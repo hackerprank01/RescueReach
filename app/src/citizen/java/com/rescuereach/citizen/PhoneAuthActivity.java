@@ -7,7 +7,11 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ViewFlipper;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -20,7 +24,6 @@ import com.rescuereach.data.repository.RepositoryProvider;
 import com.rescuereach.service.auth.AuthService;
 import com.rescuereach.service.auth.AuthServiceProvider;
 import com.rescuereach.service.auth.UserSessionManager;
-import com.rescuereach.ui.common.LoadingDialog;
 
 public class PhoneAuthActivity extends AppCompatActivity {
     private static final String TAG = "PhoneAuthActivity";
@@ -29,15 +32,18 @@ public class PhoneAuthActivity extends AppCompatActivity {
     private EditText codeEditText;
     private Button sendCodeButton;
     private Button verifyCodeButton;
-    private View phoneLayout;
-    private View codeLayout;
+    private ImageButton backButton;
+    private TextView phoneDisplayText;
+    private TextView resendCodeText;
+    private ViewFlipper viewFlipper;
+    private ProgressBar progressBar;
 
     private AuthService authService;
     private UserRepository userRepository;
     private UserSessionManager sessionManager;
-    private LoadingDialog loadingDialog;
 
     private String verificationId;
+    private String phoneNumber;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,32 +60,21 @@ public class PhoneAuthActivity extends AppCompatActivity {
         codeEditText = findViewById(R.id.edit_code);
         sendCodeButton = findViewById(R.id.button_send_code);
         verifyCodeButton = findViewById(R.id.button_verify_code);
-        phoneLayout = findViewById(R.id.layout_phone);
-        codeLayout = findViewById(R.id.layout_code);
-
-        // Set up loading dialog
-        loadingDialog = new LoadingDialog(this, "Please wait...");
+        backButton = findViewById(R.id.button_back);
+        phoneDisplayText = findViewById(R.id.text_phone_display);
+        resendCodeText = findViewById(R.id.text_resend_code);
+        viewFlipper = findViewById(R.id.viewFlipper);
+        progressBar = findViewById(R.id.progress_bar);
 
         // Set up button click listeners
         sendCodeButton.setOnClickListener(v -> sendVerificationCode());
         verifyCodeButton.setOnClickListener(v -> verifyCode());
-
-        // Initially show phone input layout
-        showPhoneLayout();
-    }
-
-    private void showPhoneLayout() {
-        phoneLayout.setVisibility(View.VISIBLE);
-        codeLayout.setVisibility(View.GONE);
-    }
-
-    private void showCodeLayout() {
-        phoneLayout.setVisibility(View.GONE);
-        codeLayout.setVisibility(View.VISIBLE);
+        backButton.setOnClickListener(v -> viewFlipper.setDisplayedChild(0));
+        resendCodeText.setOnClickListener(v -> resendVerificationCode());
     }
 
     private void sendVerificationCode() {
-        String phoneNumber = phoneEditText.getText().toString().trim();
+        phoneNumber = phoneEditText.getText().toString().trim();
 
         if (TextUtils.isEmpty(phoneNumber)) {
             phoneEditText.setError("Phone number is required");
@@ -91,33 +86,64 @@ public class PhoneAuthActivity extends AppCompatActivity {
             phoneNumber = "+1" + phoneNumber; // Default to US country code
         }
 
-        final String formattedPhoneNumber = phoneNumber;
+        showLoading(true);
 
-        loadingDialog.updateMessage("Sending verification code...");
-        loadingDialog.show();
-
-        authService.startPhoneVerification(formattedPhoneNumber, this, new AuthService.PhoneVerificationCallback() {
+        authService.startPhoneVerification(phoneNumber, this, new AuthService.PhoneVerificationCallback() {
             @Override
             public void onCodeSent(String vId) {
-                loadingDialog.dismiss();
+                showLoading(false);
                 verificationId = vId;
-                showCodeLayout();
+                phoneDisplayText.setText("Code sent to " + phoneNumber);
+                viewFlipper.setDisplayedChild(1);
                 Toast.makeText(PhoneAuthActivity.this, "Verification code sent", Toast.LENGTH_SHORT).show();
             }
 
             @Override
             public void onVerificationCompleted(PhoneAuthCredential credential) {
-                loadingDialog.dismiss();
+                showLoading(false);
                 // Auto-verification completed, handle user creation/login
-                handlePhoneAuthSuccess(formattedPhoneNumber);
+                handlePhoneAuthSuccess(phoneNumber);
             }
 
             @Override
             public void onVerificationFailed(Exception e) {
-                loadingDialog.dismiss();
+                showLoading(false);
                 Log.e(TAG, "Phone verification failed", e);
                 Toast.makeText(PhoneAuthActivity.this,
                         "Verification failed: " + e.getMessage(),
+                        Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void resendVerificationCode() {
+        if (TextUtils.isEmpty(phoneNumber)) {
+            viewFlipper.setDisplayedChild(0);
+            return;
+        }
+
+        showLoading(true);
+
+        authService.startPhoneVerification(phoneNumber, this, new AuthService.PhoneVerificationCallback() {
+            @Override
+            public void onCodeSent(String vId) {
+                showLoading(false);
+                verificationId = vId;
+                Toast.makeText(PhoneAuthActivity.this, "Verification code resent", Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onVerificationCompleted(PhoneAuthCredential credential) {
+                showLoading(false);
+                handlePhoneAuthSuccess(phoneNumber);
+            }
+
+            @Override
+            public void onVerificationFailed(Exception e) {
+                showLoading(false);
+                Log.e(TAG, "Phone verification failed on resend", e);
+                Toast.makeText(PhoneAuthActivity.this,
+                        "Resend failed: " + e.getMessage(),
                         Toast.LENGTH_LONG).show();
             }
         });
@@ -131,18 +157,17 @@ public class PhoneAuthActivity extends AppCompatActivity {
             return;
         }
 
-        loadingDialog.updateMessage("Verifying code...");
-        loadingDialog.show();
+        showLoading(true);
 
         authService.verifyPhoneWithCode(verificationId, code, new AuthService.AuthCallback() {
             @Override
             public void onSuccess() {
-                handlePhoneAuthSuccess(phoneEditText.getText().toString().trim());
+                handlePhoneAuthSuccess(phoneNumber);
             }
 
             @Override
             public void onError(Exception e) {
-                loadingDialog.dismiss();
+                showLoading(false);
                 Log.e(TAG, "Code verification failed", e);
                 Toast.makeText(PhoneAuthActivity.this,
                         "Code verification failed: " + e.getMessage(),
@@ -152,15 +177,13 @@ public class PhoneAuthActivity extends AppCompatActivity {
     }
 
     private void handlePhoneAuthSuccess(final String phoneNumber) {
-        loadingDialog.updateMessage("Finalizing login...");
-
         // Check if user exists in database
         userRepository.getUserByPhoneNumber(phoneNumber, new UserRepository.OnUserFetchedListener() {
             @Override
             public void onSuccess(User user) {
                 // User exists, save to session
                 sessionManager.saveUserPhoneNumber(phoneNumber);
-                loadingDialog.dismiss();
+                showLoading(false);
                 navigateToMain();
             }
 
@@ -176,13 +199,13 @@ public class PhoneAuthActivity extends AppCompatActivity {
         sessionManager.createNewUser(phoneNumber, new OnCompleteListener() {
             @Override
             public void onSuccess() {
-                loadingDialog.dismiss();
+                showLoading(false);
                 navigateToMain();
             }
 
             @Override
             public void onError(Exception e) {
-                loadingDialog.dismiss();
+                showLoading(false);
                 Log.e(TAG, "Failed to create user", e);
                 Toast.makeText(PhoneAuthActivity.this,
                         "Failed to create user: " + e.getMessage(),
@@ -194,5 +217,15 @@ public class PhoneAuthActivity extends AppCompatActivity {
     private void navigateToMain() {
         startActivity(new Intent(this, CitizenMainActivity.class));
         finish();
+    }
+
+    private void showLoading(boolean isLoading) {
+        progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+
+        // Disable UI interaction during loading
+        sendCodeButton.setEnabled(!isLoading);
+        verifyCodeButton.setEnabled(!isLoading);
+        backButton.setEnabled(!isLoading);
+        resendCodeText.setEnabled(!isLoading);
     }
 }

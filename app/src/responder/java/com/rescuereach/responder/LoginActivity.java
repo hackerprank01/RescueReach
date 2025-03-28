@@ -4,17 +4,20 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.rescuereach.R;
+import com.rescuereach.data.model.Responder;
 import com.rescuereach.service.auth.AuthService;
 import com.rescuereach.service.auth.AuthServiceProvider;
 import com.rescuereach.service.auth.ResponderSessionManager;
-import com.rescuereach.ui.common.LoadingDialog;
 
 public class LoginActivity extends AppCompatActivity {
     private static final String TAG = "LoginActivity";
@@ -22,10 +25,12 @@ public class LoginActivity extends AppCompatActivity {
     private EditText emailEditText;
     private EditText passwordEditText;
     private Button loginButton;
+    private TextView contactAdminText;
+    private TextView versionText;
+    private ProgressBar progressBar;
 
     private AuthService authService;
     private ResponderSessionManager sessionManager;
-    private LoadingDialog loadingDialog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,9 +45,12 @@ public class LoginActivity extends AppCompatActivity {
         emailEditText = findViewById(R.id.edit_email);
         passwordEditText = findViewById(R.id.edit_password);
         loginButton = findViewById(R.id.button_login);
+        contactAdminText = findViewById(R.id.contact_admin);
+        versionText = findViewById(R.id.version_text);
+        progressBar = findViewById(R.id.progress_bar);
 
-        // Set up loading dialog
-        loadingDialog = new LoadingDialog(this, "Logging in...");
+        // Set app version
+        versionText.setText("RescueReach Responder v1.0");
 
         // Set up login button
         loginButton.setOnClickListener(v -> attemptLogin());
@@ -77,19 +85,18 @@ public class LoginActivity extends AppCompatActivity {
             // There was an error; focus the first form field with an error
             focusView.requestFocus();
         } else {
-            // Show loading dialog and attempt login
-            loadingDialog.show();
+            // Show loading and attempt login
+            showLoading(true);
 
             authService.signInWithEmailAndPassword(email, password, new AuthService.AuthCallback() {
                 @Override
                 public void onSuccess() {
-                    loadingDialog.dismiss();
                     handleLoginSuccess();
                 }
 
                 @Override
                 public void onError(Exception e) {
-                    loadingDialog.dismiss();
+                    showLoading(false);
                     Log.e(TAG, "Login failed", e);
                     Toast.makeText(LoginActivity.this,
                             "Login failed: " + e.getMessage(),
@@ -104,11 +111,13 @@ public class LoginActivity extends AppCompatActivity {
         sessionManager.loadCurrentResponder(new ResponderSessionManager.OnResponderLoadedListener() {
             @Override
             public void onResponderLoaded(Responder responder) {
+                showLoading(false);
                 navigateToMain();
             }
 
             @Override
             public void onError(Exception e) {
+                showLoading(false);
                 Log.e(TAG, "Failed to load responder profile", e);
                 Toast.makeText(LoginActivity.this,
                         "Failed to load responder profile. Please contact administrator.",
@@ -133,5 +142,12 @@ public class LoginActivity extends AppCompatActivity {
     private void navigateToMain() {
         startActivity(new Intent(this, ResponderMainActivity.class));
         finish();
+    }
+
+    private void showLoading(boolean isLoading) {
+        progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+        loginButton.setEnabled(!isLoading);
+        emailEditText.setEnabled(!isLoading);
+        passwordEditText.setEnabled(!isLoading);
     }
 }

@@ -2,12 +2,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <activity
-            android:name=".citizen.CitizenMainActivity"
-            android:exported="true">
+            android:name=".citizen.SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RescueReach.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".citizen.PhoneAuthActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".citizen.CitizenMainActivity"
+            android:exported="false" />
     </application>
 </manifest>
