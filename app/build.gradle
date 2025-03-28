@@ -46,17 +46,6 @@ android {
         }
     }
 
-    // Explicitly define source sets
-    sourceSets {
-        citizen {
-            java.srcDirs = ['src/citizen/java']
-            res.srcDirs = ['src/citizen/res']
-        }
-        responder {
-            java.srcDirs = ['src/responder/java']
-            res.srcDirs = ['src/responder/res']
-        }
-    }
 }
 
 tasks.register('buildBothFlavors') {
