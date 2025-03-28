@@ -136,6 +136,7 @@ public class PhoneAuthActivity extends AppCompatActivity {
             public void onVerificationCompleted(PhoneAuthCredential credential) {
                 showLoading(false);
                 handlePhoneAuthSuccess(phoneNumber);
+
             }
 
             @Override
