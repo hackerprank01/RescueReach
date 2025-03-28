@@ -27,7 +27,26 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:421344929703:android:2a6de989b2f76c285f3882",
+        "mobilesdk_app_id": "1:421344929703:android:9af859c013f9315e5f3882",
+        "android_client_info": {
+          "package_name": "com.rescuereach.citizen"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSXaWSQbGkVBP_87az12AouBFcu3hAtmk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:421344929703:android:d6bc79e5c966b9a55f3882",
         "android_client_info": {
           "package_name": "com.rescuereach.responder"
         }
