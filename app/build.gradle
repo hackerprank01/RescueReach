@@ -27,6 +27,8 @@ android {
         targetCompatibility JavaVersion.VERSION_11
     }
 
+
+
     flavorDimensions "role"
 
     productFlavors {
@@ -35,18 +37,16 @@ android {
             applicationId "com.rescuereach.citizen"
             versionNameSuffix ".citizen"
             resValue "string", "app_name", "RescueReach"
-            // Additional configurations
         }
         responder {
             dimension "role"
             applicationId "com.rescuereach.responder"
             versionNameSuffix ".responder"
             resValue "string", "app_name", "RescueReach Responder"
-            // Additional configurations
         }
     }
 
-    // This helps ensure source sets are properly configured
+    // Explicitly define source sets
     sourceSets {
         citizen {
             java.srcDirs = ['src/citizen/java']
@@ -55,6 +55,21 @@ android {
         responder {
             java.srcDirs = ['src/responder/java']
             res.srcDirs = ['src/responder/res']
+        }
+    }
+}
+
+tasks.register('buildBothFlavors') {
+    dependsOn 'assembleCitizenDebug', 'assembleResponderDebug'
+    group = 'build'
+    description = 'Builds both citizen and responder debug variants'
+}
+
+// Make standard debug build create both variants
+gradle.taskGraph.whenReady { graph ->
+    if (graph.hasTask(':app:assembleDebug')) {
+        tasks.named('assembleDebug').configure {
+            finalizedBy 'buildBothFlavors'
         }
     }
 }
