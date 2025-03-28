@@ -26,6 +26,37 @@ android {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
+
+    flavorDimensions "role"
+
+    productFlavors {
+        citizen {
+            dimension "role"
+            applicationId "com.rescuereach.citizen"
+            versionNameSuffix ".citizen"
+            resValue "string", "app_name", "RescueReach"
+            // Additional configurations
+        }
+        responder {
+            dimension "role"
+            applicationId "com.rescuereach.responder"
+            versionNameSuffix ".responder"
+            resValue "string", "app_name", "RescueReach Responder"
+            // Additional configurations
+        }
+    }
+
+    // This helps ensure source sets are properly configured
+    sourceSets {
+        citizen {
+            java.srcDirs = ['src/citizen/java']
+            res.srcDirs = ['src/citizen/res']
+        }
+        responder {
+            java.srcDirs = ['src/responder/java']
+            res.srcDirs = ['src/responder/res']
+        }
+    }
 }
 
 dependencies {
