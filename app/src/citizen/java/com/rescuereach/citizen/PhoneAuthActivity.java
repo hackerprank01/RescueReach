@@ -121,7 +121,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
         // Format phone number with country code if needed
         if (!phoneNumber.startsWith("+")) {
-            phoneNumber = "+1" + phoneNumber; // Default to US country code
+            phoneNumber = "+91" + phoneNumber; // Default to US country code
         }
 
         showLoading(true);

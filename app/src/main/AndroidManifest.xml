@@ -20,6 +20,11 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <uses-permission-sdk-23 android:name="android.permission.BROADCAST_SMS"/>
+    <uses-permission-sdk-23 android:name="android.permission.SEND_SMS"/>
+    <uses-permission-sdk-23 android:name="android.permission.READ_SMS"/>
+    <uses-permission-sdk-23 android:name="android.permission.RECEIVE_SMS"/>
+
     <application
         android:name=".RescueReachApplication"
         android:allowBackup="true"

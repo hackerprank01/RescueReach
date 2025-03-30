@@ -87,7 +87,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
-                    app:prefixText="+1"
+                    app:prefixText="+91"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                     <EditText
@@ -149,7 +149,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="Code sent to +1 1234567890"
+                    android:text="Code sent to +91 1234567890"
                     android:textColor="@color/colorSecondaryText"
                     android:textSize="14sp" />
 

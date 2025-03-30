@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.gms.auth.api.phone.SmsRetriever;
 import com.google.android.gms.auth.api.phone.SmsRetrieverClient;
@@ -94,9 +95,13 @@ public class SMSRetrieverHelper {
             }
         };
 
-        // Register the receiver
+        // Register the receiver with NOT_EXPORTED flag (for Android 13+)
         IntentFilter intentFilter = new IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION);
-        activity.registerReceiver(smsReceiver, intentFilter);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            activity.registerReceiver(smsReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            ContextCompat.registerReceiver(activity, smsReceiver, intentFilter, ContextCompat.RECEIVER_NOT_EXPORTED);
+        }
     }
 
     private String extractOTPFromMessage(String message) {
