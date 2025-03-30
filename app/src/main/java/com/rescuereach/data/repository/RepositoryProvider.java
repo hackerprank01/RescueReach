@@ -4,25 +4,26 @@ import com.rescuereach.data.repository.firebase.FirebaseIncidentRepository;
 import com.rescuereach.data.repository.firebase.FirebaseResponderRepository;
 import com.rescuereach.data.repository.firebase.FirebaseUserRepository;
 import com.rescuereach.data.repository.firebase.FirebaseVolunteerRepository;
+import com.rescuereach.data.repository.realtime.RealtimeStatusRepository;
 
 /**
- * Singleton provider class for repositories.
- * This allows easy access to repositories throughout the app.
+ * Singleton provider for repositories.
  */
 public class RepositoryProvider {
     private static RepositoryProvider instance;
 
     private final UserRepository userRepository;
-    private final IncidentRepository incidentRepository;
     private final ResponderRepository responderRepository;
+    private final IncidentRepository incidentRepository;
     private final VolunteerRepository volunteerRepository;
+    private final StatusRepository statusRepository;
 
     private RepositoryProvider() {
-        // Initialize Firebase repositories
         userRepository = new FirebaseUserRepository();
-        incidentRepository = new FirebaseIncidentRepository();
         responderRepository = new FirebaseResponderRepository();
+        incidentRepository = new FirebaseIncidentRepository();
         volunteerRepository = new FirebaseVolunteerRepository();
+        statusRepository = new RealtimeStatusRepository();
     }
 
     public static synchronized RepositoryProvider getInstance() {
@@ -36,15 +37,19 @@ public class RepositoryProvider {
         return userRepository;
     }
 
-    public IncidentRepository getIncidentRepository() {
-        return incidentRepository;
-    }
-
     public ResponderRepository getResponderRepository() {
         return responderRepository;
     }
 
+    public IncidentRepository getIncidentRepository() {
+        return incidentRepository;
+    }
+
     public VolunteerRepository getVolunteerRepository() {
         return volunteerRepository;
+    }
+
+    public StatusRepository getStatusRepository() {
+        return statusRepository;
     }
 }
