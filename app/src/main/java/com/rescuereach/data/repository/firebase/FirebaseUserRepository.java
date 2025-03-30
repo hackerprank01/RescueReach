@@ -13,6 +13,9 @@ import com.rescuereach.data.model.User;
 import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.data.repository.UserRepository;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class FirebaseUserRepository implements UserRepository {
     private static final String TAG = "FirebaseUserRepository";
     private static final String COLLECTION_USERS = "users";
@@ -113,6 +116,79 @@ public class FirebaseUserRepository implements UserRepository {
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Error saving user", e);
+                    listener.onError(e);
+                });
+    }
+
+    @Override
+    public void updateUser(User user, OnCompleteListener listener) {
+        Log.d(TAG, "Updating user: " + user.getUserId());
+
+        if (user.getUserId() == null || user.getUserId().isEmpty()) {
+            listener.onError(new IllegalArgumentException("User ID cannot be null or empty"));
+            return;
+        }
+
+        DocumentReference userDoc = usersCollection.document(user.getUserId());
+        userDoc.update(
+                        "phoneNumber", user.getPhoneNumber(),
+                        "firstName", user.getFirstName(),
+                        "lastName", user.getLastName(),
+                        "email", user.getEmail(),
+                        "profileImageUrl", user.getProfileImageUrl(),
+                        "homeAddress", user.getHomeAddress(),
+                        "emergencyContacts", user.getEmergencyContacts(),
+                        "medicalInfo", user.getMedicalInfo(),
+                        "lastUpdated", System.currentTimeMillis()
+                )
+                .addOnSuccessListener(aVoid -> {
+                    Log.d(TAG, "User updated successfully");
+                    listener.onSuccess();
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error updating user", e);
+                    listener.onError(e);
+                });
+    }
+
+    @Override
+    public void deleteUser(String userId, OnCompleteListener listener) {
+        Log.d(TAG, "Deleting user: " + userId);
+
+        if (userId == null || userId.isEmpty()) {
+            listener.onError(new IllegalArgumentException("User ID cannot be null or empty"));
+            return;
+        }
+
+        DocumentReference userDoc = usersCollection.document(userId);
+        userDoc.delete()
+                .addOnSuccessListener(aVoid -> {
+                    Log.d(TAG, "User deleted successfully");
+                    listener.onSuccess();
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error deleting user", e);
+                    listener.onError(e);
+                });
+    }
+
+    @Override
+    public void getAllUsers(OnUserListFetchedListener listener) {
+        Log.d(TAG, "Getting all users");
+
+        usersCollection.get()
+                .addOnSuccessListener(querySnapshot -> {
+                    List<User> users = new ArrayList<>();
+                    for (DocumentSnapshot document : querySnapshot.getDocuments()) {
+                        User user = document.toObject(User.class);
+                        if (user != null) {
+                            users.add(user);
+                        }
+                    }
+                    listener.onSuccess(users);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error getting all users", e);
                     listener.onError(e);
                 });
     }

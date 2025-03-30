@@ -1,30 +1,37 @@
 package com.rescuereach.data.model;
 
-import java.util.Date;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class User {
     private String userId;
     private String phoneNumber;
-    private String name;
+    private String firstName;
+    private String lastName;
     private String email;
     private String profileImageUrl;
-    private Date createdAt;
-    private Date lastLoginAt;
-    private boolean isVolunteer;
+    private String homeAddress;
+    private List<EmergencyContact> emergencyContacts;
+    private Map<String, String> medicalInfo;
+    private long lastUpdated;
 
-    // Default constructor required for Firestore
+    // Required for Firestore
     public User() {
+        emergencyContacts = new ArrayList<>();
+        medicalInfo = new HashMap<>();
     }
 
     public User(String userId, String phoneNumber) {
         this.userId = userId;
         this.phoneNumber = phoneNumber;
-        this.createdAt = new Date();
-        this.lastLoginAt = new Date();
-        this.isVolunteer = false;
+        this.emergencyContacts = new ArrayList<>();
+        this.medicalInfo = new HashMap<>();
+        this.lastUpdated = System.currentTimeMillis();
     }
 
-    // Getters and Setters
+    // Getters and setters
     public String getUserId() {
         return userId;
     }
@@ -41,12 +48,20 @@ public class User {
         this.phoneNumber = phoneNumber;
     }
 
-    public String getName() {
-        return name;
+    public String getFirstName() {
+        return firstName;
     }
 
-    public void setName(String name) {
-        this.name = name;
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
     }
 
     public String getEmail() {
@@ -65,27 +80,90 @@ public class User {
         this.profileImageUrl = profileImageUrl;
     }
 
-    public Date getCreatedAt() {
-        return createdAt;
+    public String getHomeAddress() {
+        return homeAddress;
     }
 
-    public void setCreatedAt(Date createdAt) {
-        this.createdAt = createdAt;
+    public void setHomeAddress(String homeAddress) {
+        this.homeAddress = homeAddress;
     }
 
-    public Date getLastLoginAt() {
-        return lastLoginAt;
+    public List<EmergencyContact> getEmergencyContacts() {
+        return emergencyContacts;
     }
 
-    public void setLastLoginAt(Date lastLoginAt) {
-        this.lastLoginAt = lastLoginAt;
+    public void setEmergencyContacts(List<EmergencyContact> emergencyContacts) {
+        this.emergencyContacts = emergencyContacts;
     }
 
-    public boolean isVolunteer() {
-        return isVolunteer;
+    public void addEmergencyContact(EmergencyContact contact) {
+        if (emergencyContacts == null) {
+            emergencyContacts = new ArrayList<>();
+        }
+        emergencyContacts.add(contact);
     }
 
-    public void setVolunteer(boolean volunteer) {
-        isVolunteer = volunteer;
+    public Map<String, String> getMedicalInfo() {
+        return medicalInfo;
+    }
+
+    public void setMedicalInfo(Map<String, String> medicalInfo) {
+        this.medicalInfo = medicalInfo;
+    }
+
+    public void addMedicalInfo(String key, String value) {
+        if (medicalInfo == null) {
+            medicalInfo = new HashMap<>();
+        }
+        medicalInfo.put(key, value);
+    }
+
+    public long getLastUpdated() {
+        return lastUpdated;
+    }
+
+    public void setLastUpdated(long lastUpdated) {
+        this.lastUpdated = lastUpdated;
+    }
+
+    // Inner class for emergency contacts
+    public static class EmergencyContact {
+        private String name;
+        private String phoneNumber;
+        private String relationship;
+
+        public EmergencyContact() {
+            // Required empty constructor for Firestore
+        }
+
+        public EmergencyContact(String name, String phoneNumber, String relationship) {
+            this.name = name;
+            this.phoneNumber = phoneNumber;
+            this.relationship = relationship;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getPhoneNumber() {
+            return phoneNumber;
+        }
+
+        public void setPhoneNumber(String phoneNumber) {
+            this.phoneNumber = phoneNumber;
+        }
+
+        public String getRelationship() {
+            return relationship;
+        }
+
+        public void setRelationship(String relationship) {
+            this.relationship = relationship;
+        }
     }
 }
