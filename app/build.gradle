@@ -80,6 +80,7 @@ dependencies {
     implementation libs.firebase.messaging
     implementation libs.firebase.inappmessaging.display
     implementation libs.firebase.storage
+    implementation libs.play.services.location
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
@@ -97,5 +98,11 @@ dependencies {
 
     implementation 'androidx.core:core:1.x.x'
 
+    implementation("com.google.android.material:material:1.11.0") // or newer version
+
     implementation 'de.hdodenhof:circleimageview:3.1.0'
+
+    // Update to the latest version
+    implementation 'com.google.android.gms:play-services-auth:20.5.0'
+    implementation 'com.google.android.gms:play-services-base:18.2.0'
 }

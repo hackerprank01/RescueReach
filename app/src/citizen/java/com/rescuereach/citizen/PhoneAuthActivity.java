@@ -18,6 +18,8 @@ import android.widget.ViewFlipper;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseException;
 import com.google.firebase.FirebaseTooManyRequestsException;
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
@@ -67,6 +69,9 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_phone_auth);
 
+        // Check Google Play Services availability
+        checkGooglePlayServices();
+        
         // Initialize preferences
         preferences = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
 
@@ -138,6 +143,24 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
         // Check if we're in a cooldown period
         checkAndShowCooldown();
+    }
+
+    private void checkGooglePlayServices() {
+        GoogleApiAvailability apiAvailability = GoogleApiAvailability.getInstance();
+        int resultCode = apiAvailability.isGooglePlayServicesAvailable(this);
+
+        if (resultCode != ConnectionResult.SUCCESS) {
+            if (apiAvailability.isUserResolvableError(resultCode)) {
+                apiAvailability.getErrorDialog(this, resultCode, 9000,
+                                dialog -> Toast.makeText(this, "This app requires Google Play Services to function properly",
+                                        Toast.LENGTH_LONG).show())
+                        .show();
+            } else {
+                Toast.makeText(this, "This device does not support Google Play Services which is required",
+                        Toast.LENGTH_LONG).show();
+                finish();
+            }
+        }
     }
 
     private void checkAndShowCooldown() {
