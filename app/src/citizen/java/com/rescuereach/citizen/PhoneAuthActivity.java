@@ -130,16 +130,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
         verifyCodeButton.setOnClickListener(v -> verifyCode());
         backButton.setOnClickListener(v -> viewFlipper.setDisplayedChild(0));
-        resendCodeText.setOnClickListener(v -> {
-            if (canRequestSmsVerification()) {
-                resendVerificationCode();
-            } else {
-                long remainingSeconds = getRemainingCooldownTimeSeconds();
-                Toast.makeText(this,
-                        "Please wait " + remainingSeconds + " seconds before requesting another code",
-                        Toast.LENGTH_SHORT).show();
-            }
-        });
+        resendCodeText.setOnClickListener(v -> resendVerificationCode());;
 
         // Check if we're in a cooldown period
         checkAndShowCooldown();
@@ -339,9 +330,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             return;
         }
 
-        // Record the current time for cooldown
-        preferences.edit().putLong(PREF_LAST_SMS_REQUEST_TIME, System.currentTimeMillis()).apply();
-
+        // No cooldown for resend - just show a loading indicator
         showLoading(true);
 
         authService.startPhoneVerification(phoneNumber, this, new AuthService.PhoneVerificationCallback() {
@@ -356,6 +345,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
                 Toast.makeText(PhoneAuthActivity.this, "Verification code resent", Toast.LENGTH_SHORT).show();
             }
+
 
             @Override
             public void onVerificationCompleted(PhoneAuthCredential credential) {
@@ -503,7 +493,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         }
 
         backButton.setEnabled(!isLoading);
-        resendCodeText.setEnabled(!isLoading && canRequestSmsVerification());
+        resendCodeText.setEnabled(!isLoading);
 
         if (otpInputView != null) {
             otpInputView.setEnabled(!isLoading);

@@ -4,8 +4,6 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MenuItem;
-import android.view.View;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -16,16 +14,12 @@ import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
 import com.rescuereach.R;
-import com.rescuereach.citizen.fragments.EmergencyContactsFragment;
 import com.rescuereach.citizen.fragments.HomeFragment;
 import com.rescuereach.citizen.fragments.ProfileFragment;
 import com.rescuereach.citizen.fragments.ReportsFragment;
-import com.rescuereach.citizen.fragments.SafetyTipsFragment;
-import com.rescuereach.data.model.User;
 import com.rescuereach.service.auth.AuthService;
 import com.rescuereach.service.auth.AuthServiceProvider;
 import com.rescuereach.service.auth.UserSessionManager;
@@ -36,7 +30,7 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
     private DrawerLayout drawerLayout;
     private NavigationView navigationView;
     private Toolbar toolbar;
-    private ExtendedFloatingActionButton fabEmergency;
+    private FloatingActionButton fabEmergency;
 
     private AuthService authService;
     private UserSessionManager sessionManager;
@@ -54,9 +48,6 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         setupToolbar();
         setupNavigationDrawer();
         setupFab();
-
-        // Load user profile
-        loadUserProfile();
 
         // Set default fragment if this is first creation
         if (savedInstanceState == null) {
@@ -91,36 +82,8 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
     private void setupFab() {
         fabEmergency = findViewById(R.id.fab_report_emergency);
         fabEmergency.setOnClickListener(v -> {
-            // Open emergency reporting activity
+            // TODO: Open emergency reporting activity
             Toast.makeText(this, "Report Emergency clicked", Toast.LENGTH_SHORT).show();
-             Intent intent = new Intent(CitizenMainActivity.this, ReportEmergencyActivity.class);
-             startActivity(intent);
-        });
-    }
-
-    private void loadUserProfile() {
-        // Get header view to update user information
-        View headerView = navigationView.getHeaderView(0);
-        TextView nameTextView = headerView.findViewById(R.id.header_name);
-        TextView phoneTextView = headerView.findViewById(R.id.header_phone);
-
-        sessionManager.loadCurrentUser(new UserSessionManager.OnUserLoadedListener() {
-            @Override
-            public void onUserLoaded(User user) {
-                if (user != null) {
-                    Log.d(TAG, "User profile loaded: " + user.getFullName());
-                    nameTextView.setText(user.getFullName());
-                    phoneTextView.setText(user.getPhoneNumber());
-                }
-            }
-
-            @Override
-            public void onError(Exception e) {
-                Log.e(TAG, "Error loading user profile", e);
-                Toast.makeText(CitizenMainActivity.this,
-                        "Failed to load profile: " + e.getMessage(),
-                        Toast.LENGTH_SHORT).show();
-            }
         });
     }
 
@@ -131,19 +94,12 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         Fragment selectedFragment = null;
         String title = "";
 
-        // Switch between fragments based on item selected
         if (itemId == R.id.nav_home) {
             selectedFragment = new HomeFragment();
             title = "Home";
         } else if (itemId == R.id.nav_reports) {
             selectedFragment = new ReportsFragment();
             title = "My Reports";
-        } else if (itemId == R.id.nav_emergency_contacts) {
-            selectedFragment = new EmergencyContactsFragment();
-            title = "Emergency Contacts";
-        } else if (itemId == R.id.nav_safety_tips) {
-            selectedFragment = new SafetyTipsFragment();
-            title = "Safety Tips";
         } else if (itemId == R.id.nav_profile) {
             selectedFragment = new ProfileFragment();
             title = "Profile";
