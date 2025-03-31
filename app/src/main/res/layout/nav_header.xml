@@ -9,25 +9,26 @@
     android:theme="@style/ThemeOverlay.AppCompat.Dark">
 
     <ImageView
-        android:id="@+id/nav_header_image"
+        android:id="@+id/header_image"
         android:layout_width="64dp"
         android:layout_height="64dp"
-        android:src="@drawable/ic_profile_placeholders" />
+        android:contentDescription="Profile Image"
+        android:src="@drawable/ic_person" />
 
     <TextView
-        android:id="@+id/nav_header_name"
+        android:id="@+id/header_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:paddingTop="8dp"
         android:text="User Name"
         android:textAppearance="@style/TextAppearance.AppCompat.Body1"
         android:textSize="16sp"
         android:textStyle="bold" />
 
     <TextView
-        android:id="@+id/nav_header_phone"
+        android:id="@+id/header_phone"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="+91 XXXXXXXXXX" />
+        android:text="+91 0000000000" />
 
 </LinearLayout>

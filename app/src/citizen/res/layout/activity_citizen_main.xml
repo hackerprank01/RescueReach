@@ -39,9 +39,9 @@
             android:layout_gravity="bottom|end"
             android:layout_margin="16dp"
             android:text="Report Emergency"
-            android:textColor="@android:color/white"
             app:icon="@drawable/ic_emergency"
-            app:iconTint="@android:color/white" />
+            app:backgroundTint="#FF0000"
+            app:tint="@android:color/white"/>
 
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
