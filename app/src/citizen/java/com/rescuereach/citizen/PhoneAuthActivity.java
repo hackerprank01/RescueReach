@@ -306,8 +306,16 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         });
     }
 
+    // Only modify the navigateToMain method in PhoneAuthActivity.java
     private void navigateToMain() {
-        startActivity(new Intent(this, CitizenMainActivity.class));
+        // Check if user profile is complete
+        if (sessionManager.isProfileComplete()) {
+            // If profile is complete, go to main screen
+            startActivity(new Intent(this, CitizenMainActivity.class));
+        } else {
+            // If profile is not complete, go to profile completion screen
+            startActivity(new Intent(this, ProfileCompletionActivity.class));
+        }
         finish();
     }
 

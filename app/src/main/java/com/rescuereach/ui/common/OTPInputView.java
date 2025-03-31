@@ -122,7 +122,11 @@ public class OTPInputView extends LinearLayout {
     }
 
     public String getOTP() {
-        return otp;
+        StringBuilder otpBuilder = new StringBuilder();
+        for (EditText box : otpBoxes) {
+            otpBuilder.append(box.getText().toString());
+        }
+        return otpBuilder.toString();
     }
 
     public void setOTP(String otp) {

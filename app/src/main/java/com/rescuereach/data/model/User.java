@@ -1,34 +1,32 @@
 package com.rescuereach.data.model;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.Date;
 
 public class User {
     private String userId;
-    private String phoneNumber;
     private String firstName;
     private String lastName;
-    private String email;
-    private String profileImageUrl;
-    private String homeAddress;
-    private List<EmergencyContact> emergencyContacts;
-    private Map<String, String> medicalInfo;
-    private long lastUpdated;
+    private String phoneNumber; // Always starts with +91
+    private String emergencyContact; // Always starts with +91
+    private Date createdAt;
 
     // Required for Firestore
     public User() {
-        emergencyContacts = new ArrayList<>();
-        medicalInfo = new HashMap<>();
     }
 
     public User(String userId, String phoneNumber) {
         this.userId = userId;
         this.phoneNumber = phoneNumber;
-        this.emergencyContacts = new ArrayList<>();
-        this.medicalInfo = new HashMap<>();
-        this.lastUpdated = System.currentTimeMillis();
+        this.createdAt = new Date();
+    }
+
+    public User(String userId, String firstName, String lastName, String phoneNumber, String emergencyContact) {
+        this.userId = userId;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.phoneNumber = phoneNumber;
+        this.emergencyContact = emergencyContact;
+        this.createdAt = new Date();
     }
 
     // Getters and setters
@@ -38,14 +36,6 @@ public class User {
 
     public void setUserId(String userId) {
         this.userId = userId;
-    }
-
-    public String getPhoneNumber() {
-        return phoneNumber;
-    }
-
-    public void setPhoneNumber(String phoneNumber) {
-        this.phoneNumber = phoneNumber;
     }
 
     public String getFirstName() {
@@ -64,106 +54,39 @@ public class User {
         this.lastName = lastName;
     }
 
-    public String getEmail() {
-        return email;
+    public String getPhoneNumber() {
+        return phoneNumber;
     }
 
-    public void setEmail(String email) {
-        this.email = email;
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
     }
 
-    public String getProfileImageUrl() {
-        return profileImageUrl;
+    public String getEmergencyContact() {
+        return emergencyContact;
     }
 
-    public void setProfileImageUrl(String profileImageUrl) {
-        this.profileImageUrl = profileImageUrl;
+    public void setEmergencyContact(String emergencyContact) {
+        this.emergencyContact = emergencyContact;
     }
 
-    public String getHomeAddress() {
-        return homeAddress;
+    public Date getCreatedAt() {
+        return createdAt;
     }
 
-    public void setHomeAddress(String homeAddress) {
-        this.homeAddress = homeAddress;
+    public void setCreatedAt(Date createdAt) {
+        this.createdAt = createdAt;
     }
 
-    public List<EmergencyContact> getEmergencyContacts() {
-        return emergencyContacts;
-    }
-
-    public void setEmergencyContacts(List<EmergencyContact> emergencyContacts) {
-        this.emergencyContacts = emergencyContacts;
-    }
-
-    public void addEmergencyContact(EmergencyContact contact) {
-        if (emergencyContacts == null) {
-            emergencyContacts = new ArrayList<>();
-        }
-        emergencyContacts.add(contact);
-    }
-
-    public Map<String, String> getMedicalInfo() {
-        return medicalInfo;
-    }
-
-    public void setMedicalInfo(Map<String, String> medicalInfo) {
-        this.medicalInfo = medicalInfo;
-    }
-
-    public void addMedicalInfo(String key, String value) {
-        if (medicalInfo == null) {
-            medicalInfo = new HashMap<>();
-        }
-        medicalInfo.put(key, value);
-    }
-
-    public long getLastUpdated() {
-        return lastUpdated;
-    }
-
-    public void setLastUpdated(long lastUpdated) {
-        this.lastUpdated = lastUpdated;
-    }
-
-    // Inner class for emergency contacts
-    public static class EmergencyContact {
-        private String name;
-        private String phoneNumber;
-        private String relationship;
-
-        public EmergencyContact() {
-            // Required empty constructor for Firestore
-        }
-
-        public EmergencyContact(String name, String phoneNumber, String relationship) {
-            this.name = name;
-            this.phoneNumber = phoneNumber;
-            this.relationship = relationship;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getPhoneNumber() {
-            return phoneNumber;
-        }
-
-        public void setPhoneNumber(String phoneNumber) {
-            this.phoneNumber = phoneNumber;
-        }
-
-        public String getRelationship() {
-            return relationship;
-        }
-
-        public void setRelationship(String relationship) {
-            this.relationship = relationship;
+    public String getFullName() {
+        if (firstName != null && lastName != null) {
+            return firstName + " " + lastName;
+        } else if (firstName != null) {
+            return firstName;
+        } else if (lastName != null) {
+            return lastName;
+        } else {
+            return "Unknown";
         }
     }
 }

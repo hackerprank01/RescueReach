@@ -5,6 +5,12 @@ import com.rescuereach.data.model.User;
 import java.util.List;
 
 public interface UserRepository {
+    void getUserById(String userId, OnUserFetchedListener listener);
+    void getUserByPhoneNumber(String phoneNumber, OnUserFetchedListener listener);
+    void saveUser(User user, OnCompleteListener listener);
+    void updateUserProfile(User user, OnCompleteListener listener); // Updated method
+    void deleteUser(String phoneNumber, OnCompleteListener listener); // Changed from userId to phoneNumber
+    void getAllUsers(OnUserListFetchedListener listener);
 
     interface OnUserFetchedListener {
         void onSuccess(User user);
@@ -15,16 +21,4 @@ public interface UserRepository {
         void onSuccess(List<User> users);
         void onError(Exception e);
     }
-
-    void getUserById(String userId, OnUserFetchedListener listener);
-
-    void getUserByPhoneNumber(String phoneNumber, OnUserFetchedListener listener);
-
-    void saveUser(User user, OnCompleteListener listener);
-
-    void updateUser(User user, OnCompleteListener listener);
-
-    void deleteUser(String userId, OnCompleteListener listener);
-
-    void getAllUsers(OnUserListFetchedListener listener);
 }

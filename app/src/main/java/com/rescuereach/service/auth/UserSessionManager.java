@@ -2,28 +2,21 @@ package com.rescuereach.service.auth;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.net.ConnectivityManager;
-import android.net.Network;
-import android.net.NetworkCapabilities;
-import android.net.NetworkRequest;
-import android.os.Build;
 import android.util.Log;
-
-import androidx.annotation.NonNull;
 
 import com.rescuereach.data.model.User;
 import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.data.repository.RepositoryProvider;
-import com.rescuereach.data.repository.StatusRepository;
 import com.rescuereach.data.repository.UserRepository;
 
-/**
- * Manages user session and provides common user operations.
- */
 public class UserSessionManager {
     private static final String TAG = "UserSessionManager";
     private static final String PREF_NAME = "RescueReachUserSession";
     private static final String KEY_USER_PHONE = "user_phone";
+    private static final String KEY_USER_FIRST_NAME = "user_first_name";
+    private static final String KEY_USER_LAST_NAME = "user_last_name";
+    private static final String KEY_USER_EMERGENCY_CONTACT = "user_emergency_contact";
+    private static final String KEY_IS_PROFILE_COMPLETE = "is_profile_complete";
 
     private static UserSessionManager instance;
 
@@ -31,38 +24,14 @@ public class UserSessionManager {
     private final SharedPreferences sharedPreferences;
     private final AuthService authService;
     private final UserRepository userRepository;
-    private final StatusRepository statusRepository;
-    private final ConnectivityManager.NetworkCallback networkCallback;
 
     private User currentUser;
-    private boolean isNetworkAvailable = false;
 
     private UserSessionManager(Context context) {
         this.context = context.getApplicationContext();
         this.sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         this.authService = AuthServiceProvider.getInstance().getAuthService();
         this.userRepository = RepositoryProvider.getInstance().getUserRepository();
-        this.statusRepository = RepositoryProvider.getInstance().getStatusRepository();
-
-        // Setup network callback
-        this.networkCallback = new ConnectivityManager.NetworkCallback() {
-            @Override
-            public void onAvailable(@NonNull Network network) {
-                isNetworkAvailable = true;
-                updateOnlineStatus();
-            }
-
-            @Override
-            public void onLost(@NonNull Network network) {
-                isNetworkAvailable = false;
-            }
-        };
-
-        // Register network callback
-        registerNetworkCallback();
-
-        // Check initial network state
-        checkNetworkState();
     }
 
     public static synchronized UserSessionManager getInstance(Context context) {
@@ -72,59 +41,9 @@ public class UserSessionManager {
         return instance;
     }
 
-    private void registerNetworkCallback() {
-        try {
-            ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (connectivityManager != null) {
-                NetworkRequest.Builder builder = new NetworkRequest.Builder();
-                connectivityManager.registerNetworkCallback(builder.build(), networkCallback);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error registering network callback", e);
-        }
-    }
-
-    private void checkNetworkState() {
-        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (connectivityManager != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                Network network = connectivityManager.getActiveNetwork();
-                if (network != null) {
-                    NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
-                    isNetworkAvailable = capabilities != null &&
-                            (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR));
-                }
-            } else {
-                // For older devices
-                isNetworkAvailable = connectivityManager.getActiveNetworkInfo() != null &&
-                        connectivityManager.getActiveNetworkInfo().isConnected();
-            }
-        }
-    }
-
-    private void updateOnlineStatus() {
-        if (authService.isLoggedIn() && isNetworkAvailable) {
-            String userId = authService.getCurrentUserId();
-            if (userId != null) {
-                statusRepository.updateUserStatus(userId, "online", new OnCompleteListener() {
-                    @Override
-                    public void onSuccess() {
-                        Log.d(TAG, "User online status updated");
-                    }
-
-                    @Override
-                    public void onError(Exception e) {
-                        Log.e(TAG, "Failed to update online status", e);
-                    }
-                });
-            }
-        }
-    }
-
     public void saveUserPhoneNumber(String phoneNumber) {
         SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putString(KEY_USER_PHONE, phoneNumber);
+        editor.putString(KEY_USER_PHONE, formatPhoneNumber(phoneNumber));
         editor.apply();
     }
 
@@ -132,58 +51,17 @@ public class UserSessionManager {
         return sharedPreferences.getString(KEY_USER_PHONE, null);
     }
 
-    public void loadCurrentUser(final OnUserLoadedListener listener) {
-        if (!authService.isLoggedIn()) {
-            listener.onError(new Exception("No user logged in"));
-            return;
-        }
+    public void saveUserProfileData(String firstName, String lastName, String emergencyContact) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_USER_FIRST_NAME, firstName);
+        editor.putString(KEY_USER_LAST_NAME, lastName);
+        editor.putString(KEY_USER_EMERGENCY_CONTACT, formatPhoneNumber(emergencyContact));
+        editor.putBoolean(KEY_IS_PROFILE_COMPLETE, true);
+        editor.apply();
+    }
 
-        final String userId = authService.getCurrentUserId();
-        if (userId == null) {
-            listener.onError(new Exception("User ID is null"));
-            return;
-        }
-
-        userRepository.getUserById(userId, new UserRepository.OnUserFetchedListener() {
-            @Override
-            public void onSuccess(User user) {
-                currentUser = user;
-
-                // Update online status
-                if (isNetworkAvailable) {
-                    updateOnlineStatus();
-                }
-
-                listener.onUserLoaded(user);
-            }
-
-            @Override
-            public void onError(Exception e) {
-                // If there's an error getting the user, check if it's a permission issue
-                if (e.getMessage().contains("PERMISSION_DENIED")) {
-                    // Try to create the user if they don't exist
-                    String phoneNumber = getSavedPhoneNumber();
-                    if (phoneNumber != null) {
-                        createNewUser(phoneNumber, new OnCompleteListener() {
-                            @Override
-                            public void onSuccess() {
-                                // Try to load again
-                                loadCurrentUser(listener);
-                            }
-
-                            @Override
-                            public void onError(Exception e) {
-                                listener.onError(e);
-                            }
-                        });
-                    } else {
-                        listener.onError(new Exception("User not found and no phone number available"));
-                    }
-                } else {
-                    listener.onError(e);
-                }
-            }
-        });
+    public boolean isProfileComplete() {
+        return sharedPreferences.getBoolean(KEY_IS_PROFILE_COMPLETE, false);
     }
 
     public void createNewUser(String phoneNumber, OnCompleteListener listener) {
@@ -193,18 +71,12 @@ public class UserSessionManager {
             return;
         }
 
-        User newUser = new User(userId, phoneNumber);
+        User newUser = new User(userId, formatPhoneNumber(phoneNumber));
         userRepository.saveUser(newUser, new OnCompleteListener() {
             @Override
             public void onSuccess() {
                 currentUser = newUser;
                 saveUserPhoneNumber(phoneNumber);
-
-                // Set initial online status
-                if (isNetworkAvailable) {
-                    updateOnlineStatus();
-                }
-
                 listener.onSuccess();
             }
 
@@ -215,42 +87,28 @@ public class UserSessionManager {
         });
     }
 
-    public User getCurrentUser() {
-        return currentUser;
-    }
+    public void updateUserProfile(String firstName, String lastName, String emergencyContact, OnCompleteListener listener) {
+        String userId = authService.getCurrentUserId();
+        String phoneNumber = getSavedPhoneNumber();
 
-    public void logout(final OnCompleteListener listener) {
-        final String userId = authService.getCurrentUserId();
-
-        // Set offline status before logout
-        if (userId != null && isNetworkAvailable) {
-            statusRepository.updateUserStatus(userId, "offline", new OnCompleteListener() {
-                @Override
-                public void onSuccess() {
-                    // Now proceed with logout
-                    performLogout(listener);
-                }
-
-                @Override
-                public void onError(Exception e) {
-                    // Log error but still proceed with logout
-                    Log.e(TAG, "Failed to update offline status", e);
-                    performLogout(listener);
-                }
-            });
-        } else {
-            performLogout(listener);
+        if (userId == null || phoneNumber == null) {
+            listener.onError(new Exception("User ID or phone number is missing"));
+            return;
         }
-    }
 
-    private void performLogout(OnCompleteListener listener) {
-        authService.signOut(new AuthService.AuthCallback() {
+        User updatedUser = new User(
+                userId,
+                firstName,
+                lastName,
+                phoneNumber,
+                formatPhoneNumber(emergencyContact)
+        );
+
+        userRepository.updateUserProfile(updatedUser, new OnCompleteListener() {
             @Override
             public void onSuccess() {
-                currentUser = null;
-                SharedPreferences.Editor editor = sharedPreferences.edit();
-                editor.clear();
-                editor.apply();
+                currentUser = updatedUser;
+                saveUserProfileData(firstName, lastName, emergencyContact);
                 listener.onSuccess();
             }
 
@@ -261,17 +119,51 @@ public class UserSessionManager {
         });
     }
 
-    public void unregisterNetworkCallback() {
-        try {
-            ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (connectivityManager != null) {
-                connectivityManager.unregisterNetworkCallback(networkCallback);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error unregistering network callback", e);
+    public void loadCurrentUser(final OnUserLoadedListener listener) {
+        String phoneNumber = getSavedPhoneNumber();
+        if (phoneNumber == null) {
+            listener.onError(new Exception("No saved phone number"));
+            return;
         }
+
+        userRepository.getUserByPhoneNumber(phoneNumber, new UserRepository.OnUserFetchedListener() {
+            @Override
+            public void onSuccess(User user) {
+                currentUser = user;
+                listener.onUserLoaded(user);
+            }
+
+            @Override
+            public void onError(Exception e) {
+                listener.onError(e);
+            }
+        });
     }
 
+    private String formatPhoneNumber(String phoneNumber) {
+        if (phoneNumber == null) return null;
+
+        // Remove any non-digit characters
+        String cleaned = phoneNumber.replaceAll("[^\\d+]", "");
+
+        // Ensure it starts with +91
+        if (!cleaned.startsWith("+")) {
+            cleaned = "+91" + cleaned;
+        } else if (!cleaned.startsWith("+91")) {
+            cleaned = "+91" + cleaned.substring(1);
+        }
+
+        return cleaned;
+    }
+
+    public void clearSession() {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.clear();
+        editor.apply();
+        currentUser = null;
+    }
+
+    // Interface for user loading callback
     public interface OnUserLoadedListener {
         void onUserLoaded(User user);
         void onError(Exception e);
