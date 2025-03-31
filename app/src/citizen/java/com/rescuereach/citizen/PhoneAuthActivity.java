@@ -1,13 +1,12 @@
 package com.rescuereach.citizen;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.os.CountDownTimer;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -16,10 +15,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ViewFlipper;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseException;
 import com.google.firebase.FirebaseTooManyRequestsException;
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
@@ -35,16 +34,19 @@ import com.rescuereach.service.auth.SMSRetrieverHelper;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.ui.common.OTPInputView;
 
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView.OTPCompletionListener {
     private static final String TAG = "PhoneAuthActivity";
-    private static final long SMS_COOLDOWN_MS = 30000; // 60 seconds cooldown
-    private static final String PREF_NAME = "phone_auth_prefs";
-    private static final String PREF_LAST_SMS_REQUEST_TIME = "last_sms_request_time";
 
+    // Constants
+    private static final int NETWORK_TIMEOUT_MS = 30000; // 30 seconds timeout for network operations
+
+    // UI Components
     private EditText phoneEditText;
     private Button sendCodeButton;
+    private Button clearButton;
     private Button verifyCodeButton;
     private ImageButton backButton;
     private TextView phoneDisplayText;
@@ -52,28 +54,27 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private ViewFlipper viewFlipper;
     private ProgressBar progressBar;
     private OTPInputView otpInputView;
-    private TextView countdownText;
-    private CountDownTimer countDownTimer;
-    private SharedPreferences preferences;
 
+    // Services
     private AuthService authService;
     private UserRepository userRepository;
     private UserSessionManager sessionManager;
     private SMSRetrieverHelper smsRetrieverHelper;
 
+    // State variables
     private String verificationId;
     private String phoneNumber;
+    private boolean isRequestInProgress = false;
+    private Handler networkTimeoutHandler;
+    private Runnable networkTimeoutRunnable;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_phone_auth);
 
-        // Check Google Play Services availability
-        checkGooglePlayServices();
-        
-        // Initialize preferences
-        preferences = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+        // Initialize handler for network timeouts
+        networkTimeoutHandler = new Handler(Looper.getMainLooper());
 
         // Initialize services
         authService = AuthServiceProvider.getInstance().getAuthService();
@@ -82,8 +83,19 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         smsRetrieverHelper = new SMSRetrieverHelper(this);
 
         // Initialize views
+        initializeViews();
+
+        // Set up listeners
+        setupListeners();
+
+        // Set up SMS retriever
+        setupSMSRetriever();
+    }
+
+    private void initializeViews() {
         phoneEditText = findViewById(R.id.edit_phone);
         sendCodeButton = findViewById(R.id.button_send_code);
+        clearButton = findViewById(R.id.button_clear);
         verifyCodeButton = findViewById(R.id.button_verify_code);
         backButton = findViewById(R.id.button_back);
         phoneDisplayText = findViewById(R.id.text_phone_display);
@@ -92,111 +104,43 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         progressBar = findViewById(R.id.progress_bar);
         otpInputView = findViewById(R.id.otp_input_view);
 
-        // Add countdown text after send button
-        countdownText = new TextView(this);
-        countdownText.setId(View.generateViewId());
-        countdownText.setTextColor(getResources().getColor(android.R.color.holo_red_light));
-        countdownText.setVisibility(View.GONE);
+        // Ensure ViewFlipper is showing first view on start
+        viewFlipper.setDisplayedChild(0);
+    }
 
-        // Find the parent layout containing the send button
-        ViewGroup sendButtonParent = (ViewGroup) sendCodeButton.getParent();
-        int index = sendButtonParent.indexOfChild(sendCodeButton);
-        sendButtonParent.addView(countdownText, index + 1);
-
-        // Set the layout parameters for the countdown text
-        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) countdownText.getLayoutParams();
-        params.width = ViewGroup.LayoutParams.WRAP_CONTENT;
-        params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
-        params.topMargin = 16;
-        countdownText.setLayoutParams(params);
-
-        // Set up listeners
+    private void setupListeners() {
         otpInputView.setOTPCompletionListener(this);
 
-        // Set up SMS retriever
-        setupSMSRetriever();
-
-        // Set up button click listeners
         sendCodeButton.setOnClickListener(v -> {
-            if (canRequestSmsVerification()) {
+            if (!isRequestInProgress) {
                 sendVerificationCode();
-            } else {
-                long remainingSeconds = getRemainingCooldownTimeSeconds();
-                Toast.makeText(this,
-                        "Please wait " + remainingSeconds + " seconds before requesting another code",
-                        Toast.LENGTH_SHORT).show();
             }
         });
 
-        verifyCodeButton.setOnClickListener(v -> verifyCode());
-        backButton.setOnClickListener(v -> viewFlipper.setDisplayedChild(0));
-        resendCodeText.setOnClickListener(v -> resendVerificationCode());;
+        clearButton.setOnClickListener(v -> {
+            resetAuthenticationState();
+            // Give user feedback
+            Toast.makeText(this, "Form cleared", Toast.LENGTH_SHORT).show();
+        });
 
-        // Check if we're in a cooldown period
-        checkAndShowCooldown();
-    }
+        verifyCodeButton.setOnClickListener(v -> {
+            if (!isRequestInProgress) {
+                verifyCode();
+            }
+        });
 
-    private void checkGooglePlayServices() {
-        GoogleApiAvailability apiAvailability = GoogleApiAvailability.getInstance();
-        int resultCode = apiAvailability.isGooglePlayServicesAvailable(this);
+        backButton.setOnClickListener(v -> {
+            resetAuthenticationState();
+            viewFlipper.setDisplayedChild(0);
+        });
 
-        if (resultCode != ConnectionResult.SUCCESS) {
-            if (apiAvailability.isUserResolvableError(resultCode)) {
-                apiAvailability.getErrorDialog(this, resultCode, 9000,
-                                dialog -> Toast.makeText(this, "This app requires Google Play Services to function properly",
-                                        Toast.LENGTH_LONG).show())
-                        .show();
+        resendCodeText.setOnClickListener(v -> {
+            if (!isRequestInProgress) {
+                resendVerificationCode();
             } else {
-                Toast.makeText(this, "This device does not support Google Play Services which is required",
-                        Toast.LENGTH_LONG).show();
-                finish();
+                Toast.makeText(this, "Please wait, a request is already in progress", Toast.LENGTH_SHORT).show();
             }
-        }
-    }
-
-    private void checkAndShowCooldown() {
-        if (!canRequestSmsVerification()) {
-            startCountdownTimer(getRemainingCooldownTimeMillis());
-        }
-    }
-
-    private boolean canRequestSmsVerification() {
-        long lastRequestTime = preferences.getLong(PREF_LAST_SMS_REQUEST_TIME, 0);
-        long currentTime = System.currentTimeMillis();
-        return currentTime - lastRequestTime >= SMS_COOLDOWN_MS;
-    }
-
-    private long getRemainingCooldownTimeMillis() {
-        long lastRequestTime = preferences.getLong(PREF_LAST_SMS_REQUEST_TIME, 0);
-        long currentTime = System.currentTimeMillis();
-        long elapsedTime = currentTime - lastRequestTime;
-        return Math.max(0, SMS_COOLDOWN_MS - elapsedTime);
-    }
-
-    private long getRemainingCooldownTimeSeconds() {
-        return getRemainingCooldownTimeMillis() / 1000;
-    }
-
-    private void startCountdownTimer(long milliseconds) {
-        if (countDownTimer != null) {
-            countDownTimer.cancel();
-        }
-
-        countdownText.setVisibility(View.VISIBLE);
-        sendCodeButton.setEnabled(false);
-
-        countDownTimer = new CountDownTimer(milliseconds, 1000) {
-            @Override
-            public void onTick(long millisUntilFinished) {
-                countdownText.setText("Please wait " + (millisUntilFinished / 1000) + " seconds before requesting another code");
-            }
-
-            @Override
-            public void onFinish() {
-                countdownText.setVisibility(View.GONE);
-                sendCodeButton.setEnabled(true);
-            }
-        }.start();
+        });
     }
 
     private void setupSMSRetriever() {
@@ -204,18 +148,23 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             @Override
             public void onSMSRetrieved(String otp) {
                 Log.d(TAG, "OTP retrieved: " + otp);
-                if (otpInputView != null) {
-                    otpInputView.setOTP(otp);
-                    // Automatically verify after small delay to give UI time to update
-                    otpInputView.postDelayed(() -> verifyCode(), 300);
+                if (otpInputView != null && !isFinishing() && !isDestroyed()) {
+                    runOnUiThread(() -> {
+                        otpInputView.setOTP(otp);
+                        // Automatically verify after small delay to give UI time to update
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            if (!isFinishing() && !isDestroyed()) {
+                                verifyCode();
+                            }
+                        }, 500);
+                    });
                 }
             }
 
             @Override
             public void onSMSRetrievalFailed(Exception e) {
                 Log.e(TAG, "SMS retrieval failed", e);
-                // Just log the error but don't show to user to avoid confusion
-                // It will fallback to manual input
+                // Silent failure - don't show error to user
             }
         });
     }
@@ -223,7 +172,9 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     @Override
     public void onOTPCompleted(String otp) {
         // OTP input complete, enable verify button
-        verifyCodeButton.setEnabled(true);
+        if (!isDestroyed() && !isFinishing()) {
+            verifyCodeButton.setEnabled(true);
+        }
     }
 
     private void sendVerificationCode() {
@@ -245,15 +196,29 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             phoneNumber = "+91" + phoneNumber; // Default to India country code
         }
 
+        isRequestInProgress = true;
         showLoading(true);
 
-        // Record the current time for cooldown
-        preferences.edit().putLong(PREF_LAST_SMS_REQUEST_TIME, System.currentTimeMillis()).apply();
+        // Set a timeout for the network operation
+        startNetworkTimeout(() -> {
+            if (isRequestInProgress) {
+                isRequestInProgress = false;
+                showLoading(false);
+                if (!isFinishing() && !isDestroyed()) {
+                    showErrorDialog("Verification request timed out. Please check your internet connection and try again.");
+                }
+            }
+        });
 
         authService.startPhoneVerification(phoneNumber, this, new AuthService.PhoneVerificationCallback() {
             @Override
             public void onCodeSent(String vId) {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
                 showLoading(false);
+
+                if (isFinishing() || isDestroyed()) return;
+
                 verificationId = vId;
                 phoneDisplayText.setText("Code sent to " + phoneNumber);
                 viewFlipper.setDisplayedChild(1);
@@ -266,33 +231,40 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
             @Override
             public void onVerificationCompleted(PhoneAuthCredential credential) {
-                showLoading(false);
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
+
+                if (isFinishing() || isDestroyed()) return;
+
+                Log.d(TAG, "onVerificationCompleted: Auto-verification successful");
                 // Auto-verification completed, handle user creation/login
+                showLoading(false);
                 handlePhoneAuthSuccess(phoneNumber);
             }
 
             @Override
             public void onVerificationFailed(Exception e) {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
                 showLoading(false);
+
+                if (isFinishing() || isDestroyed()) return;
+
                 Log.e(TAG, "Phone verification failed", e);
 
-                // Provide specific error message based on the exception
-                String errorMessage;
+                // Handle rate limiting errors specially
+                if (e instanceof FirebaseTooManyRequestsException ||
+                        (e.getMessage() != null && e.getMessage().contains("quota"))) {
+                    showRateLimitErrorDialog();
+                    return;
+                }
 
-                if (e instanceof FirebaseTooManyRequestsException) {
-                    errorMessage = "We have blocked all requests from this device due to unusual activity. Try again later.";
-                    // Force a longer cooldown
-                    preferences.edit().putLong(PREF_LAST_SMS_REQUEST_TIME, System.currentTimeMillis()).apply();
-                    startCountdownTimer(SMS_COOLDOWN_MS);
-                } else if (e instanceof FirebaseAuthInvalidCredentialsException) {
+                // Handle other errors
+                String errorMessage;
+                if (e instanceof FirebaseAuthInvalidCredentialsException) {
                     errorMessage = "Invalid phone number format. Please check and try again.";
                 } else if (e instanceof FirebaseException && e.getMessage() != null) {
-                    if (e.getMessage().contains("quota")) {
-                        errorMessage = "SMS quota exceeded. Please try again later.";
-                        // Force a longer cooldown
-                        preferences.edit().putLong(PREF_LAST_SMS_REQUEST_TIME, System.currentTimeMillis()).apply();
-                        startCountdownTimer(SMS_COOLDOWN_MS);
-                    } else if (e.getMessage().contains("invalid format")) {
+                    if (e.getMessage().contains("invalid format")) {
                         errorMessage = "The phone number format is invalid";
                     } else if (e.getMessage().contains("network")) {
                         errorMessage = "Network error. Check your connection";
@@ -306,6 +278,28 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 Toast.makeText(PhoneAuthActivity.this, errorMessage, Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    private void showRateLimitErrorDialog() {
+        if (isFinishing() || isDestroyed()) return;
+
+        new AlertDialog.Builder(this)
+                .setTitle("Too Many Attempts")
+                .setMessage("You've made too many verification requests. Please wait at least 15 minutes before trying again.")
+                .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+                .setCancelable(false)
+                .show();
+    }
+
+    private void showErrorDialog(String message) {
+        if (isFinishing() || isDestroyed()) return;
+
+        new AlertDialog.Builder(this)
+                .setTitle("Error")
+                .setMessage(message)
+                .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+                .setCancelable(true)
+                .show();
     }
 
     private boolean isValidIndianPhoneNumber(String phoneNumber) {
@@ -330,13 +324,29 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             return;
         }
 
-        // No cooldown for resend - just show a loading indicator
+        isRequestInProgress = true;
         showLoading(true);
+
+        // Set a timeout for the network operation
+        startNetworkTimeout(() -> {
+            if (isRequestInProgress) {
+                isRequestInProgress = false;
+                showLoading(false);
+                if (!isFinishing() && !isDestroyed()) {
+                    showErrorDialog("Resend request timed out. Please check your internet connection and try again.");
+                }
+            }
+        });
 
         authService.startPhoneVerification(phoneNumber, this, new AuthService.PhoneVerificationCallback() {
             @Override
             public void onCodeSent(String vId) {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
                 showLoading(false);
+
+                if (isFinishing() || isDestroyed()) return;
+
                 verificationId = vId;
 
                 // Clear the input and start SMS retriever again
@@ -346,29 +356,36 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 Toast.makeText(PhoneAuthActivity.this, "Verification code resent", Toast.LENGTH_SHORT).show();
             }
 
-
             @Override
             public void onVerificationCompleted(PhoneAuthCredential credential) {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
                 showLoading(false);
+
+                if (isFinishing() || isDestroyed()) return;
+
                 handlePhoneAuthSuccess(phoneNumber);
             }
 
             @Override
             public void onVerificationFailed(Exception e) {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
                 showLoading(false);
+
+                if (isFinishing() || isDestroyed()) return;
+
                 Log.e(TAG, "Phone verification failed on resend", e);
 
-                String errorMessage;
-
+                // Handle rate limiting errors specially
                 if (e instanceof FirebaseTooManyRequestsException ||
                         (e.getMessage() != null && e.getMessage().contains("quota"))) {
-                    errorMessage = "We have blocked all requests from this device due to unusual activity. Try again later.";
-                    // Force a longer cooldown
-                    startCountdownTimer(SMS_COOLDOWN_MS);
-                } else {
-                    errorMessage = "Resend failed: " + e.getMessage();
+                    showRateLimitErrorDialog();
+                    return;
                 }
 
+                // Handle other errors
+                String errorMessage = "Resend failed: " + (e.getMessage() != null ? e.getMessage() : "Unknown error");
                 Toast.makeText(PhoneAuthActivity.this, errorMessage, Toast.LENGTH_LONG).show();
             }
         });
@@ -382,17 +399,39 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             return;
         }
 
+        isRequestInProgress = true;
         showLoading(true);
+
+        // Set a timeout for the network operation
+        startNetworkTimeout(() -> {
+            if (isRequestInProgress) {
+                isRequestInProgress = false;
+                showLoading(false);
+                if (!isFinishing() && !isDestroyed()) {
+                    showErrorDialog("Verification request timed out. Please check your internet connection and try again.");
+                }
+            }
+        });
 
         authService.verifyPhoneWithCode(verificationId, code, new AuthService.AuthCallback() {
             @Override
             public void onSuccess() {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
+
+                if (isFinishing() || isDestroyed()) return;
+
                 handlePhoneAuthSuccess(phoneNumber);
             }
 
             @Override
             public void onError(Exception e) {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
                 showLoading(false);
+
+                if (isFinishing() || isDestroyed()) return;
+
                 Log.e(TAG, "Code verification failed", e);
 
                 String errorMessage;
@@ -402,7 +441,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 } else if (e.getMessage() != null && e.getMessage().contains("expired")) {
                     errorMessage = "Code expired. Please request a new code";
                 } else {
-                    errorMessage = "Code verification failed: " + e.getMessage();
+                    errorMessage = "Verification failed. Please try again.";
                 }
 
                 Toast.makeText(PhoneAuthActivity.this, errorMessage, Toast.LENGTH_LONG).show();
@@ -410,21 +449,60 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         });
     }
 
+    private void startNetworkTimeout(Runnable timeoutAction) {
+        cancelNetworkTimeout(); // Cancel any existing timeout
+
+        networkTimeoutRunnable = timeoutAction;
+        networkTimeoutHandler.postDelayed(networkTimeoutRunnable, NETWORK_TIMEOUT_MS);
+    }
+
+    private void cancelNetworkTimeout() {
+        if (networkTimeoutRunnable != null) {
+            networkTimeoutHandler.removeCallbacks(networkTimeoutRunnable);
+            networkTimeoutRunnable = null;
+        }
+    }
+
     private void handlePhoneAuthSuccess(final String phoneNumber) {
+        isRequestInProgress = true;
+        showLoading(true);
+
+        // Set a timeout for the database operation
+        startNetworkTimeout(() -> {
+            if (isRequestInProgress) {
+                isRequestInProgress = false;
+                showLoading(false);
+                if (!isFinishing() && !isDestroyed()) {
+                    // Even if database check times out, we can still proceed with creating a new user
+                    createNewUser(phoneNumber);
+                }
+            }
+        });
+
         // Check if user exists in database
         userRepository.getUserByPhoneNumber(phoneNumber, new UserRepository.OnUserFetchedListener() {
             @Override
             public void onSuccess(User user) {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
+                showLoading(false);
+
+                if (isFinishing() || isDestroyed()) return;
+
                 // User exists, save to session
                 sessionManager.saveUserPhoneNumber(phoneNumber);
-                showLoading(false);
                 navigateToMain();
             }
 
             @Override
             public void onError(Exception e) {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
+
+                if (isFinishing() || isDestroyed()) return;
+
                 // Handle specific database errors
-                if (e.getMessage() != null && e.getMessage().contains("User not found")) {
+                if (e != null && e.getMessage() != null && e.getMessage().contains("User not found")) {
                     // User doesn't exist, create new user
                     createNewUser(phoneNumber);
                 } else {
@@ -432,7 +510,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                     showLoading(false);
                     Log.e(TAG, "Database error during user check", e);
                     Toast.makeText(PhoneAuthActivity.this,
-                            "Database error: " + e.getMessage(),
+                            "Database error: " + (e != null ? e.getMessage() : "Unknown error"),
                             Toast.LENGTH_LONG).show();
                 }
             }
@@ -440,25 +518,53 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     }
 
     private void createNewUser(String phoneNumber) {
+        isRequestInProgress = true;
+        showLoading(true);
+
+        // Set a timeout for the database operation
+        startNetworkTimeout(() -> {
+            if (isRequestInProgress) {
+                isRequestInProgress = false;
+                showLoading(false);
+                if (!isFinishing() && !isDestroyed()) {
+                    showErrorDialog("Database operation timed out. Please try again later.");
+                }
+            }
+        });
+
         sessionManager.createNewUser(phoneNumber, new OnCompleteListener() {
             @Override
             public void onSuccess() {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
                 showLoading(false);
+
+                if (isFinishing() || isDestroyed()) return;
+
                 navigateToMain();
             }
 
             @Override
             public void onError(Exception e) {
+                cancelNetworkTimeout();
+                isRequestInProgress = false;
                 showLoading(false);
+
+                if (isFinishing() || isDestroyed()) return;
+
                 Log.e(TAG, "Failed to create user", e);
 
                 String errorMessage = "Failed to create user: ";
-                if (e.getMessage() != null && e.getMessage().contains("network")) {
-                    errorMessage += "Network error. Please check your connection";
-                } else if (e.getMessage() != null && e.getMessage().contains("permission")) {
-                    errorMessage += "Permission denied. Please contact support";
+                if (e != null && e.getMessage() != null) {
+                    if (e.getMessage().contains("network")) {
+                        errorMessage += "Network error. Please check your connection";
+                    } else if (e.getMessage().contains("permission")) {
+                        errorMessage += "Permission denied. Please contact support";
+                    } else {
+                        errorMessage += e.getMessage();
+                    }
                 } else {
-                    errorMessage += e.getMessage();
+                    errorMessage += "Unknown error";
                 }
 
                 Toast.makeText(PhoneAuthActivity.this, errorMessage, Toast.LENGTH_LONG).show();
@@ -479,38 +585,70 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     }
 
     private void showLoading(boolean isLoading) {
+        if (isFinishing() || isDestroyed()) return;
+
         progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
 
         // Disable UI interaction during loading
         sendCodeButton.setEnabled(!isLoading);
+        clearButton.setEnabled(!isLoading);
 
         // Only enable verify button if OTP is complete
         if (otpInputView != null) {
             String currentOtp = otpInputView.getOTP();
-            verifyCodeButton.setEnabled(!isLoading && currentOtp.length() == 6);
+            verifyCodeButton.setEnabled(!isLoading && currentOtp != null && currentOtp.length() == 6);
         } else {
             verifyCodeButton.setEnabled(!isLoading);
         }
 
         backButton.setEnabled(!isLoading);
         resendCodeText.setEnabled(!isLoading);
+        phoneEditText.setEnabled(!isLoading);
 
         if (otpInputView != null) {
             otpInputView.setEnabled(!isLoading);
         }
     }
 
+    private void resetAuthenticationState() {
+        // Cancel any ongoing operations
+        cancelNetworkTimeout();
+        isRequestInProgress = false;
+
+        // Reset input fields
+        if (phoneEditText != null) {
+            phoneEditText.setText("");
+            phoneEditText.setError(null);
+            phoneEditText.requestFocus(); // Set focus back to phone field
+        }
+
+        if (otpInputView != null) {
+            otpInputView.clearOTP();
+        }
+
+        // Reset verification state
+        verificationId = null;
+
+        // Ensure UI is not in loading state
+        showLoading(false);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Don't cancel operations on pause - they should continue in background
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // Cancel any pending timeouts
+        cancelNetworkTimeout();
+
         // Clean up SMS retriever
         if (smsRetrieverHelper != null) {
             smsRetrieverHelper.unregisterReceiver();
-        }
-
-        // Clean up countdown timer
-        if (countDownTimer != null) {
-            countDownTimer.cancel();
+            smsRetrieverHelper = null;
         }
     }
 }

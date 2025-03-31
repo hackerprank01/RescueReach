@@ -8,12 +8,14 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
 import com.rescuereach.R;
@@ -30,7 +32,7 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
     private DrawerLayout drawerLayout;
     private NavigationView navigationView;
     private Toolbar toolbar;
-    private FloatingActionButton fabEmergency;
+    private ExtendedFloatingActionButton fabEmergency;
 
     private AuthService authService;
     private UserSessionManager sessionManager;
@@ -104,7 +106,10 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
             selectedFragment = new ProfileFragment();
             title = "Profile";
         } else if (itemId == R.id.nav_logout) {
-            logout();
+            showLogoutConfirmationDialog();
+            // Close drawer and return since we're showing a dialog
+            drawerLayout.closeDrawer(GravityCompat.START);
+            return true;
         }
 
         if (selectedFragment != null) {
@@ -120,6 +125,19 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         // Close drawer after handling click
         drawerLayout.closeDrawer(GravityCompat.START);
         return true;
+    }
+
+    private void showLogoutConfirmationDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Confirm Logout");
+        builder.setMessage("Are you sure you want to logout?");
+        builder.setPositiveButton("Yes", (dialog, which) -> {
+            logout();
+        });
+        builder.setNegativeButton("No", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.create().show();
     }
 
     private void logout() {

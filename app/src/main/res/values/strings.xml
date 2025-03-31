@@ -5,4 +5,5 @@
     <string name="action_settings">Settings</string>
     <string name="action_logout">Logout</string>
     <string name="report_emergency">Report Emergency</string>
+    <string name="zero">0</string>
 </resources>
