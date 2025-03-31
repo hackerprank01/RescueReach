@@ -72,12 +72,18 @@ public class SMSRetrieverHelper {
                     Bundle extras = intent.getExtras();
                     if (extras == null) {
                         Log.e(TAG, "SMS retrieved extras were null");
+                        if (listener != null) {
+                            listener.onSMSRetrievalFailed(new Exception("SMS extras were null"));
+                        }
                         return;
                     }
 
                     Status status = (Status) extras.get(SmsRetriever.EXTRA_STATUS);
                     if (status == null) {
                         Log.e(TAG, "SMS retrieved status was null");
+                        if (listener != null) {
+                            listener.onSMSRetrievalFailed(new Exception("SMS status was null"));
+                        }
                         return;
                     }
 
@@ -85,11 +91,11 @@ public class SMSRetrieverHelper {
                         case CommonStatusCodes.SUCCESS:
                             // Get SMS message contents
                             String message = (String) extras.get(SmsRetriever.EXTRA_SMS_MESSAGE);
-                            Log.d(TAG, "SMS retrieved: " + message);
+                            Log.d(TAG, "SMS retrieved: " + (message != null ? message : "null message"));
 
                             if (message != null) {
                                 String otp = extractOTPFromMessage(message);
-                                Log.d(TAG, "Extracted OTP: " + otp);
+                                Log.d(TAG, "Extracted OTP: " + (otp != null ? otp : "no OTP found"));
 
                                 if (otp != null && listener != null) {
                                     listener.onSMSRetrieved(otp);
@@ -122,9 +128,9 @@ public class SMSRetrieverHelper {
             }
         };
 
-        // Register the receiver with NOT_EXPORTED flag (for Android 13+)
-        IntentFilter intentFilter = new IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION);
         try {
+            // Register the receiver with NOT_EXPORTED flag (for Android 13+)
+            IntentFilter intentFilter = new IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION);
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 activity.registerReceiver(smsReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED);
             } else {
@@ -133,40 +139,43 @@ public class SMSRetrieverHelper {
             Log.d(TAG, "SMS broadcast receiver registered successfully");
         } catch (Exception e) {
             Log.e(TAG, "Error registering SMS receiver", e);
+            if (listener != null) {
+                listener.onSMSRetrievalFailed(e);
+            }
         }
     }
 
     private String extractOTPFromMessage(String message) {
-        if (message == null) return null;
+        if (message == null || message.isEmpty()) {
+            return null;
+        }
 
-        // Log the message for debugging
-        Log.d(TAG, "Attempting to extract OTP from: " + message);
+        Log.d(TAG, "Attempting to extract OTP from message: " + message);
 
-        // Try different patterns to extract the OTP
-        // Pattern 1: Look for a 6-digit number
-        Pattern pattern = Pattern.compile("(\\d{6})");
+        // Try multiple patterns to extract the OTP
+
+        // Pattern 1: Look for exactly 6 digits together
+        Pattern pattern = Pattern.compile("\\b(\\d{6})\\b");
         Matcher matcher = pattern.matcher(message);
-
         if (matcher.find()) {
             return matcher.group(1);
         }
 
-        // Pattern 2: Look for "code", "verification", or "OTP" followed by digits
-        pattern = Pattern.compile("(?:code|verification code|OTP)[^\\d]*(\\d{4,6})", Pattern.CASE_INSENSITIVE);
+        // Pattern 2: Look for "code" or "OTP" followed by 6 digits (case insensitive)
+        pattern = Pattern.compile("(?:code|otp)[^\\d]*(\\d{6})", Pattern.CASE_INSENSITIVE);
         matcher = pattern.matcher(message);
-
         if (matcher.find()) {
             return matcher.group(1);
         }
 
-        // Pattern 3: Last resort - any sequence of 4-6 digits
-        pattern = Pattern.compile("\\b(\\d{4,6})\\b");
+        // Pattern 3: Look for any 6 consecutive digits as a last resort
+        pattern = Pattern.compile("(\\d{6})");
         matcher = pattern.matcher(message);
-
         if (matcher.find()) {
             return matcher.group(1);
         }
 
+        Log.d(TAG, "No OTP pattern found in message");
         return null;
     }
 
@@ -178,6 +187,7 @@ public class SMSRetrieverHelper {
             } catch (Exception e) {
                 Log.e(TAG, "Error unregistering SMS receiver", e);
             }
+            smsReceiver = null;
         }
     }
 }
