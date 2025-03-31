@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
 
 public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView.OTPCompletionListener {
     private static final String TAG = "PhoneAuthActivity";
-    private static final long SMS_COOLDOWN_MS = 60000; // 60 seconds cooldown
+    private static final long SMS_COOLDOWN_MS = 30000; // 60 seconds cooldown
     private static final String PREF_NAME = "phone_auth_prefs";
     private static final String PREF_LAST_SMS_REQUEST_TIME = "last_sms_request_time";
 
