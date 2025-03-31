@@ -28,7 +28,7 @@ public class SplashActivity extends AppCompatActivity {
 
         if (authService.isLoggedIn()) {
             // User is logged in, go to main activity
-            startActivity(new Intent(this, PhoneAuthActivity    .class));
+            startActivity(new Intent(this, CitizenMainActivity  .class));
         } else {
             // User is not logged in, go to phone auth activity
             startActivity(new Intent(this, PhoneAuthActivity.class));
