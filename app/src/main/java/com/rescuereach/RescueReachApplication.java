@@ -1,34 +1,46 @@
 package com.rescuereach;
 
 import android.app.Application;
-import android.content.Context;
+import android.util.Log;
 
 import com.google.firebase.FirebaseApp;
-import com.rescuereach.service.auth.UserSessionManager;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreSettings;
+import com.rescuereach.data.repository.RepositoryProvider;
+import com.rescuereach.service.auth.AuthServiceProvider;
 
 public class RescueReachApplication extends Application {
+    private static final String TAG = "RescueReachApp";
 
     @Override
     public void onCreate() {
         super.onCreate();
 
         // Initialize Firebase
+        initializeFirebase();
+
+        // Initialize service providers
+        initializeServiceProviders();
+
+        Log.d(TAG, "Application initialized");
+    }
+
+    private void initializeFirebase() {
+        // Initialize Firebase
         FirebaseApp.initializeApp(this);
+
+        // Configure Firestore settings for offline persistence
+        FirebaseFirestoreSettings settings = new FirebaseFirestoreSettings.Builder()
+                .setPersistenceEnabled(true)
+                .build();
+        FirebaseFirestore.getInstance().setFirestoreSettings(settings);
     }
 
-    @Override
-    protected void attachBaseContext(Context base) {
-        super.attachBaseContext(base);
-    }
+    private void initializeServiceProviders() {
+        // Initialize the AuthServiceProvider
+        AuthServiceProvider.getInstance();
 
-    @Override
-    public void onTerminate() {
-        // Unregister callbacks
-        try {
-            UserSessionManager.getInstance(this).unregisterNetworkCallback();
-        } catch (Exception e) {
-            // Ignore
-        }
-        super.onTerminate();
+        // Initialize the RepositoryProvider
+        RepositoryProvider.getInstance();
     }
 }
