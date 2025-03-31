@@ -3,7 +3,9 @@ package com.rescuereach.service.auth;
 import android.app.Activity;
 
 import com.google.firebase.FirebaseException;
+import com.google.firebase.FirebaseTooManyRequestsException;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.PhoneAuthCredential;
 import com.google.firebase.auth.PhoneAuthOptions;
@@ -99,7 +101,14 @@ public class FirebaseAuthService implements AuthService {
 
                     @Override
                     public void onVerificationFailed(FirebaseException e) {
-                        callback.onVerificationFailed(e);
+                        // Pass the specific exception type for better handling
+                        if (e instanceof FirebaseTooManyRequestsException) {
+                            callback.onVerificationFailed(e);
+                        } else if (e instanceof FirebaseAuthInvalidCredentialsException) {
+                            callback.onVerificationFailed(e);
+                        } else {
+                            callback.onVerificationFailed(e);
+                        }
                     }
                 })
                 .build();
@@ -116,7 +125,10 @@ public class FirebaseAuthService implements AuthService {
     private void signInWithPhoneCredential(PhoneAuthCredential credential, AuthCallback callback) {
         firebaseAuth.signInWithCredential(credential)
                 .addOnSuccessListener(authResult -> callback.onSuccess())
-                .addOnFailureListener(e -> callback.onError(e));
+                .addOnFailureListener(e -> {
+                    // Preserve exception type for better error handling
+                    callback.onError(e);
+                });
     }
 
     @Override

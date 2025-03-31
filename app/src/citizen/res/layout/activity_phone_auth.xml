@@ -109,6 +109,16 @@
                     android:text="Send OTP"
                     android:textColor="@android:color/white" />
 
+                <TextView
+                    android:id="@+id/text_countdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="8dp"
+                    android:text="Please wait 60s before requesting another code"
+                    android:textColor="#FF5722"
+                    android:visibility="gone" />
+
             </LinearLayout>
 
             <!-- OTP Verification View -->

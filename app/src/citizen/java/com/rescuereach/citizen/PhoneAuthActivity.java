@@ -1,10 +1,13 @@
 package com.rescuereach.citizen;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.CountDownTimer;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -15,6 +18,9 @@ import android.widget.ViewFlipper;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.firebase.FirebaseException;
+import com.google.firebase.FirebaseTooManyRequestsException;
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
 import com.google.firebase.auth.PhoneAuthCredential;
 import com.rescuereach.R;
 import com.rescuereach.data.model.User;
@@ -27,8 +33,16 @@ import com.rescuereach.service.auth.SMSRetrieverHelper;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.ui.common.OTPInputView;
 
+import java.util.regex.Pattern;
+
 public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView.OTPCompletionListener {
     private static final String TAG = "PhoneAuthActivity";
+    private static final long SMS_COOLDOWN_MS = 60000; // 60 seconds cooldown
+    private static final String PREF_NAME = "phone_auth_prefs";
+    private static final String PREF_LAST_SMS_REQUEST_TIME = "last_sms_request_time";
+    private static final String PREF_LAST_PHONE_NUMBER = "last_phone_number";
+    private static final int MAX_ATTEMPTS_PER_NUMBER = 3;
+    private static final String PREF_ATTEMPT_COUNT = "attempt_count";
 
     private EditText phoneEditText;
     private Button sendCodeButton;
@@ -39,11 +53,14 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private ViewFlipper viewFlipper;
     private ProgressBar progressBar;
     private OTPInputView otpInputView;
+    private TextView countdownText;
 
     private AuthService authService;
     private UserRepository userRepository;
     private UserSessionManager sessionManager;
     private SMSRetrieverHelper smsRetrieverHelper;
+    private SharedPreferences preferences;
+    private CountDownTimer countDownTimer;
 
     private String verificationId;
     private String phoneNumber;
@@ -52,6 +69,9 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_phone_auth);
+
+        // Initialize preferences
+        preferences = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
 
         // Initialize services
         authService = AuthServiceProvider.getInstance().getAuthService();
@@ -70,6 +90,25 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         progressBar = findViewById(R.id.progress_bar);
         otpInputView = findViewById(R.id.otp_input_view);
 
+        // Add countdown text
+        countdownText = findViewById(R.id.text_countdown);
+        if (countdownText == null) {
+            // If not in layout yet, add programmatically after the send button
+            countdownText = new TextView(this);
+            countdownText.setId(View.generateViewId());
+            countdownText.setTextColor(getResources().getColor(android.R.color.holo_red_light));
+            countdownText.setVisibility(View.GONE);
+
+            // Find the parent layout containing the send button
+            View parent = (View) sendCodeButton.getParent();
+            if (parent instanceof ViewGroup) {
+                ViewGroup parentLayout = (ViewGroup) parent;
+                // Add the TextView after the button
+                int index = parentLayout.indexOfChild(sendCodeButton);
+                parentLayout.addView(countdownText, index + 1);
+            }
+        }
+
         // Set up listeners
         otpInputView.setOTPCompletionListener(this);
 
@@ -77,10 +116,74 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         setupSMSRetriever();
 
         // Set up button click listeners
-        sendCodeButton.setOnClickListener(v -> sendVerificationCode());
+        sendCodeButton.setOnClickListener(v -> {
+            if (canRequestSmsVerification()) {
+                sendVerificationCode();
+            } else {
+                Toast.makeText(this, "Please wait before requesting another code", Toast.LENGTH_SHORT).show();
+            }
+        });
+
         verifyCodeButton.setOnClickListener(v -> verifyCode());
         backButton.setOnClickListener(v -> viewFlipper.setDisplayedChild(0));
-        resendCodeText.setOnClickListener(v -> resendVerificationCode());
+        resendCodeText.setOnClickListener(v -> {
+            if (canRequestSmsVerification()) {
+                resendVerificationCode();
+            } else {
+                long remainingSeconds = getRemainingCooldownTimeSeconds();
+                Toast.makeText(this,
+                        "Please wait " + remainingSeconds + " seconds before requesting another code",
+                        Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        // Check if we're in a cooldown period
+        checkAndShowCooldown();
+    }
+
+    private void checkAndShowCooldown() {
+        if (!canRequestSmsVerification()) {
+            startCountdownTimer(getRemainingCooldownTimeMillis());
+        }
+    }
+
+    private boolean canRequestSmsVerification() {
+        long lastRequestTime = preferences.getLong(PREF_LAST_SMS_REQUEST_TIME, 0);
+        long currentTime = System.currentTimeMillis();
+        return currentTime - lastRequestTime >= SMS_COOLDOWN_MS;
+    }
+
+    private long getRemainingCooldownTimeMillis() {
+        long lastRequestTime = preferences.getLong(PREF_LAST_SMS_REQUEST_TIME, 0);
+        long currentTime = System.currentTimeMillis();
+        long elapsedTime = currentTime - lastRequestTime;
+        return Math.max(0, SMS_COOLDOWN_MS - elapsedTime);
+    }
+
+    private long getRemainingCooldownTimeSeconds() {
+        return getRemainingCooldownTimeMillis() / 1000;
+    }
+
+    private void startCountdownTimer(long milliseconds) {
+        if (countDownTimer != null) {
+            countDownTimer.cancel();
+        }
+
+        countdownText.setVisibility(View.VISIBLE);
+        sendCodeButton.setEnabled(false);
+
+        countDownTimer = new CountDownTimer(milliseconds, 1000) {
+            @Override
+            public void onTick(long millisUntilFinished) {
+                countdownText.setText("Please wait " + (millisUntilFinished / 1000) + " seconds before requesting another code");
+            }
+
+            @Override
+            public void onFinish() {
+                countdownText.setVisibility(View.GONE);
+                sendCodeButton.setEnabled(true);
+            }
+        }.start();
     }
 
     private void setupSMSRetriever() {
@@ -99,7 +202,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             public void onSMSRetrievalFailed(Exception e) {
                 Log.e(TAG, "SMS retrieval failed", e);
                 Toast.makeText(PhoneAuthActivity.this,
-                        "SMS auto-detection failed: " + e.getMessage(),
+                        "SMS auto-detection failed. Please enter the code manually.",
                         Toast.LENGTH_SHORT).show();
             }
         });
@@ -114,17 +217,41 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private void sendVerificationCode() {
         phoneNumber = phoneEditText.getText().toString().trim();
 
-        if (TextUtils.isEmpty(phoneNumber)) {
-            phoneEditText.setError("Phone number is required");
+        if (!isValidPhoneNumber(phoneNumber)) {
+            phoneEditText.setError("Please enter a valid 10-digit phone number");
             return;
         }
 
         // Format phone number with country code if needed
         if (!phoneNumber.startsWith("+")) {
-            phoneNumber = "+91" + phoneNumber; // Default to US country code
+            phoneNumber = "+91" + phoneNumber; // Default to India country code
+        }
+
+        // Update attempt count for this number
+        String lastPhoneNumber = preferences.getString(PREF_LAST_PHONE_NUMBER, "");
+        int attempts = 0;
+
+        if (phoneNumber.equals(lastPhoneNumber)) {
+            attempts = preferences.getInt(PREF_ATTEMPT_COUNT, 0) + 1;
+        } else {
+            // Reset for new number
+            preferences.edit().putString(PREF_LAST_PHONE_NUMBER, phoneNumber).apply();
+        }
+
+        preferences.edit().putInt(PREF_ATTEMPT_COUNT, attempts).apply();
+
+        // Check if we've exceeded max attempts for this number
+        if (attempts >= MAX_ATTEMPTS_PER_NUMBER) {
+            Toast.makeText(this,
+                    "Too many attempts for this number. Please try again later or use a different number.",
+                    Toast.LENGTH_LONG).show();
+            return;
         }
 
         showLoading(true);
+
+        // Record the current time for cooldown
+        preferences.edit().putLong(PREF_LAST_SMS_REQUEST_TIME, System.currentTimeMillis()).apply();
 
         authService.startPhoneVerification(phoneNumber, this, new AuthService.PhoneVerificationCallback() {
             @Override
@@ -153,16 +280,24 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 Log.e(TAG, "Phone verification failed", e);
 
                 // Provide specific error message based on the exception
-                String errorMessage = "Verification failed: ";
+                String errorMessage;
 
-                if (e.getMessage().contains("invalid format")) {
-                    errorMessage += "The phone number format is invalid";
-                } else if (e.getMessage().contains("quota")) {
-                    errorMessage += "Too many requests. Try again later";
-                } else if (e.getMessage().contains("network")) {
-                    errorMessage += "Network error. Check your connection";
+                if (e instanceof FirebaseTooManyRequestsException) {
+                    errorMessage = "We have blocked all requests from this device due to unusual activity. Try again later.";
+                    // Enforce a longer cooldown
+                    preferences.edit().putLong(PREF_LAST_SMS_REQUEST_TIME, System.currentTimeMillis()).apply();
+                    startCountdownTimer(SMS_COOLDOWN_MS);
+                } else if (e instanceof FirebaseAuthInvalidCredentialsException) {
+                    errorMessage = "Invalid phone number format. Please check and try again.";
+                } else if (e.getMessage() != null && e.getMessage().contains("quota")) {
+                    errorMessage = "SMS quota exceeded. Please try again later.";
+                    // Enforce a longer cooldown
+                    preferences.edit().putLong(PREF_LAST_SMS_REQUEST_TIME, System.currentTimeMillis()).apply();
+                    startCountdownTimer(SMS_COOLDOWN_MS);
+                } else if (e.getMessage() != null && e.getMessage().contains("network")) {
+                    errorMessage = "Network error. Check your connection and try again.";
                 } else {
-                    errorMessage += e.getMessage();
+                    errorMessage = "Verification failed: " + e.getMessage();
                 }
 
                 Toast.makeText(PhoneAuthActivity.this, errorMessage, Toast.LENGTH_LONG).show();
@@ -170,11 +305,33 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         });
     }
 
+    private boolean isValidPhoneNumber(String phoneNumber) {
+        if (TextUtils.isEmpty(phoneNumber)) {
+            return false;
+        }
+
+        // Remove any non-digit characters
+        String cleaned = phoneNumber.replaceAll("[^\\d+]", "");
+
+        // Indian numbers validation
+        if (cleaned.startsWith("+91")) {
+            return cleaned.length() == 13; // +91 plus 10 digits
+        } else if (Pattern.matches("^[6-9]\\d{9}$", cleaned)) {
+            // Indian mobile without country code (starts with 6-9 and is 10 digits)
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     private void resendVerificationCode() {
         if (TextUtils.isEmpty(phoneNumber)) {
             viewFlipper.setDisplayedChild(0);
             return;
         }
+
+        // Record the current time for cooldown
+        preferences.edit().putLong(PREF_LAST_SMS_REQUEST_TIME, System.currentTimeMillis()).apply();
 
         showLoading(true);
 
@@ -202,11 +359,16 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 showLoading(false);
                 Log.e(TAG, "Phone verification failed on resend", e);
 
-                String errorMessage = "Resend failed: ";
-                if (e.getMessage().contains("quota")) {
-                    errorMessage += "Too many attempts. Try again later";
+                String errorMessage;
+
+                if (e instanceof FirebaseTooManyRequestsException) {
+                    errorMessage = "We have blocked all requests from this device due to unusual activity. Try again later.";
+                    startCountdownTimer(SMS_COOLDOWN_MS);
+                } else if (e.getMessage() != null && e.getMessage().contains("quota")) {
+                    errorMessage = "SMS quota exceeded. Please try again later.";
+                    startCountdownTimer(SMS_COOLDOWN_MS);
                 } else {
-                    errorMessage += e.getMessage();
+                    errorMessage = "Resend failed: " + e.getMessage();
                 }
 
                 Toast.makeText(PhoneAuthActivity.this, errorMessage, Toast.LENGTH_LONG).show();
@@ -235,14 +397,14 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 showLoading(false);
                 Log.e(TAG, "Code verification failed", e);
 
-                String errorMessage = "Code verification failed: ";
-                if (e.getMessage().contains("invalid code")) {
+                String errorMessage;
+                if (e instanceof FirebaseAuthInvalidCredentialsException) {
                     errorMessage = "Invalid verification code. Please try again";
                     otpInputView.clearOTP();
-                } else if (e.getMessage().contains("expired")) {
+                } else if (e.getMessage() != null && e.getMessage().contains("expired")) {
                     errorMessage = "Code expired. Please request a new code";
                 } else {
-                    errorMessage += e.getMessage();
+                    errorMessage = "Code verification failed: " + e.getMessage();
                 }
 
                 Toast.makeText(PhoneAuthActivity.this, errorMessage, Toast.LENGTH_LONG).show();
@@ -264,7 +426,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             @Override
             public void onError(Exception e) {
                 // Handle specific database errors
-                if (e.getMessage().contains("User not found")) {
+                if (e.getMessage() != null && e.getMessage().contains("User not found")) {
                     // User doesn't exist, create new user
                     createNewUser(phoneNumber);
                 } else {
@@ -293,9 +455,9 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 Log.e(TAG, "Failed to create user", e);
 
                 String errorMessage = "Failed to create user: ";
-                if (e.getMessage().contains("network")) {
+                if (e.getMessage() != null && e.getMessage().contains("network")) {
                     errorMessage += "Network error. Please check your connection";
-                } else if (e.getMessage().contains("permission")) {
+                } else if (e.getMessage() != null && e.getMessage().contains("permission")) {
                     errorMessage += "Permission denied. Please contact support";
                 } else {
                     errorMessage += e.getMessage();
@@ -306,7 +468,6 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         });
     }
 
-    // Only modify the navigateToMain method in PhoneAuthActivity.java
     private void navigateToMain() {
         // Check if user profile is complete
         if (sessionManager.isProfileComplete()) {
@@ -324,7 +485,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
         // Disable UI interaction during loading
         sendCodeButton.setEnabled(!isLoading);
-        verifyCodeButton.setEnabled(!isLoading);
+        verifyCodeButton.setEnabled(!isLoading && otpInputView.hasValidOTP());
         backButton.setEnabled(!isLoading);
         resendCodeText.setEnabled(!isLoading);
 
@@ -339,6 +500,11 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         // Clean up SMS retriever
         if (smsRetrieverHelper != null) {
             smsRetrieverHelper.unregisterReceiver();
+        }
+
+        // Clean up countdown timer
+        if (countDownTimer != null) {
+            countDownTimer.cancel();
         }
     }
 }
