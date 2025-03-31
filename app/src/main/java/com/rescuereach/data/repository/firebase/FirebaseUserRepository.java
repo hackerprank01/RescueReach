@@ -3,6 +3,9 @@ package com.rescuereach.data.repository.firebase;
 import android.util.Log;
 
 import com.google.android.gms.tasks.Task;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ServerValue;
 import com.google.firebase.firestore.CollectionReference;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
@@ -14,7 +17,9 @@ import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.data.repository.UserRepository;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class FirebaseUserRepository implements UserRepository {
     private static final String TAG = "FirebaseUserRepository";
@@ -99,7 +104,7 @@ public class FirebaseUserRepository implements UserRepository {
 
     @Override
     public void saveUser(User user, OnCompleteListener listener) {
-        Log.d(TAG, "Saving user: " + user.getUserId());
+        Log.d(TAG, "Saving user: " + user.getPhoneNumber());
 
         if (user.getUserId() == null || user.getUserId().isEmpty()) {
             listener.onError(new IllegalArgumentException("User ID cannot be null or empty"));
@@ -199,7 +204,7 @@ public class FirebaseUserRepository implements UserRepository {
         listener.onSuccess();
 
         // In a full implementation, you'd do something like:
-        /*
+
         DatabaseReference usersRef = FirebaseDatabase.getInstance().getReference("users");
         Map<String, Object> userBasicInfo = new HashMap<>();
         userBasicInfo.put("phoneNumber", user.getPhoneNumber());
@@ -209,7 +214,7 @@ public class FirebaseUserRepository implements UserRepository {
         usersRef.child(user.getUserId()).setValue(userBasicInfo)
                 .addOnSuccessListener(aVoid -> listener.onSuccess())
                 .addOnFailureListener(listener::onError);
-        */
+
     }
 
     private void createEmptyUserDocument(String userId, Exception originalError, OnUserFetchedListener listener) {
