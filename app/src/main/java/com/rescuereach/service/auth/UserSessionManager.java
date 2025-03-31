@@ -64,6 +64,34 @@ public class UserSessionManager {
         return sharedPreferences.getBoolean(KEY_IS_PROFILE_COMPLETE, false);
     }
 
+    // New helper methods for ProfileFragment
+    public String getFirstName() {
+        return sharedPreferences.getString(KEY_USER_FIRST_NAME, "");
+    }
+
+    public String getLastName() {
+        return sharedPreferences.getString(KEY_USER_LAST_NAME, "");
+    }
+
+    public String getFullName() {
+        String firstName = getFirstName();
+        String lastName = getLastName();
+
+        if (!firstName.isEmpty() && !lastName.isEmpty()) {
+            return firstName + " " + lastName;
+        } else if (!firstName.isEmpty()) {
+            return firstName;
+        } else if (!lastName.isEmpty()) {
+            return lastName;
+        } else {
+            return "User";
+        }
+    }
+
+    public String getEmergencyContact() {
+        return sharedPreferences.getString(KEY_USER_EMERGENCY_CONTACT, "");
+    }
+
     public void createNewUser(String phoneNumber, OnCompleteListener listener) {
         String userId = authService.getCurrentUserId();
         if (userId == null) {
@@ -117,6 +145,11 @@ public class UserSessionManager {
                 listener.onError(e);
             }
         });
+    }
+    public void markProfileComplete() {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putBoolean(KEY_IS_PROFILE_COMPLETE, true);
+        editor.apply();
     }
 
     public void loadCurrentUser(final OnUserLoadedListener listener) {

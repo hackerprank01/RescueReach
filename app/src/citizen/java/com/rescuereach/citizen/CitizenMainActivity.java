@@ -16,7 +16,6 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
 import com.rescuereach.R;
 import com.rescuereach.citizen.fragments.HomeFragment;
@@ -45,6 +44,13 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         // Initialize services
         authService = AuthServiceProvider.getInstance().getAuthService();
         sessionManager = UserSessionManager.getInstance(this);
+
+        // Ensure profile is marked as complete if user reaches this screen
+        // This prevents ProfileCompletionActivity from showing after logout
+        if (!sessionManager.isProfileComplete() && sessionManager.getSavedPhoneNumber() != null) {
+            // If phone number exists but profile not marked complete, mark it complete
+            sessionManager.markProfileComplete();
+        }
 
         // Initialize UI components
         setupToolbar();

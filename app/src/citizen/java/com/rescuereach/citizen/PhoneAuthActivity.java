@@ -7,6 +7,8 @@ import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -15,7 +17,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ViewFlipper;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -23,6 +24,7 @@ import com.google.firebase.FirebaseException;
 import com.google.firebase.FirebaseTooManyRequestsException;
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
 import com.google.firebase.auth.PhoneAuthCredential;
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.rescuereach.R;
 import com.rescuereach.data.model.User;
 import com.rescuereach.data.repository.OnCompleteListener;
@@ -34,7 +36,6 @@ import com.rescuereach.service.auth.SMSRetrieverHelper;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.ui.common.OTPInputView;
 
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView.OTPCompletionListener {
@@ -81,6 +82,12 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         userRepository = RepositoryProvider.getInstance().getUserRepository();
         sessionManager = UserSessionManager.getInstance(this);
         smsRetrieverHelper = new SMSRetrieverHelper(this);
+
+        // Check if already authenticated
+        if (authService.isLoggedIn() && sessionManager.getSavedPhoneNumber() != null) {
+            navigateToMain();
+            return;
+        }
 
         // Initialize views
         initializeViews();
@@ -130,6 +137,8 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         });
 
         backButton.setOnClickListener(v -> {
+            Animation slideInLeft = AnimationUtils.loadAnimation(this, android.R.anim.slide_in_left);
+            viewFlipper.setInAnimation(slideInLeft);
             resetAuthenticationState();
             viewFlipper.setDisplayedChild(0);
         });
@@ -221,6 +230,10 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
                 verificationId = vId;
                 phoneDisplayText.setText("Code sent to " + phoneNumber);
+
+                // Show OTP verification view with animation
+                Animation slideInRight = AnimationUtils.loadAnimation(PhoneAuthActivity.this, R.anim.slide_in_right);
+                viewFlipper.setInAnimation(slideInRight);
                 viewFlipper.setDisplayedChild(1);
 
                 // Start SMS retriever to automatically capture the code
@@ -240,6 +253,9 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 // Auto-verification completed, handle user creation/login
                 showLoading(false);
                 handlePhoneAuthSuccess(phoneNumber);
+
+                // Subscribe to appropriate topics for push notifications
+                subscribeToTopics();
             }
 
             @Override
@@ -422,6 +438,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 if (isFinishing() || isDestroyed()) return;
 
                 handlePhoneAuthSuccess(phoneNumber);
+                subscribeToTopics();
             }
 
             @Override
@@ -582,6 +599,18 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             startActivity(new Intent(this, ProfileCompletionActivity.class));
         }
         finish();
+    }
+
+    // Subscribe to FCM topics for citizens
+    private void subscribeToTopics() {
+        FirebaseMessaging.getInstance().subscribeToTopic("citizens")
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        Log.d(TAG, "Subscribed to 'citizens' topic");
+                    } else {
+                        Log.e(TAG, "Failed to subscribe to 'citizens' topic", task.getException());
+                    }
+                });
     }
 
     private void showLoading(boolean isLoading) {
