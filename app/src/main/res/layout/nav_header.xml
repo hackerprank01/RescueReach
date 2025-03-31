@@ -12,7 +12,7 @@
         android:id="@+id/nav_header_image"
         android:layout_width="64dp"
         android:layout_height="64dp"
-        android:src="@drawable/ic_profile_placeholder" />
+        android:src="@drawable/ic_profile_placeholders" />
 
     <TextView
         android:id="@+id/nav_header_name"
