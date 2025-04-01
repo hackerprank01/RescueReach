@@ -255,7 +255,6 @@ public class FirebaseUserRepository implements UserRepository {
         updates.put("lastName", user.getLastName() != null ? user.getLastName() : "");
         updates.put("fullName", user.getFullName());
         updates.put("emergencyContact", user.getEmergencyContact() != null ? user.getEmergencyContact() : "");
-        updates.put("lastUpdated", ServerValue.TIMESTAMP);
 
         usersRef.child(phoneKey).updateChildren(updates)
                 .addOnSuccessListener(aVoid -> {
@@ -278,7 +277,6 @@ public class FirebaseUserRepository implements UserRepository {
         userBasicInfo.put("lastName", user.getLastName() != null ? user.getLastName() : "");
         userBasicInfo.put("fullName", user.getFullName());
         userBasicInfo.put("emergencyContact", user.getEmergencyContact() != null ? user.getEmergencyContact() : "");
-        userBasicInfo.put("lastActive", ServerValue.TIMESTAMP);
         userBasicInfo.put("createdAt", ServerValue.TIMESTAMP);
         userBasicInfo.put("status", "online");
 

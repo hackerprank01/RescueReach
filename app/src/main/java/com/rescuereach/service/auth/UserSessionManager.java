@@ -152,6 +152,12 @@ public class UserSessionManager {
         editor.apply();
     }
 
+    public void resetProfileCompletionStatus() {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putBoolean(KEY_IS_PROFILE_COMPLETE, false);
+        editor.apply();
+    }
+
     public void loadCurrentUser(final OnUserLoadedListener listener) {
         String phoneNumber = getSavedPhoneNumber();
         if (phoneNumber == null) {

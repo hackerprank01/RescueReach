@@ -76,41 +76,7 @@ public class FirebaseAuthService implements AuthService {
                 .setPhoneNumber(phoneNumber)
                 .setTimeout(60L, TimeUnit.SECONDS)
                 .setActivity(activity)
-                .setCallbacks(new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                    @Override
-                    public void onCodeSent(String verificationId,
-                                           PhoneAuthProvider.ForceResendingToken token) {
-                        callback.onCodeSent(verificationId);
-                    }
-
-                    @Override
-                    public void onVerificationCompleted(PhoneAuthCredential credential) {
-                        callback.onVerificationCompleted(credential);
-                        signInWithPhoneCredential(credential, new AuthCallback() {
-                            @Override
-                            public void onSuccess() {
-                                // Authentication successful
-                            }
-
-                            @Override
-                            public void onError(Exception e) {
-                                // Handle error
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void onVerificationFailed(FirebaseException e) {
-                        // Pass the specific exception type for better handling
-                        if (e instanceof FirebaseTooManyRequestsException) {
-                            callback.onVerificationFailed(e);
-                        } else if (e instanceof FirebaseAuthInvalidCredentialsException) {
-                            callback.onVerificationFailed(e);
-                        } else {
-                            callback.onVerificationFailed(e);
-                        }
-                    }
-                })
+                .setCallbacks(createCallbacks(callback))
                 .build();
 
         PhoneAuthProvider.verifyPhoneNumber(options);
@@ -120,6 +86,38 @@ public class FirebaseAuthService implements AuthService {
     public void verifyPhoneWithCode(String verificationId, String code, AuthCallback callback) {
         PhoneAuthCredential credential = PhoneAuthProvider.getCredential(verificationId, code);
         signInWithPhoneCredential(credential, callback);
+    }
+
+    @Override
+    public void resendVerificationCode(String phoneNumber, PhoneAuthProvider.ForceResendingToken token, Activity activity, PhoneVerificationCallback callback) {
+        PhoneAuthOptions options = PhoneAuthOptions.newBuilder(firebaseAuth)
+                .setPhoneNumber(phoneNumber)
+                .setTimeout(60L, TimeUnit.SECONDS)
+                .setActivity(activity)
+                .setCallbacks(createCallbacks(callback))
+                .setForceResendingToken(token) // Use the token for resending
+                .build();
+
+        PhoneAuthProvider.verifyPhoneNumber(options);
+    }
+
+    private PhoneAuthProvider.OnVerificationStateChangedCallbacks createCallbacks(PhoneVerificationCallback callback) {
+        return new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+            @Override
+            public void onVerificationCompleted(PhoneAuthCredential credential) {
+                callback.onVerificationCompleted(credential);
+            }
+
+            @Override
+            public void onVerificationFailed(FirebaseException e) {
+                callback.onVerificationFailed(e);
+            }
+
+            @Override
+            public void onCodeSent(String verificationId, PhoneAuthProvider.ForceResendingToken token) {
+                callback.onCodeSent(verificationId, token);
+            }
+        };
     }
 
     private void signInWithPhoneCredential(PhoneAuthCredential credential, AuthCallback callback) {

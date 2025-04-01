@@ -43,7 +43,8 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/titleText" />
 
-    <androidx.cardview.widget.CardView
+    <com.google.android.material.card.MaterialCardView
+        app:layout_constraintTop_toBottomOf="@+id/subtitleText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
@@ -52,22 +53,22 @@
         app:cardCornerRadius="16dp"
         app:cardElevation="8dp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/subtitleText">
+        app:layout_constraintStart_toStartOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@color/white"
-            android:padding="24dp">
+            android:padding="24dp"
+            android:background="@color/white">
 
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="16dp"
                 android:hint="First Name"
+                android:textColorHint="@color/black"
                 app:hintTextColor="@color/black">
 
                 <EditText
@@ -84,14 +85,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:hint="Last Name">
+                android:hint="Last Name"
+                android:textColorHint="@color/black"
+                app:hintTextColor="@color/black">
 
                 <EditText
                     android:id="@+id/edit_last_name"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/black"
                     android:inputType="textPersonName"
+                    android:textColor="@color/black"
                     android:maxLines="1" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -101,14 +104,17 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:hint="Emergency Contact Number"
-                app:prefixText="+91">
+                android:textColorHint="@color/black"
+                app:hintTextColor="@color/black"
+                app:prefixText="+91"
+                app:prefixTextColor="@color/black">
 
                 <EditText
                     android:id="@+id/edit_emergency_contact"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/black"
                     android:inputType="phone"
+                    android:textColor="@color/black"
                     android:maxLines="1" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -124,14 +130,14 @@
                 android:id="@+id/button_save"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
+                android:layout_marginTop="24dp"
                 android:background="@drawable/button_background"
                 android:padding="12dp"
                 android:text="Save and Continue"
                 android:textColor="@android:color/black" />
 
         </LinearLayout>
-    </androidx.cardview.widget.CardView>
+    </com.google.android.material.card.MaterialCardView>
 
     <ProgressBar
         android:id="@+id/progress_bar"

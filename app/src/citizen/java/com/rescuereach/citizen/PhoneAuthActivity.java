@@ -2,6 +2,7 @@ package com.rescuereach.citizen;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.CountDownTimer;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -9,6 +10,10 @@ import android.util.Log;
 import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
+import android.content.pm.PackageManager;
+
+import com.google.firebase.messaging.BuildConfig;
+import com.rescuereach.service.auth.AppSignatureHelper;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -24,6 +29,7 @@ import com.google.firebase.FirebaseException;
 import com.google.firebase.FirebaseTooManyRequestsException;
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
 import com.google.firebase.auth.PhoneAuthCredential;
+import com.google.firebase.auth.PhoneAuthProvider;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.rescuereach.R;
 import com.rescuereach.data.model.User;
@@ -42,7 +48,8 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private static final String TAG = "PhoneAuthActivity";
 
     // Constants
-    private static final int NETWORK_TIMEOUT_MS = 30000; // 30 seconds timeout for network operations
+    private static final int NETWORK_TIMEOUT_MS = 30000; // 30 seconds timeout
+    private static final int RESEND_COOLDOWN_MS = 60000; // 60 seconds cooldown for resend
 
     // UI Components
     private EditText phoneEditText;
@@ -52,6 +59,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private ImageButton backButton;
     private TextView phoneDisplayText;
     private TextView resendCodeText;
+    private TextView countdownTimerText;
     private ViewFlipper viewFlipper;
     private ProgressBar progressBar;
     private OTPInputView otpInputView;
@@ -65,9 +73,11 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     // State variables
     private String verificationId;
     private String phoneNumber;
+    private PhoneAuthProvider.ForceResendingToken resendToken;
     private boolean isRequestInProgress = false;
     private Handler networkTimeoutHandler;
     private Runnable networkTimeoutRunnable;
+    private CountDownTimer resendCooldownTimer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -107,12 +117,17 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         backButton = findViewById(R.id.button_back);
         phoneDisplayText = findViewById(R.id.text_phone_display);
         resendCodeText = findViewById(R.id.text_resend_code);
+        countdownTimerText = findViewById(R.id.text_countdown_timer);
         viewFlipper = findViewById(R.id.viewFlipper);
         progressBar = findViewById(R.id.progress_bar);
         otpInputView = findViewById(R.id.otp_input_view);
 
         // Ensure ViewFlipper is showing first view on start
         viewFlipper.setDisplayedChild(0);
+
+        // Initially disable the resend option
+        resendCodeText.setEnabled(false);
+        countdownTimerText.setVisibility(View.GONE);
     }
 
     private void setupListeners() {
@@ -139,13 +154,16 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         backButton.setOnClickListener(v -> {
             Animation slideInLeft = AnimationUtils.loadAnimation(this, android.R.anim.slide_in_left);
             viewFlipper.setInAnimation(slideInLeft);
+            cancelResendCooldown();
             resetAuthenticationState();
             viewFlipper.setDisplayedChild(0);
         });
 
         resendCodeText.setOnClickListener(v -> {
-            if (!isRequestInProgress) {
+            if (!isRequestInProgress && resendCodeText.isEnabled()) {
                 resendVerificationCode();
+            } else if (!resendCodeText.isEnabled()) {
+                Toast.makeText(this, "Please wait before requesting a new code", Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(this, "Please wait, a request is already in progress", Toast.LENGTH_SHORT).show();
             }
@@ -153,10 +171,21 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     }
 
     private void setupSMSRetriever() {
+        // Create and configure SMS Retriever
+        smsRetrieverHelper = new SMSRetrieverHelper(this);
+
+        // Get and log the app signature (for development purposes)
+        if (BuildConfig.DEBUG) {
+            AppSignatureHelper appSignatureHelper = new AppSignatureHelper(this);
+            String appSignature = appSignatureHelper.getAppSignature();
+            Log.d(TAG, "App Signature for SMS Retriever: " + appSignature);
+        }
+
+        // Set the SMS retrieval listener
         smsRetrieverHelper.setSMSRetrievedListener(new SMSRetrieverHelper.SMSRetrievedListener() {
             @Override
             public void onSMSRetrieved(String otp) {
-                Log.d(TAG, "OTP retrieved: " + otp);
+                Log.d(TAG, "OTP retrieved from SMS: " + otp);
                 if (otpInputView != null && !isFinishing() && !isDestroyed()) {
                     runOnUiThread(() -> {
                         otpInputView.setOTP(otp);
@@ -174,9 +203,11 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             public void onSMSRetrievalFailed(Exception e) {
                 Log.e(TAG, "SMS retrieval failed", e);
                 // Silent failure - don't show error to user
+                // If automatic SMS retrieval fails, user can still enter code manually
             }
         });
     }
+
 
     @Override
     public void onOTPCompleted(String otp) {
@@ -221,14 +252,18 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
         authService.startPhoneVerification(phoneNumber, this, new AuthService.PhoneVerificationCallback() {
             @Override
-            public void onCodeSent(String vId) {
+            public void onCodeSent(String vId, PhoneAuthProvider.ForceResendingToken token) {
                 cancelNetworkTimeout();
                 isRequestInProgress = false;
                 showLoading(false);
 
+                smsRetrieverHelper.unregisterReceiver(); // Unregister any existing receiver
+                smsRetrieverHelper.startSMSRetriever(); // Start a new retriever
+
                 if (isFinishing() || isDestroyed()) return;
 
                 verificationId = vId;
+                resendToken = token;
                 phoneDisplayText.setText("Code sent to " + phoneNumber);
 
                 // Show OTP verification view with animation
@@ -238,6 +273,9 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
                 // Start SMS retriever to automatically capture the code
                 smsRetrieverHelper.startSMSRetriever();
+
+                // Start countdown for resend button
+                startResendCooldown();
 
                 Toast.makeText(PhoneAuthActivity.this, "Verification code sent", Toast.LENGTH_SHORT).show();
             }
@@ -296,6 +334,43 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         });
     }
 
+    private void startResendCooldown() {
+        // Cancel any existing timer
+        cancelResendCooldown();
+
+        // Disable resend button and show countdown
+        resendCodeText.setEnabled(false);
+        countdownTimerText.setVisibility(View.VISIBLE);
+
+        // Create and start new countdown timer
+        resendCooldownTimer = new CountDownTimer(RESEND_COOLDOWN_MS, 1000) {
+            @Override
+            public void onTick(long millisUntilFinished) {
+                int seconds = (int) (millisUntilFinished / 1000);
+                countdownTimerText.setText("Resend available in " + seconds + "s");
+            }
+
+            @Override
+            public void onFinish() {
+                // Enable resend button and hide countdown
+                resendCodeText.setEnabled(true);
+                countdownTimerText.setVisibility(View.GONE);
+                resendCooldownTimer = null;
+            }
+        }.start();
+    }
+
+    private void cancelResendCooldown() {
+        if (resendCooldownTimer != null) {
+            resendCooldownTimer.cancel();
+            resendCooldownTimer = null;
+        }
+
+        // Reset UI
+        resendCodeText.setEnabled(true);
+        countdownTimerText.setVisibility(View.GONE);
+    }
+
     private void showRateLimitErrorDialog() {
         if (isFinishing() || isDestroyed()) return;
 
@@ -340,6 +415,13 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             return;
         }
 
+        if (resendToken == null) {
+            // If we don't have a resend token, just go back to phone input
+            Toast.makeText(this, "Unable to resend code. Please try again.", Toast.LENGTH_SHORT).show();
+            viewFlipper.setDisplayedChild(0);
+            return;
+        }
+
         isRequestInProgress = true;
         showLoading(true);
 
@@ -354,9 +436,9 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             }
         });
 
-        authService.startPhoneVerification(phoneNumber, this, new AuthService.PhoneVerificationCallback() {
+        authService.resendVerificationCode(phoneNumber, resendToken, this, new AuthService.PhoneVerificationCallback() {
             @Override
-            public void onCodeSent(String vId) {
+            public void onCodeSent(String vId, PhoneAuthProvider.ForceResendingToken token) {
                 cancelNetworkTimeout();
                 isRequestInProgress = false;
                 showLoading(false);
@@ -364,10 +446,14 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 if (isFinishing() || isDestroyed()) return;
 
                 verificationId = vId;
+                resendToken = token;
 
                 // Clear the input and start SMS retriever again
                 otpInputView.clearOTP();
                 smsRetrieverHelper.startSMSRetriever();
+
+                // Start new cooldown timer
+                startResendCooldown();
 
                 Toast.makeText(PhoneAuthActivity.this, "Verification code resent", Toast.LENGTH_SHORT).show();
             }
@@ -508,6 +594,17 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
                 // User exists, save to session
                 sessionManager.saveUserPhoneNumber(phoneNumber);
+
+                // If user profile data exists in database but not in shared prefs,
+                // update shared prefs with this data
+                if (user.getFirstName() != null && user.getLastName() != null) {
+                    sessionManager.saveUserProfileData(
+                            user.getFirstName(),
+                            user.getLastName(),
+                            user.getEmergencyContact() != null ? user.getEmergencyContact() : ""
+                    );
+                }
+
                 navigateToMain();
             }
 
@@ -631,7 +728,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         }
 
         backButton.setEnabled(!isLoading);
-        resendCodeText.setEnabled(!isLoading);
+        // Don't change resendCodeText enabled state here - it's managed by the cooldown timer
         phoneEditText.setEnabled(!isLoading);
 
         if (otpInputView != null) {
@@ -642,6 +739,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private void resetAuthenticationState() {
         // Cancel any ongoing operations
         cancelNetworkTimeout();
+        cancelResendCooldown();
         isRequestInProgress = false;
 
         // Reset input fields
@@ -657,6 +755,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
         // Reset verification state
         verificationId = null;
+        resendToken = null;
 
         // Ensure UI is not in loading state
         showLoading(false);
@@ -673,6 +772,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         super.onDestroy();
         // Cancel any pending timeouts
         cancelNetworkTimeout();
+        cancelResendCooldown();
 
         // Clean up SMS retriever
         if (smsRetrieverHelper != null) {
