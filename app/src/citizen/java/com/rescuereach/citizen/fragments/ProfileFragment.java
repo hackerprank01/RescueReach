@@ -1,5 +1,8 @@
 package com.rescuereach.citizen.fragments;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.content.Context;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextUtils;
@@ -8,14 +11,17 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.card.MaterialCardView;
@@ -24,17 +30,21 @@ import com.rescuereach.data.model.User;
 import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.service.auth.UserSessionManager;
 
+import java.util.regex.Pattern;
+
 public class ProfileFragment extends Fragment {
     private static final String TAG = "ProfileFragment";
 
     // UI Components
     private TextView fullNameTextView;
     private TextView phoneTextView;
+    private TextView emergencyContactTextView;
     private TextView phoneEditTextView; // Non-editable phone in edit mode
     private EditText firstNameEditText;
     private EditText lastNameEditText;
     private EditText emergencyContactEditText;
     private Button updateProfileButton;
+    private Button cancelUpdateButton;
     private Button editProfileButton;
     private ProgressBar progressBar;
     private MaterialCardView viewProfileCardView;
@@ -45,6 +55,7 @@ public class ProfileFragment extends Fragment {
 
     // State variables
     private boolean isEditing = false;
+    private boolean hasUnsavedChanges = false;
 
     @Nullable
     @Override
@@ -67,7 +78,10 @@ public class ProfileFragment extends Fragment {
         // Set up event listeners
         setupListeners();
 
-        // Load user data
+        // Display cached data immediately to improve perceived performance
+        displayCachedUserData();
+
+        // Then load latest data from server
         loadUserData();
     }
 
@@ -76,6 +90,7 @@ public class ProfileFragment extends Fragment {
         viewProfileCardView = view.findViewById(R.id.card_view_profile);
         fullNameTextView = view.findViewById(R.id.text_full_name);
         phoneTextView = view.findViewById(R.id.text_phone);
+        emergencyContactTextView = view.findViewById(R.id.text_emergency_contact);
         editProfileButton = view.findViewById(R.id.button_edit_profile);
 
         // Find edit profile elements
@@ -85,8 +100,9 @@ public class ProfileFragment extends Fragment {
         lastNameEditText = view.findViewById(R.id.edit_last_name);
         emergencyContactEditText = view.findViewById(R.id.edit_emergency_contact);
         updateProfileButton = view.findViewById(R.id.button_update_profile);
+        cancelUpdateButton = view.findViewById(R.id.button_cancel_update);
 
-        // Progress indicator
+        // Loading element
         progressBar = view.findViewById(R.id.progress_bar);
 
         // Initially show view mode
@@ -109,13 +125,27 @@ public class ProfileFragment extends Fragment {
             }
         });
 
-        // Add text change listeners for first name and last name to update full name in real-time
-        TextWatcher nameChangeWatcher = new TextWatcher() {
+        // Set click listener for cancel button
+        cancelUpdateButton.setOnClickListener(v -> {
+            // Check if there are unsaved changes
+            if (hasUnsavedChanges) {
+                showDiscardChangesDialog();
+            } else {
+                // No changes, just switch back to view mode
+                setEditMode(false);
+            }
+        });
+
+        // Add text change watchers for validation and change tracking
+        TextWatcher textWatcher = new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 
             @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // Mark that we have unsaved changes
+                hasUnsavedChanges = true;
+            }
 
             @Override
             public void afterTextChanged(Editable s) {
@@ -124,20 +154,22 @@ public class ProfileFragment extends Fragment {
             }
         };
 
-        firstNameEditText.addTextChangedListener(nameChangeWatcher);
-        lastNameEditText.addTextChangedListener(nameChangeWatcher);
-        emergencyContactEditText.addTextChangedListener(nameChangeWatcher);
+        firstNameEditText.addTextChangedListener(textWatcher);
+        lastNameEditText.addTextChangedListener(textWatcher);
+        emergencyContactEditText.addTextChangedListener(textWatcher);
     }
 
     private void loadUserData() {
-        showLoading(true);
+        // Don't show the full loading overlay since we're already showing cached data
+        // Just show the progress bar
+        progressBar.setVisibility(View.VISIBLE);
 
         sessionManager.loadCurrentUser(new UserSessionManager.OnUserLoadedListener() {
             @Override
             public void onUserLoaded(User user) {
                 if (isAdded() && getActivity() != null) {
                     requireActivity().runOnUiThread(() -> {
-                        showLoading(false);
+                        progressBar.setVisibility(View.GONE);
                         displayUserData(user);
                     });
                 }
@@ -147,14 +179,14 @@ public class ProfileFragment extends Fragment {
             public void onError(Exception e) {
                 if (isAdded() && getActivity() != null) {
                     requireActivity().runOnUiThread(() -> {
-                        showLoading(false);
-                        // Display cached data from preferences if available
-                        displayCachedUserData();
+                        progressBar.setVisibility(View.GONE);
 
-                        // Show error toast
+                        // We already displayed cached data, so just show a toast about the fetch error
                         Toast.makeText(requireContext(),
-                                "Error loading profile: " + e.getMessage(),
+                                "Error refreshing profile data",
                                 Toast.LENGTH_SHORT).show();
+
+                        Log.e(TAG, "Error loading profile", e);
                     });
                 }
             }
@@ -166,25 +198,39 @@ public class ProfileFragment extends Fragment {
             // Display user data in view mode
             fullNameTextView.setText(user.getFullName());
             phoneTextView.setText(user.getPhoneNumber());
+            // Make sure we have an emergency contact view in layout
+            if (emergencyContactTextView != null) {
+                emergencyContactTextView.setText(user.getEmergencyContact());
+            }
             phoneEditTextView.setText(user.getPhoneNumber());
 
             // Also populate edit fields (hidden initially)
             firstNameEditText.setText(user.getFirstName());
             lastNameEditText.setText(user.getLastName());
             emergencyContactEditText.setText(user.getEmergencyContact());
+
+            // Reset unsaved changes flag
+            hasUnsavedChanges = false;
         }
     }
 
     private void displayCachedUserData() {
-        // Use data from SharedPreferences
-        String phonNumber = sessionManager.getSavedPhoneNumber();
+        // Use data from SharedPreferences for immediate display
+        String phoneNumber = sessionManager.getSavedPhoneNumber();
         fullNameTextView.setText(sessionManager.getFullName());
-        phoneTextView.setText(phonNumber);
-        phoneEditTextView.setText(phonNumber);
+        phoneTextView.setText(phoneNumber);
+        // Make sure we have an emergency contact view in layout
+        if (emergencyContactTextView != null) {
+            emergencyContactTextView.setText(sessionManager.getEmergencyContact());
+        }
+        phoneEditTextView.setText(phoneNumber);
 
         firstNameEditText.setText(sessionManager.getFirstName());
         lastNameEditText.setText(sessionManager.getLastName());
         emergencyContactEditText.setText(sessionManager.getEmergencyContact());
+
+        // Reset unsaved changes flag
+        hasUnsavedChanges = false;
     }
 
     private void prepareForEditing() {
@@ -196,6 +242,9 @@ public class ProfileFragment extends Fragment {
 
         // Clear any previous error states
         clearErrors();
+
+        // Reset unsaved changes flag
+        hasUnsavedChanges = false;
     }
 
     private void clearErrors() {
@@ -213,13 +262,21 @@ public class ProfileFragment extends Fragment {
             firstNameEditText.setError("First name is required");
             firstNameEditText.requestFocus();
             isValid = false;
+        } else if (firstName.length() < 2) {
+            firstNameEditText.setError("First name must be at least 2 characters");
+            firstNameEditText.requestFocus();
+            isValid = false;
         }
 
         // Validate last name
         String lastName = lastNameEditText.getText().toString().trim();
         if (TextUtils.isEmpty(lastName)) {
             lastNameEditText.setError("Last name is required");
-            lastNameEditText.requestFocus();
+            if (isValid) lastNameEditText.requestFocus();
+            isValid = false;
+        } else if (lastName.length() < 2) {
+            lastNameEditText.setError("Last name must be at least 2 characters");
+            if (isValid) lastNameEditText.requestFocus();
             isValid = false;
         }
 
@@ -227,11 +284,11 @@ public class ProfileFragment extends Fragment {
         String emergencyContact = emergencyContactEditText.getText().toString().trim();
         if (TextUtils.isEmpty(emergencyContact)) {
             emergencyContactEditText.setError("Emergency contact is required");
-            emergencyContactEditText.requestFocus();
+            if (isValid) emergencyContactEditText.requestFocus();
             isValid = false;
         } else if (!isValidPhoneNumber(emergencyContact)) {
-            emergencyContactEditText.setError("Please enter a valid phone number");
-            emergencyContactEditText.requestFocus();
+            emergencyContactEditText.setError("Please enter a valid 10-digit phone number");
+            if (isValid) emergencyContactEditText.requestFocus();
             isValid = false;
         }
 
@@ -248,9 +305,9 @@ public class ProfileFragment extends Fragment {
 
         // Valid formats: +91XXXXXXXXXX or just XXXXXXXXXX (10 digits)
         if (cleaned.startsWith("+91")) {
-            return cleaned.length() == 13;
+            return cleaned.length() == 10 && Pattern.matches("^[6-9]\\d{9}$", cleaned);
         } else {
-            return cleaned.length() == 10;
+            return cleaned.length() == 10 && Pattern.matches("^[6-9]\\d{9}$", cleaned);
         }
     }
 
@@ -268,8 +325,14 @@ public class ProfileFragment extends Fragment {
                     requireActivity().runOnUiThread(() -> {
                         showLoading(false);
 
-                        // Update display with new data
+                        // Update displayed data
                         fullNameTextView.setText(firstName + " " + lastName);
+                        if (emergencyContactTextView != null) {
+                            emergencyContactTextView.setText(formatPhoneNumber(emergencyContact));
+                        }
+
+                        // Reset unsaved changes flag
+                        hasUnsavedChanges = false;
 
                         // Switch back to view mode
                         setEditMode(false);
@@ -296,12 +359,51 @@ public class ProfileFragment extends Fragment {
         });
     }
 
+    private String formatPhoneNumber(String phoneNumber) {
+        if (phoneNumber == null) return "";
+
+        // Format for display - ensure it has +91 prefix
+        if (!phoneNumber.startsWith("+")) {
+            return "+91 " + phoneNumber;
+        } else if (phoneNumber.startsWith("+91")) {
+            return phoneNumber;
+        } else {
+            return "+91 " + phoneNumber.substring(1);
+        }
+    }
+
     private void setEditMode(boolean isEdit) {
         isEditing = isEdit;
 
-        // Toggle visibility between view and edit modes
+        // Simple visibility toggle without animations to avoid issues
         viewProfileCardView.setVisibility(isEdit ? View.GONE : View.VISIBLE);
         editProfileCardView.setVisibility(isEdit ? View.VISIBLE : View.GONE);
+
+        if (isEdit) {
+            // Focus on first name field
+            firstNameEditText.requestFocus();
+            showKeyboard(firstNameEditText);
+        } else {
+            // Hide keyboard
+            hideKeyboard();
+        }
+    }
+
+    private void showDiscardChangesDialog() {
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Discard Changes")
+                .setMessage("You have unsaved changes. Are you sure you want to discard them?")
+                .setPositiveButton("Discard", (dialog, which) -> {
+                    // Discard changes and revert to view mode
+                    prepareForEditing(); // Reset form with original data
+                    setEditMode(false);
+                })
+                .setNegativeButton("Cancel", (dialog, which) -> {
+                    // Continue editing
+                    dialog.dismiss();
+                })
+                .setCancelable(true)
+                .show();
     }
 
     private void showLoading(boolean isLoading) {
@@ -318,6 +420,10 @@ public class ProfileFragment extends Fragment {
             updateProfileButton.setEnabled(!isLoading);
         }
 
+        if (cancelUpdateButton != null) {
+            cancelUpdateButton.setEnabled(!isLoading);
+        }
+
         if (firstNameEditText != null) {
             firstNameEditText.setEnabled(!isLoading);
         }
@@ -328,6 +434,25 @@ public class ProfileFragment extends Fragment {
 
         if (emergencyContactEditText != null) {
             emergencyContactEditText.setEnabled(!isLoading);
+        }
+    }
+
+    private void showKeyboard(View view) {
+        if (view.requestFocus()) {
+            InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT);
+            }
+        }
+    }
+
+    private void hideKeyboard() {
+        View view = requireActivity().getCurrentFocus();
+        if (view != null) {
+            InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+            }
         }
     }
 }

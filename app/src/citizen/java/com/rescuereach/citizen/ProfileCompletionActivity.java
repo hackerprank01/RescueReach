@@ -16,6 +16,8 @@ import com.rescuereach.R;
 import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.service.auth.UserSessionManager;
 
+import java.util.regex.Pattern;
+
 public class ProfileCompletionActivity extends AppCompatActivity {
     private static final String TAG = "ProfileCompletionActivity";
 
@@ -43,7 +45,70 @@ public class ProfileCompletionActivity extends AppCompatActivity {
         progressBar = findViewById(R.id.progress_bar);
 
         // Set up button click listener
-        saveButton.setOnClickListener(v -> saveProfile());
+        saveButton.setOnClickListener(v -> {
+            // Validate and update profile
+            if (validateInput()) {
+                saveProfile();
+            }
+        });
+    }
+
+    private boolean validateInput() {
+        boolean isValid = true;
+
+        // Validate first name
+        String firstName = firstNameEditText.getText().toString().trim();
+        if (TextUtils.isEmpty(firstName)) {
+            firstNameEditText.setError("First name is required");
+            firstNameEditText.requestFocus();
+            isValid = false;
+        } else if (firstName.length() < 2) {
+            firstNameEditText.setError("First name must be at least 2 characters");
+            firstNameEditText.requestFocus();
+            isValid = false;
+        }
+
+        // Validate last name
+        String lastName = lastNameEditText.getText().toString().trim();
+        if (TextUtils.isEmpty(lastName)) {
+            lastNameEditText.setError("Last name is required");
+            if (isValid) lastNameEditText.requestFocus();
+            isValid = false;
+        } else if (lastName.length() < 2) {
+            lastNameEditText.setError("Last name must be at least 2 characters");
+            if (isValid) lastNameEditText.requestFocus();
+            isValid = false;
+        }
+
+        // Validate emergency contact
+        String emergencyContact = emergencyContactEditText.getText().toString().trim();
+        if (TextUtils.isEmpty(emergencyContact)) {
+            emergencyContactEditText.setError("Emergency contact is required");
+            if (isValid) emergencyContactEditText.requestFocus();
+            isValid = false;
+        } else if (!isValidPhoneNumber(emergencyContact)) {
+            emergencyContactEditText.setError("Please enter a valid 10-digit phone number");
+            if (isValid) emergencyContactEditText.requestFocus();
+            isValid = false;
+        }
+
+        return isValid;
+    }
+
+    private boolean isValidPhoneNumber(String phoneNumber) {
+        if (TextUtils.isEmpty(phoneNumber)) {
+            return false;
+        }
+
+        // Remove any non-digit characters
+        String cleaned = phoneNumber.replaceAll("[^\\d+]", "");
+
+        // Valid formats: +91XXXXXXXXXX or just XXXXXXXXXX (10 digits)
+        if (cleaned.startsWith("+91")) {
+            return cleaned.length() == 10 && Pattern.matches("^[6-9]\\d{9}$", cleaned);
+        } else {
+            return cleaned.length() == 10 && Pattern.matches("^[6-9]\\d{9}$", cleaned);
+        }
     }
 
     private void saveProfile() {

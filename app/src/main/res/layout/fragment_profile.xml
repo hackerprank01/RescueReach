@@ -35,26 +35,32 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center_horizontal"
                     android:text="User Profile"
-                    android:textColor="@color/black"
-                    android:textSize="24sp"
+                    android:textAllCaps="true"
+                    android:textColor="@color/purple_700"
+                    android:textSize="25sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="16dp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/purple_200"
+                    android:layout_marginBottom="16dp"/>
 
                 <TextView
                     android:id="@+id/text_full_name"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="24dp"
                     android:text="User Name"
                     android:textAlignment="center"
                     android:textColor="@color/black"
-                    android:textSize="22sp"
+                    android:textSize="20sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
                     android:text="Phone Number"
                     android:textColor="@color/black"
                     android:textSize="14sp"
@@ -65,8 +71,29 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_otp_box"
-                    android:padding="12dp"
+                    android:padding="15dp"
                     android:layout_marginTop="8dp"
+                    android:layout_marginBottom="16dp"
+                    android:text="+91 0000000000"
+                    android:textColor="@color/black"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Emergency Contact"
+                    android:textColor="@color/black"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/text_emergency_contact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_otp_box"
+                    android:padding="15dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="24dp"
                     android:text="+91 0000000000"
                     android:textColor="@color/black"
                     android:textSize="16sp" />
@@ -75,7 +102,6 @@
                     android:id="@+id/button_edit_profile"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="32dp"
                     android:background="@drawable/button_background"
                     android:padding="12dp"
                     android:text="Edit Profile"
@@ -107,17 +133,24 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
+                    android:layout_gravity="center_horizontal"
                     android:text="Edit Your Profile"
-                    android:textColor="@color/black"
+                    android:textAllCaps="true"
+                    android:textColor="@color/purple_700"
                     android:textSize="22sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/purple_200"
+                    android:layout_marginBottom="16dp"/>
 
                 <!-- Phone Number Display (Non-editable) -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
                     android:text="Phone Number"
                     android:textColor="@color/black"
                     android:textSize="14sp"
@@ -139,10 +172,11 @@
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="8dp"
                     android:hint="First Name"
                     android:textColorHint="@color/black"
-                    app:hintTextColor="@color/black">
+                    app:hintTextColor="@color/black"
+                    app:errorEnabled="true">
 
                     <EditText
                         android:id="@+id/edit_first_name"
@@ -157,10 +191,11 @@
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="8dp"
                     android:hint="Last Name"
                     android:textColorHint="@color/black"
-                    app:hintTextColor="@color/black">
+                    app:hintTextColor="@color/black"
+                    app:errorEnabled="true">
 
                     <EditText
                         android:id="@+id/edit_last_name"
@@ -175,12 +210,13 @@
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="8dp"
                     android:hint="Emergency Contact Number"
                     android:textColorHint="@color/black"
                     app:hintTextColor="@color/black"
-                    app:prefixText="+91"
-                    app:prefixTextColor="@color/black">
+                    app:prefixTextColor="@color/black"
+                    app:errorEnabled="true">
+                    <!--app:prefixText="+91"-->
 
                     <EditText
                         android:id="@+id/edit_emergency_contact"
@@ -194,20 +230,39 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="4dp"
                     android:text="Your emergency contact should be someone we can reach in case of an emergency"
                     android:textColor="@color/colorSecondaryText"
                     android:textSize="14sp" />
 
-                <Button
-                    android:id="@+id/button_update_profile"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
-                    android:background="@drawable/button_background"
-                    android:padding="12dp"
-                    android:text="Update Profile"
-                    android:textColor="@android:color/black" />
+                    android:orientation="horizontal"
+                    android:layout_marginTop="24dp">
+
+                    <Button
+                        android:id="@+id/button_cancel_update"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/button_secondary_background"
+                        android:padding="12dp"
+                        android:text="Cancel"
+                        android:textColor="@android:color/black" />
+
+                    <Button
+                        android:id="@+id/button_update_profile"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/button_background"
+                        android:padding="12dp"
+                        android:text="Update"
+                        android:textColor="@android:color/black" />
+                </LinearLayout>
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
