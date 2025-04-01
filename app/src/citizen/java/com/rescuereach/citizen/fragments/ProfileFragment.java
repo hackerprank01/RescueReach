@@ -1,5 +1,6 @@
 package com.rescuereach.citizen.fragments;
 
+import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextUtils;
@@ -161,10 +162,11 @@ public class ProfileFragment extends Fragment {
         });
     }
 
+    @SuppressLint("SetTextI18n")
     private void displayUserData(User user) {
         if (user != null) {
             // Display user data in view mode
-            fullNameTextView.setText(user.getFullName());
+            fullNameTextView.setText("User Name: " + user.getFullName());
             phoneTextView.setText(user.getPhoneNumber());
             phoneEditTextView.setText(user.getPhoneNumber());
 

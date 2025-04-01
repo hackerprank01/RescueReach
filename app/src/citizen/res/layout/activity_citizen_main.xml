@@ -32,7 +32,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Menu"
                 android:src="@drawable/ic_list"
-                app:tint="@color/white" />
+                app:tint="@color/black" />
 
             <!-- Centered title -->
             <TextView

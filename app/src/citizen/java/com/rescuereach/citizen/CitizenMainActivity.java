@@ -1,6 +1,7 @@
 package com.rescuereach.citizen;
 
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MenuItem;
@@ -86,7 +87,14 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayShowTitleEnabled(false);
         }
+
+        setTitleColor(Color.BLACK);
     }
+
+    public void setTitleColor(int color) {
+        toolbarTitle.setTextColor(color);
+    }
+
 
     private void setupNavigationDrawer() {
         // Set click listener for custom drawer toggle button
@@ -118,12 +126,15 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         if (itemId == R.id.nav_home) {
             selectedFragment = new HomeFragment();
             title = "Home";
+            setTitleColor(Color.BLACK);
         } else if (itemId == R.id.nav_reports) {
             selectedFragment = new ReportsFragment();
             title = "My Reports";
+            setTitleColor(Color.BLACK);
         } else if (itemId == R.id.nav_profile) {
             selectedFragment = new ProfileFragment();
-            title = "Profile";
+            setTitleColor(Color.BLACK);
+
         } else if (itemId == R.id.nav_logout) {
             showLogoutConfirmationDialog();
             // Close drawer and return since we're showing a dialog
@@ -140,6 +151,7 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         drawerLayout.closeDrawer(GravityCompat.START);
         return true;
     }
+
 
     private void loadFragment(Fragment fragment, String title) {
         getSupportFragmentManager().beginTransaction()
@@ -160,6 +172,10 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         });
         builder.setNegativeButton("No", (dialog, which) -> {
             dialog.dismiss();
+            Intent intent = new Intent(CitizenMainActivity.this, CitizenMainActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
         });
         builder.create().show();
     }
