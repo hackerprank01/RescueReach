@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="NavigationDrawerTextStyle" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="NavigationDrawerTextStyle">
         <item name="android:textSize">15sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textColor">@color/colorPrimaryText</item>
-        <item name="toolbarStyle">@style/Widget.AppCompat.Toolbar</item>
-        <item name="actionMenuTextColor">@color/white</item>
     </style>
+
+    <style name="Theme.RescueReach.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+
 
 </resources>

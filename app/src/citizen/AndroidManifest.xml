@@ -44,14 +44,18 @@
         <activity
             android:name=".citizen.PhoneAuthActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.RescueReach.NoActionBar" />
 
         <activity
             android:name=".citizen.CitizenMainActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:theme="@style/Theme.RescueReach.NoActionBar" />
 
-        <activity android:name=".citizen.ProfileCompletionActivity"
-            android:exported="false"/>
+        <activity
+            android:name=".citizen.ProfileCompletionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RescueReach.NoActionBar" />
 
 
     </application>

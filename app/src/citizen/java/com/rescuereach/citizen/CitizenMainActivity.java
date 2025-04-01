@@ -4,10 +4,13 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.ImageButton;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -31,7 +34,10 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
     private DrawerLayout drawerLayout;
     private NavigationView navigationView;
     private Toolbar toolbar;
+    private TextView toolbarTitle;
+    private ImageButton drawerToggleButton;
     private ExtendedFloatingActionButton fabEmergency;
+    private ProgressBar progressIndicator;
 
     private AuthService authService;
     private UserSessionManager sessionManager;
@@ -46,51 +52,58 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         sessionManager = UserSessionManager.getInstance(this);
 
         // Ensure profile is marked as complete if user reaches this screen
-        // This prevents ProfileCompletionActivity from showing after logout
         if (!sessionManager.isProfileComplete() && sessionManager.getSavedPhoneNumber() != null) {
-            // If phone number exists but profile not marked complete, mark it complete
             sessionManager.markProfileComplete();
         }
 
         // Initialize UI components
+        initializeViews();
         setupToolbar();
         setupNavigationDrawer();
         setupFab();
 
         // Set default fragment if this is first creation
         if (savedInstanceState == null) {
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, new HomeFragment())
-                    .commit();
+            loadFragment(new HomeFragment(), "Home");
             navigationView.setCheckedItem(R.id.nav_home);
         }
     }
 
-    private void setupToolbar() {
+    private void initializeViews() {
         toolbar = findViewById(R.id.toolbar);
+        toolbarTitle = findViewById(R.id.toolbar_title);
+        drawerToggleButton = findViewById(R.id.drawer_toggle_button);
+        drawerLayout = findViewById(R.id.drawer_layout);
+        navigationView = findViewById(R.id.nav_view);
+        fabEmergency = findViewById(R.id.fab_report_emergency);
+        progressIndicator = findViewById(R.id.progress_indicator);
+    }
+
+    private void setupToolbar() {
         setSupportActionBar(toolbar);
+
+        // Hide default title
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayShowTitleEnabled(false);
+        }
     }
 
     private void setupNavigationDrawer() {
-        drawerLayout = findViewById(R.id.drawer_layout);
-        navigationView = findViewById(R.id.nav_view);
-
-        // Setup drawer toggle
-        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
-                this, drawerLayout, toolbar,
-                R.string.navigation_drawer_open,
-                R.string.navigation_drawer_close);
-        drawerLayout.addDrawerListener(toggle);
-        toggle.syncState();
+        // Set click listener for custom drawer toggle button
+        drawerToggleButton.setOnClickListener(v -> {
+            if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                drawerLayout.closeDrawer(GravityCompat.START);
+            } else {
+                drawerLayout.openDrawer(GravityCompat.START);
+            }
+        });
 
         // Setup navigation item selection listener
         navigationView.setNavigationItemSelectedListener(this);
     }
 
     private void setupFab() {
-        fabEmergency = findViewById(R.id.fab_report_emergency);
         fabEmergency.setOnClickListener(v -> {
-            // TODO: Open emergency reporting activity
             Toast.makeText(this, "Report Emergency clicked", Toast.LENGTH_SHORT).show();
         });
     }
@@ -118,19 +131,24 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
             return true;
         }
 
+        // Load the selected fragment
         if (selectedFragment != null) {
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, selectedFragment)
-                    .commit();
-
-            if (!title.isEmpty()) {
-                setTitle(title);
-            }
+            loadFragment(selectedFragment, title);
         }
 
         // Close drawer after handling click
         drawerLayout.closeDrawer(GravityCompat.START);
         return true;
+    }
+
+    private void loadFragment(Fragment fragment, String title) {
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.fragment_container, fragment)
+                .commit();
+
+        if (title != null && !title.isEmpty()) {
+            toolbarTitle.setText(title);
+        }
     }
 
     private void showLogoutConfirmationDialog() {
@@ -147,9 +165,13 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
     }
 
     private void logout() {
+        showLoading(true);
+
         authService.signOut(new AuthService.AuthCallback() {
             @Override
             public void onSuccess() {
+                showLoading(false);
+
                 // Clear user session
                 sessionManager.clearSession();
 
@@ -162,12 +184,20 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
 
             @Override
             public void onError(Exception e) {
+                showLoading(false);
+
                 Log.e(TAG, "Logout failed", e);
                 Toast.makeText(CitizenMainActivity.this,
                         "Logout failed: " + e.getMessage(),
                         Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    private void showLoading(boolean isLoading) {
+        if (progressIndicator != null) {
+            progressIndicator.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+        }
     }
 
     @Override

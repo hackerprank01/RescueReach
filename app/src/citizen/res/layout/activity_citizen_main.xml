@@ -6,58 +6,90 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
-    tools:context=".citizen.CitizenMainActivity"
-    tools:openDrawer="start">
+    tools:context=".citizen.CitizenMainActivity">
 
-    <androidx.coordinatorlayout.widget.CoordinatorLayout
+    <!-- Main content layout including the toolbar -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <com.google.android.material.appbar.AppBarLayout
+        <!-- Single toolbar at the top -->
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/purple_500"
+            android:elevation="4dp"
+            app:contentInsetStart="0dp"
+            app:contentInsetStartWithNavigation="0dp">
 
-            <androidx.appcompat.widget.Toolbar
-                android:id="@+id/toolbar"
+            <!-- Menu button -->
+            <ImageButton
+                android:id="@+id/drawer_toggle_button"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Menu"
+                android:src="@drawable/ic_list"
+                app:tint="@color/white" />
+
+            <!-- Centered title -->
+            <TextView
+                android:id="@+id/toolbar_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="RescueReach"
+                android:textColor="@android:color/white"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+        </androidx.appcompat.widget.Toolbar>
+
+        <!-- Main content area -->
+        <androidx.coordinatorlayout.widget.CoordinatorLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <FrameLayout
+                android:id="@+id/fragment_container"
                 android:layout_width="match_parent"
-                android:layout_height="?attr/actionBarSize"
-                android:background="@color/purple_500"
-                app:layout_scrollFlags="scroll|enterAlways"
-                app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />
+                android:layout_height="match_parent" />
 
-        </com.google.android.material.appbar.AppBarLayout>
+            <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+                android:id="@+id/fab_report_emergency"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="16dp"
+                android:text="@string/report_emergency"
+                android:textColor="#000000"
+                app:backgroundTint="#FF0000"
+                app:icon="@drawable/ic_emergency"
+                app:tint="@android:color/white" />
 
-        <FrameLayout
-            android:id="@+id/fragment_container"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            app:layout_behavior="@string/appbar_scrolling_view_behavior" />
+            <ProgressBar
+                android:id="@+id/progress_indicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone" />
 
-        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-            android:id="@+id/fab_report_emergency"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_margin="16dp"
-            android:text="@string/report_emergency"
-            android:textColor="#000000"
-            app:backgroundTint="#FF0000"
-            app:icon="@drawable/ic_emergency"
-            app:tint="@android:color/white" />
+        </androidx.coordinatorlayout.widget.CoordinatorLayout>
+    </LinearLayout>
 
-    </androidx.coordinatorlayout.widget.CoordinatorLayout>
-
+    <!-- Navigation drawer -->
     <com.google.android.material.navigation.NavigationView
         android:id="@+id/nav_view"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="110dp"
         android:layout_gravity="start"
         android:background="@color/purple_500"
-        android:fitsSystemWindows="true"
-        app:itemTextColor="@color/white"
+        app:itemIconTint="@android:color/white"
+        app:itemTextColor="@color/black"
         app:menu="@menu/drawer_menu"
-        app:itemTextAppearance="@style/NavigationDrawerTextStyle"
-         />
+        app:itemTextAppearance="@style/NavigationDrawerTextStyle"/>
 
 </androidx.drawerlayout.widget.DrawerLayout>
