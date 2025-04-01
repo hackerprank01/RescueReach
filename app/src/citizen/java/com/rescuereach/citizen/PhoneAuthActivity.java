@@ -1,6 +1,11 @@
 package com.rescuereach.citizen;
 
+import android.content.BroadcastReceiver;
+import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Handler;
@@ -13,6 +18,7 @@ import android.view.animation.AnimationUtils;
 import android.content.pm.PackageManager;
 
 import com.google.firebase.messaging.BuildConfig;
+
 import com.rescuereach.service.auth.AppSignatureHelper;
 import android.widget.Button;
 import android.widget.EditText;
@@ -22,8 +28,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ViewFlipper;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.google.firebase.FirebaseException;
 import com.google.firebase.FirebaseTooManyRequestsException;
@@ -78,6 +87,10 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private Handler networkTimeoutHandler;
     private Runnable networkTimeoutRunnable;
     private CountDownTimer resendCooldownTimer;
+
+    private static final int SMS_PERMISSION_REQUEST_CODE = 123;
+    private BroadcastReceiver smsBroadcastReceiver;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -171,43 +184,147 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     }
 
     private void setupSMSRetriever() {
-        // Create and configure SMS Retriever
-        smsRetrieverHelper = new SMSRetrieverHelper(this);
-
-        // Get and log the app signature (for development purposes)
-        if (BuildConfig.DEBUG) {
-            AppSignatureHelper appSignatureHelper = new AppSignatureHelper(this);
-            String appSignature = appSignatureHelper.getAppSignature();
-            Log.d(TAG, "App Signature for SMS Retriever: " + appSignature);
+        // Check and request SMS read permission for Android 13+ (API 33+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.RECEIVE_SMS},
+                        SMS_PERMISSION_REQUEST_CODE);
+            } else {
+                registerSMSReceiver();
+            }
+        } else {
+            registerSMSReceiver();
         }
 
-        // Set the SMS retrieval listener
-        smsRetrieverHelper.setSMSRetrievedListener(new SMSRetrieverHelper.SMSRetrievedListener() {
-            @Override
-            public void onSMSRetrieved(String otp) {
-                Log.d(TAG, "OTP retrieved from SMS: " + otp);
-                if (otpInputView != null && !isFinishing() && !isDestroyed()) {
-                    runOnUiThread(() -> {
-                        otpInputView.setOTP(otp);
-                        // Automatically verify after small delay to give UI time to update
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            if (!isFinishing() && !isDestroyed()) {
-                                verifyCode();
-                            }
-                        }, 500);
-                    });
+        // Also try the Google SMS Retriever API as a fallback
+        try {
+            smsRetrieverHelper = new SMSRetrieverHelper(this);
+            smsRetrieverHelper.setSMSRetrievedListener(new SMSRetrieverHelper.SMSRetrievedListener() {
+                @Override
+                public void onSMSRetrieved(String otp) {
+                    Log.d(TAG, "OTP retrieved from SMS Retriever API: " + otp);
+                    populateOTPAndVerify(otp);
                 }
-            }
 
-            @Override
-            public void onSMSRetrievalFailed(Exception e) {
-                Log.e(TAG, "SMS retrieval failed", e);
-                // Silent failure - don't show error to user
-                // If automatic SMS retrieval fails, user can still enter code manually
-            }
-        });
+                @Override
+                public void onSMSRetrievalFailed(Exception e) {
+                    Log.e(TAG, "SMS Retriever API failed", e);
+                    // Silent failure - user can still enter code manually
+                }
+            });
+            smsRetrieverHelper.startSMSRetriever();
+        } catch (Exception e) {
+            Log.e(TAG, "Error initializing SMS Retriever", e);
+        }
     }
 
+    private void registerSMSReceiver() {
+        // Unregister any existing receiver
+        if (smsBroadcastReceiver != null) {
+            try {
+                unregisterReceiver(smsBroadcastReceiver);
+            } catch (Exception e) {
+                Log.e(TAG, "Error unregistering existing SMS receiver", e);
+            }
+        }
+
+        // Create a new broadcast receiver for SMS
+        smsBroadcastReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent.getAction() != null &&
+                        intent.getAction().equals("android.provider.Telephony.SMS_RECEIVED")) {
+
+                    Bundle bundle = intent.getExtras();
+                    if (bundle != null) {
+                        // Extract SMS messages
+                        Object[] pdus = (Object[]) bundle.get("pdus");
+                        if (pdus != null) {
+                            for (Object pdu : pdus) {
+                                android.telephony.SmsMessage smsMessage;
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                    String format = bundle.getString("format");
+                                    smsMessage = android.telephony.SmsMessage.createFromPdu((byte[]) pdu, format);
+                                } else {
+                                    smsMessage = android.telephony.SmsMessage.createFromPdu((byte[]) pdu);
+                                }
+
+                                String messageBody = smsMessage.getMessageBody();
+                                Log.d(TAG, "SMS received: " + messageBody);
+
+                                // Extract OTP from the message
+                                String otp = extractOTPFromMessage(messageBody);
+                                if (otp != null) {
+                                    Log.d(TAG, "OTP extracted from SMS: " + otp);
+                                    populateOTPAndVerify(otp);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // Register the receiver
+        IntentFilter filter = new IntentFilter("android.provider.Telephony.SMS_RECEIVED");
+        filter.setPriority(999); // High priority
+        registerReceiver(smsBroadcastReceiver, filter);
+        Log.d(TAG, "SMS broadcast receiver registered");
+    }
+
+    private String extractOTPFromMessage(String message) {
+        if (message == null || message.isEmpty()) {
+            return null;
+        }
+
+        // Try multiple patterns to find the OTP
+        // Pattern 1: Look for 6 consecutive digits
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(\\d{6})");
+        java.util.regex.Matcher matcher = pattern.matcher(message);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        // Pattern 2: Look for "code" or "otp" followed by 6 digits
+        pattern = java.util.regex.Pattern.compile("(?i)(?:verification|code|otp)[^0-9]*([0-9]{6})");
+        matcher = pattern.matcher(message);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        return null;
+    }
+
+    private void populateOTPAndVerify(String otp) {
+        if (otpInputView != null && !isFinishing() && !isDestroyed()) {
+            runOnUiThread(() -> {
+                otpInputView.setOTP(otp);
+                // Give UI time to update before verifying
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        verifyCode();
+                    }
+                }, 800);
+            });
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == SMS_PERMISSION_REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted, register the receiver
+                registerSMSReceiver();
+            } else {
+                // Permission denied, continue without SMS auto-reading
+                Toast.makeText(this, "SMS auto-reading permission denied. Please enter the code manually.",
+                        Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
 
     @Override
     public void onOTPCompleted(String otp) {
@@ -774,7 +891,16 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         cancelNetworkTimeout();
         cancelResendCooldown();
 
-        // Clean up SMS retriever
+        // Unregister SMS receivers
+        if (smsBroadcastReceiver != null) {
+            try {
+                unregisterReceiver(smsBroadcastReceiver);
+            } catch (Exception e) {
+                Log.e(TAG, "Error unregistering SMS receiver", e);
+            }
+            smsBroadcastReceiver = null;
+        }
+
         if (smsRetrieverHelper != null) {
             smsRetrieverHelper.unregisterReceiver();
             smsRetrieverHelper = null;
