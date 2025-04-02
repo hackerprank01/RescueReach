@@ -23,7 +23,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="''Your Safety is Our Priority''"
+        android:text="Your Safety is Our Priority"
         android:textColor="@color/black"
         android:textSize="24sp"
         android:textStyle="bold"
@@ -51,6 +51,7 @@
         android:layout_marginEnd="24dp"
         app:cardCornerRadius="16dp"
         app:cardElevation="8dp"
+        app:cardBackgroundColor="@color/white"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/subtitleText">
@@ -58,7 +59,8 @@
         <ViewFlipper
             android:id="@+id/viewFlipper"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:background="@color/white">
 
             <!-- Phone Input View -->
             <LinearLayout
@@ -87,7 +89,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
-                    app:prefixText="+1"
+                    app:prefixText="+91"
+                    android:textColor="@color/black"
+                    app:prefixTextColor="@color/black"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                     <EditText
@@ -95,6 +99,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Phone Number"
+                        android:textColorHint="@color/black"
+                        android:textColor="@color/black"
                         android:inputType="phone" />
 
                 </com.google.android.material.textfield.TextInputLayout>
@@ -107,7 +113,17 @@
                     android:background="@drawable/button_background"
                     android:padding="12dp"
                     android:text="Send OTP"
-                    android:textColor="@android:color/white" />
+                    android:textColor="@android:color/black" />
+
+                <Button
+                    android:id="@+id/button_clear"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/button_secondary_background"
+                    android:padding="12dp"
+                    android:text="Clear"
+                    android:textColor="@android:color/black" />
 
             </LinearLayout>
 
@@ -149,25 +165,23 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="Code sent to +1 1234567890"
+                    android:text="Code sent to +91 1234567890"
                     android:textColor="@color/colorSecondaryText"
                     android:textSize="14sp" />
 
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="match_parent"
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    android:text="Enter 6-digit OTP"
+                    android:textColor="@color/colorPrimaryText"
+                    android:textSize="16sp" />
 
-                    <EditText
-                        android:id="@+id/edit_code"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="6-digit OTP"
-                        android:inputType="number"
-                        android:maxLength="6" />
-
-                </com.google.android.material.textfield.TextInputLayout>
+                <com.rescuereach.ui.common.OTPInputView
+                    android:id="@+id/otp_input_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp" />
 
                 <Button
                     android:id="@+id/button_verify_code"
@@ -177,18 +191,47 @@
                     android:background="@drawable/button_background"
                     android:padding="12dp"
                     android:text="Verify"
-                    android:textColor="@android:color/white" />
+                    android:textColor="@color/black"
+                    android:enabled="false" />
 
-                <TextView
-                    android:id="@+id/text_resend_code"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:layout_marginTop="16dp"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:text="Didn't receive code? Resend"
-                    android:textColor="@color/colorPrimary" />
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginTop="16dp">
+
+                    <TextView
+                        android:id="@+id/text_timer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Resend available in 60 seconds"
+                        android:textColor="@color/colorSecondaryText"
+                        android:textSize="12sp"
+                        android:visibility="gone"/>
+
+                    <TextView
+                        android:id="@+id/text_resend_code"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="Didn't receive code? Resend"
+                        android:textColor="@color/colorPrimary" />
+
+                    <TextView
+                        android:id="@+id/text_countdown_timer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:layout_marginTop="8dp"
+                        android:text="Resend available in 60s"
+                        android:textColor="@color/colorSecondaryText"
+                        android:textSize="14sp"
+                        android:visibility="gone" />
+                    
+                </LinearLayout>
 
             </LinearLayout>
 

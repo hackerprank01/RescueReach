@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">RescueReach</string>
+    <string name="navigation_drawer_open">Open navigation drawer</string>
+    <string name="navigation_drawer_close">Close navigation drawer</string>
+    <string name="action_logout">Logout</string>
+    <string name="report_emergency">Report Emergency</string>
+    <string name="zero">0</string>
+    <string name="break_line">---------------------------------------------------------------------------------------</string>
 </resources>

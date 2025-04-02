@@ -6,6 +6,9 @@
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -20,6 +23,13 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <uses-permission android:name="android.permission.BROADCAST_SMS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.SEND_SMS"/>
+    <uses-permission android:name="android.permission.READ_SMS"/>
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
     <application
         android:name=".RescueReachApplication"
         android:allowBackup="true"
@@ -32,6 +42,12 @@
         android:theme="@style/Theme.RescueReach"
         tools:targetApi="31">
         <!-- Main activities are declared in flavor-specific manifests -->
+
+        <activity
+            android:name=".citizen.ProfileCompletionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RescueReach.NoActionBar" />
+
     </application>
 
 </manifest>

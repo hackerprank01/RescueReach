@@ -4,15 +4,13 @@ import java.util.Date;
 
 public class User {
     private String userId;
-    private String phoneNumber;
-    private String name;
-    private String email;
-    private String profileImageUrl;
+    private String firstName;
+    private String lastName;
+    private String phoneNumber; // Always starts with +91
+    private String emergencyContact; // Always starts with +91
     private Date createdAt;
-    private Date lastLoginAt;
-    private boolean isVolunteer;
 
-    // Default constructor required for Firestore
+    // Required for Firestore
     public User() {
     }
 
@@ -20,17 +18,40 @@ public class User {
         this.userId = userId;
         this.phoneNumber = phoneNumber;
         this.createdAt = new Date();
-        this.lastLoginAt = new Date();
-        this.isVolunteer = false;
     }
 
-    // Getters and Setters
+    public User(String userId, String firstName, String lastName, String phoneNumber, String emergencyContact) {
+        this.userId = userId;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.phoneNumber = phoneNumber;
+        this.emergencyContact = emergencyContact;
+        this.createdAt = new Date();
+    }
+
+    // Getters and setters
     public String getUserId() {
         return userId;
     }
 
     public void setUserId(String userId) {
         this.userId = userId;
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
     }
 
     public String getPhoneNumber() {
@@ -41,28 +62,12 @@ public class User {
         this.phoneNumber = phoneNumber;
     }
 
-    public String getName() {
-        return name;
+    public String getEmergencyContact() {
+        return emergencyContact;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getProfileImageUrl() {
-        return profileImageUrl;
-    }
-
-    public void setProfileImageUrl(String profileImageUrl) {
-        this.profileImageUrl = profileImageUrl;
+    public void setEmergencyContact(String emergencyContact) {
+        this.emergencyContact = emergencyContact;
     }
 
     public Date getCreatedAt() {
@@ -73,19 +78,15 @@ public class User {
         this.createdAt = createdAt;
     }
 
-    public Date getLastLoginAt() {
-        return lastLoginAt;
-    }
-
-    public void setLastLoginAt(Date lastLoginAt) {
-        this.lastLoginAt = lastLoginAt;
-    }
-
-    public boolean isVolunteer() {
-        return isVolunteer;
-    }
-
-    public void setVolunteer(boolean volunteer) {
-        isVolunteer = volunteer;
+    public String getFullName() {
+        if (firstName != null && lastName != null) {
+            return firstName + " " + lastName;
+        } else if (firstName != null) {
+            return firstName;
+        } else if (lastName != null) {
+            return lastName;
+        } else {
+            return "Unknown";
+        }
     }
 }

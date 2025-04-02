@@ -6,22 +6,21 @@ import com.rescuereach.data.repository.firebase.FirebaseUserRepository;
 import com.rescuereach.data.repository.firebase.FirebaseVolunteerRepository;
 
 /**
- * Singleton provider class for repositories.
- * This allows easy access to repositories throughout the app.
+ * Singleton provider for all repository implementations.
  */
 public class RepositoryProvider {
     private static RepositoryProvider instance;
 
     private final UserRepository userRepository;
-    private final IncidentRepository incidentRepository;
     private final ResponderRepository responderRepository;
+    private final IncidentRepository incidentRepository;
     private final VolunteerRepository volunteerRepository;
 
     private RepositoryProvider() {
-        // Initialize Firebase repositories
+        // Initialize repositories with Firebase implementations
         userRepository = new FirebaseUserRepository();
-        incidentRepository = new FirebaseIncidentRepository();
         responderRepository = new FirebaseResponderRepository();
+        incidentRepository = new FirebaseIncidentRepository();
         volunteerRepository = new FirebaseVolunteerRepository();
     }
 
@@ -36,12 +35,12 @@ public class RepositoryProvider {
         return userRepository;
     }
 
-    public IncidentRepository getIncidentRepository() {
-        return incidentRepository;
-    }
-
     public ResponderRepository getResponderRepository() {
         return responderRepository;
+    }
+
+    public IncidentRepository getIncidentRepository() {
+        return incidentRepository;
     }
 
     public VolunteerRepository getVolunteerRepository() {

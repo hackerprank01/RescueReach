@@ -3,7 +3,9 @@ package com.rescuereach.service.auth;
 import android.app.Activity;
 
 import com.google.firebase.FirebaseException;
+import com.google.firebase.FirebaseTooManyRequestsException;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.PhoneAuthCredential;
 import com.google.firebase.auth.PhoneAuthOptions;
@@ -74,34 +76,7 @@ public class FirebaseAuthService implements AuthService {
                 .setPhoneNumber(phoneNumber)
                 .setTimeout(60L, TimeUnit.SECONDS)
                 .setActivity(activity)
-                .setCallbacks(new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                    @Override
-                    public void onCodeSent(String verificationId,
-                                           PhoneAuthProvider.ForceResendingToken token) {
-                        callback.onCodeSent(verificationId);
-                    }
-
-                    @Override
-                    public void onVerificationCompleted(PhoneAuthCredential credential) {
-                        callback.onVerificationCompleted(credential);
-                        signInWithPhoneCredential(credential, new AuthCallback() {
-                            @Override
-                            public void onSuccess() {
-                                // Authentication successful
-                            }
-
-                            @Override
-                            public void onError(Exception e) {
-                                // Handle error
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void onVerificationFailed(FirebaseException e) {
-                        callback.onVerificationFailed(e);
-                    }
-                })
+                .setCallbacks(createCallbacks(callback))
                 .build();
 
         PhoneAuthProvider.verifyPhoneNumber(options);
@@ -113,10 +88,45 @@ public class FirebaseAuthService implements AuthService {
         signInWithPhoneCredential(credential, callback);
     }
 
+    @Override
+    public void resendVerificationCode(String phoneNumber, PhoneAuthProvider.ForceResendingToken token, Activity activity, PhoneVerificationCallback callback) {
+        PhoneAuthOptions options = PhoneAuthOptions.newBuilder(firebaseAuth)
+                .setPhoneNumber(phoneNumber)
+                .setTimeout(60L, TimeUnit.SECONDS)
+                .setActivity(activity)
+                .setCallbacks(createCallbacks(callback))
+                .setForceResendingToken(token) // Use the token for resending
+                .build();
+
+        PhoneAuthProvider.verifyPhoneNumber(options);
+    }
+
+    private PhoneAuthProvider.OnVerificationStateChangedCallbacks createCallbacks(PhoneVerificationCallback callback) {
+        return new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+            @Override
+            public void onVerificationCompleted(PhoneAuthCredential credential) {
+                callback.onVerificationCompleted(credential);
+            }
+
+            @Override
+            public void onVerificationFailed(FirebaseException e) {
+                callback.onVerificationFailed(e);
+            }
+
+            @Override
+            public void onCodeSent(String verificationId, PhoneAuthProvider.ForceResendingToken token) {
+                callback.onCodeSent(verificationId, token);
+            }
+        };
+    }
+
     private void signInWithPhoneCredential(PhoneAuthCredential credential, AuthCallback callback) {
         firebaseAuth.signInWithCredential(credential)
                 .addOnSuccessListener(authResult -> callback.onSuccess())
-                .addOnFailureListener(e -> callback.onError(e));
+                .addOnFailureListener(e -> {
+                    // Preserve exception type for better error handling
+                    callback.onError(e);
+                });
     }
 
     @Override
