@@ -7,7 +7,13 @@
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
     <color name="teal_200">#FF03DAC5</color>
+    <color name="purple_100">#B39DDB</color>
     <color name="teal_700">#FF018786</color>
+
+    <color name="safety_card_1">#FFF8E1</color>
+    <color name="safety_card_2">#E1F5FE</color>
+    <color name="safety_card_3">#F3E5F5</color>
+    <color name="safety_card_4">#E8F5E9</color>
 
     <!-- Custom colors for RescueReach -->
     <color name="colorPrimary">#E7190A</color>
@@ -15,4 +21,7 @@
     <color name="colorAccent">#FF5722</color>
     <color name="colorPrimaryText">#000000</color>
     <color name="colorSecondaryText">#000000</color>
+    <color name="blue_700">#1976D2</color>
+    <color name="blue_500">#2196F3</color>
+    <color name="blue_200">#90CAF9</color>
 </resources>

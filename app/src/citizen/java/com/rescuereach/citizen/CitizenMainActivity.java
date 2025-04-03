@@ -25,6 +25,8 @@ import com.rescuereach.R;
 import com.rescuereach.citizen.fragments.HomeFragment;
 import com.rescuereach.citizen.fragments.ProfileFragment;
 import com.rescuereach.citizen.fragments.ReportsFragment;
+import com.rescuereach.citizen.fragments.SafetyTipsFragment;
+import com.rescuereach.citizen.fragments.HelpSupportFragment;
 import com.rescuereach.service.auth.AuthService;
 import com.rescuereach.service.auth.AuthServiceProvider;
 import com.rescuereach.service.auth.UserSessionManager;
@@ -88,13 +90,13 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
             getSupportActionBar().setDisplayShowTitleEnabled(false);
         }
 
-        setTitleColor(Color.BLACK);
+        // Fix: Set title color to WHITE for better contrast with toolbar
+        setTitleColor(Color.WHITE);
     }
 
     public void setTitleColor(int color) {
         toolbarTitle.setTextColor(color);
     }
-
 
     private void setupNavigationDrawer() {
         // Set click listener for custom drawer toggle button
@@ -111,9 +113,33 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
     }
 
     private void setupFab() {
+        // Set up pulse animation for emergency button
+        startPulseAnimation();
+
         fabEmergency.setOnClickListener(v -> {
+            // TODO: Navigate to emergency reporting activity
             Toast.makeText(this, "Report Emergency clicked", Toast.LENGTH_SHORT).show();
         });
+    }
+
+    private void startPulseAnimation() {
+        fabEmergency.animate()
+                .scaleX(1.1f)
+                .scaleY(1.1f)
+                .setDuration(500)
+                .withEndAction(() -> {
+                    fabEmergency.animate()
+                            .scaleX(1.0f)
+                            .scaleY(1.0f)
+                            .setDuration(500)
+                            .withEndAction(() -> {
+                                if (!isFinishing()) {
+                                    startPulseAnimation();
+                                }
+                            })
+                            .start();
+                })
+                .start();
     }
 
     @Override
@@ -126,16 +152,18 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         if (itemId == R.id.nav_home) {
             selectedFragment = new HomeFragment();
             title = "Home";
-            setTitleColor(Color.BLACK);
         } else if (itemId == R.id.nav_reports) {
             selectedFragment = new ReportsFragment();
             title = "My Reports";
-            setTitleColor(Color.BLACK);
         } else if (itemId == R.id.nav_profile) {
             selectedFragment = new ProfileFragment();
             title = "Edit Profile";
-            setTitleColor(Color.BLACK);
-
+        } else if (itemId == R.id.nav_safety_tips) {
+            selectedFragment = new SafetyTipsFragment();
+            title = "Safety Tips";
+        } else if (itemId == R.id.nav_help_support) {
+            selectedFragment = new HelpSupportFragment();
+            title = "Help & Support";
         } else if (itemId == R.id.nav_logout) {
             showLogoutConfirmationDialog();
             // Close drawer and return since we're showing a dialog
@@ -143,9 +171,9 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
             return true;
         }
 
-        // Load the selected fragment
+        // Load the selected fragment with animation
         if (selectedFragment != null) {
-            loadFragment(selectedFragment, title);
+            loadFragmentWithAnimation(selectedFragment, title);
         }
 
         // Close drawer after handling click
@@ -153,9 +181,24 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         return true;
     }
 
-
     private void loadFragment(Fragment fragment, String title) {
         getSupportFragmentManager().beginTransaction()
+                .replace(R.id.fragment_container, fragment)
+                .commit();
+
+        if (title != null && !title.isEmpty()) {
+            toolbarTitle.setText(title);
+        }
+    }
+
+    private void loadFragmentWithAnimation(Fragment fragment, String title) {
+        getSupportFragmentManager().beginTransaction()
+                .setCustomAnimations(
+                        R.anim.fade_in,
+                        R.anim.fade_out,
+                        R.anim.fade_in,
+                        R.anim.fade_out
+                )
                 .replace(R.id.fragment_container, fragment)
                 .commit();
 
@@ -173,10 +216,6 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
         });
         builder.setNegativeButton("No", (dialog, which) -> {
             dialog.dismiss();
-            Intent intent = new Intent(CitizenMainActivity.this, CitizenMainActivity.class);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            startActivity(intent);
-            finish();
         });
         builder.create().show();
     }

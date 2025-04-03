@@ -32,7 +32,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Menu"
                 android:src="@drawable/ic_list"
-                app:tint="@color/black" />
+                app:tint="@color/white" />
 
             <!-- Centered title -->
             <TextView
@@ -64,10 +64,10 @@
                 android:layout_gravity="bottom|end"
                 android:layout_margin="16dp"
                 android:text="@string/report_emergency"
-                android:textColor="#000000"
+                android:textColor="@color/white"
                 app:backgroundTint="#FF0000"
                 app:icon="@drawable/ic_emergency"
-                app:tint="@android:color/white" />
+                app:iconTint="@color/white" />
 
             <ProgressBar
                 android:id="@+id/progress_indicator"
@@ -79,17 +79,19 @@
         </androidx.coordinatorlayout.widget.CoordinatorLayout>
     </LinearLayout>
 
-    <!-- Navigation drawer -->
+    <!-- Navigation drawer with rounded corners -->
     <com.google.android.material.navigation.NavigationView
         android:id="@+id/nav_view"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="110dp"
+        android:layout_marginTop="?attr/actionBarSize"
         android:layout_gravity="start"
-        android:background="@color/purple_500"
-        app:itemIconTint="@android:color/white"
-        app:itemTextColor="@color/black"
-        app:menu="@menu/drawer_menu"
-        app:itemTextAppearance="@style/NavigationDrawerTextStyle"/>
+        android:background="@drawable/rounded_drawer_background"
+        android:layout_marginEnd="60dp"
+        app:itemIconTint="@color/white"
+        app:itemTextColor="@color/white"
+        app:itemIconPadding="16dp"
+        app:itemTextAppearance="@style/NavigationDrawerTextStyle"
+        app:menu="@menu/drawer_menu" />
 
 </androidx.drawerlayout.widget.DrawerLayout>
