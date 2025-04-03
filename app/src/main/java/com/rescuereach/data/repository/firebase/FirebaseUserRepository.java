@@ -320,7 +320,7 @@ public class FirebaseUserRepository implements UserRepository {
         userBasicInfo.put("lastName", user.getLastName() != null ? user.getLastName() : "");
         userBasicInfo.put("fullName", user.getFullName());
         userBasicInfo.put("emergencyContact", user.getEmergencyContact() != null ? user.getEmergencyContact() : "");
-        userBasicInfo.put("createdAt", ServerValue.TIMESTAMP);
+        userBasicInfo.put("createdAt", user.getCreatedAt());
         userBasicInfo.put("status", "online");
 
         // Try both phone-key and UID approaches

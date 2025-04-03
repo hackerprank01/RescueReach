@@ -133,6 +133,7 @@ public class CitizenMainActivity extends AppCompatActivity implements Navigation
             setTitleColor(Color.BLACK);
         } else if (itemId == R.id.nav_profile) {
             selectedFragment = new ProfileFragment();
+            title = "Edit Profile";
             setTitleColor(Color.BLACK);
 
         } else if (itemId == R.id.nav_logout) {
