@@ -1,32 +1,68 @@
 package com.rescuereach.citizen;
 
+import android.app.DatePickerDialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.ContactsContract;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.Button;
+import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.rescuereach.R;
+import com.rescuereach.data.model.User;
 import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.service.auth.UserSessionManager;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class ProfileCompletionActivity extends AppCompatActivity {
     private static final String TAG = "ProfileCompletionActivity";
+    private static final int PICK_CONTACT_REQUEST = 1;
+    private static final int REQUEST_READ_CONTACTS = 2;
 
-    private EditText firstNameEditText;
-    private EditText lastNameEditText;
-    private EditText emergencyContactEditText;
+    // UI Components
+    private TextInputEditText fullNameEditText;
+    private TextInputEditText dobEditText;
+    private AutoCompleteTextView genderDropdown;
+    private AutoCompleteTextView stateDropdown;
+    private TextInputEditText emergencyContactEditText;
+    private TextInputLayout emergencyContactLayout;
+    private RadioGroup volunteerRadioGroup;
+    private RadioButton volunteerYesRadio;
+    private RadioButton volunteerNoRadio;
     private Button saveButton;
     private ProgressBar progressBar;
 
+    // Date formatting
+    private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
+    private Date selectedDob;
+
+    // Service
     private UserSessionManager sessionManager;
 
     @Override
@@ -38,11 +74,10 @@ public class ProfileCompletionActivity extends AppCompatActivity {
         sessionManager = UserSessionManager.getInstance(this);
 
         // Initialize views
-        firstNameEditText = findViewById(R.id.edit_first_name);
-        lastNameEditText = findViewById(R.id.edit_last_name);
-        emergencyContactEditText = findViewById(R.id.edit_emergency_contact);
-        saveButton = findViewById(R.id.button_save);
-        progressBar = findViewById(R.id.progress_bar);
+        initializeViews();
+        setupDropdowns();
+        setupDatePicker();
+        setupContactPicker();
 
         // Set up button click listener
         saveButton.setOnClickListener(v -> {
@@ -53,30 +88,193 @@ public class ProfileCompletionActivity extends AppCompatActivity {
         });
     }
 
+    private void initializeViews() {
+        fullNameEditText = findViewById(R.id.edit_full_name);
+        dobEditText = findViewById(R.id.edit_dob);
+        genderDropdown = findViewById(R.id.dropdown_gender);
+        stateDropdown = findViewById(R.id.dropdown_state);
+        emergencyContactEditText = findViewById(R.id.edit_emergency_contact);
+        emergencyContactLayout = findViewById(R.id.emergency_contact_layout);
+        volunteerRadioGroup = findViewById(R.id.radio_volunteer);
+        volunteerYesRadio = findViewById(R.id.radio_volunteer_yes);
+        volunteerNoRadio = findViewById(R.id.radio_volunteer_no);
+        saveButton = findViewById(R.id.button_save);
+        progressBar = findViewById(R.id.progress_bar);
+
+        // Default selection for volunteer radio
+        volunteerNoRadio.setChecked(true);
+    }
+
+    private void setupDropdowns() {
+        // Set up Gender dropdown
+        String[] genderOptions = getResources().getStringArray(R.array.gender_options);
+        ArrayAdapter<String> genderAdapter = new ArrayAdapter<>(
+                this, R.layout.dropdown_item, genderOptions);
+        genderDropdown.setAdapter(genderAdapter);
+
+        // Set up State dropdown
+        String[] stateOptions = getResources().getStringArray(R.array.indian_states);
+        ArrayAdapter<String> stateAdapter = new ArrayAdapter<>(
+                this, R.layout.dropdown_item, stateOptions);
+        stateDropdown.setAdapter(stateAdapter);
+    }
+
+    private void setupDatePicker() {
+        dobEditText.setOnClickListener(v -> showDatePickerDialog());
+    }
+
+    private void showDatePickerDialog() {
+        // Get Current Date
+        final Calendar calendar = Calendar.getInstance();
+        int year = calendar.get(Calendar.YEAR) - 18; // Default to 18 years ago
+        int month = calendar.get(Calendar.MONTH);
+        int day = calendar.get(Calendar.DAY_OF_MONTH);
+
+        // If a date is already selected, use that
+        if (selectedDob != null) {
+            calendar.setTime(selectedDob);
+            year = calendar.get(Calendar.YEAR);
+            month = calendar.get(Calendar.MONTH);
+            day = calendar.get(Calendar.DAY_OF_MONTH);
+        }
+
+        DatePickerDialog datePickerDialog = new DatePickerDialog(this,
+                new DatePickerDialog.OnDateSetListener() {
+                    @Override
+                    public void onDateSet(DatePicker view, int year, int monthOfYear, int dayOfMonth) {
+                        Calendar selectedCalendar = Calendar.getInstance();
+                        selectedCalendar.set(year, monthOfYear, dayOfMonth);
+                        selectedDob = selectedCalendar.getTime();
+                        dobEditText.setText(dateFormat.format(selectedDob));
+                    }
+                }, year, month, day);
+
+        // Set maximum date to today - 10 years (minimum age)
+        Calendar minAgeCalendar = Calendar.getInstance();
+        minAgeCalendar.add(Calendar.YEAR, -10);
+        datePickerDialog.getDatePicker().setMaxDate(minAgeCalendar.getTimeInMillis());
+
+        // Set minimum date to 100 years ago (reasonable maximum age)
+        Calendar maxAgeCalendar = Calendar.getInstance();
+        maxAgeCalendar.add(Calendar.YEAR, -100);
+        datePickerDialog.getDatePicker().setMinDate(maxAgeCalendar.getTimeInMillis());
+
+        datePickerDialog.show();
+    }
+
+    private void setupContactPicker() {
+        emergencyContactLayout.setEndIconOnClickListener(v -> {
+            // Check for contacts permission
+            if (ContextCompat.checkSelfPermission(ProfileCompletionActivity.this,
+                    android.Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(ProfileCompletionActivity.this,
+                        new String[]{android.Manifest.permission.READ_CONTACTS}, REQUEST_READ_CONTACTS);
+            } else {
+                pickContact();
+            }
+        });
+    }
+
+    private void pickContact() {
+        Intent pickContactIntent = new Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI);
+        pickContactIntent.setType(ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE);
+        startActivityForResult(pickContactIntent, PICK_CONTACT_REQUEST);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_READ_CONTACTS) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                pickContact();
+            } else {
+                Toast.makeText(this, "Contact permission is needed to select contacts", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_CONTACT_REQUEST && resultCode == RESULT_OK) {
+            if (data != null) {
+                Uri contactUri = data.getData();
+                if (contactUri != null) {
+                    String[] projection = new String[]{ContactsContract.CommonDataKinds.Phone.NUMBER};
+
+                    try (Cursor cursor = getContentResolver().query(contactUri, projection, null, null, null)) {
+                        if (cursor != null && cursor.moveToFirst()) {
+                            int numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+                            String number = cursor.getString(numberIndex);
+
+                            // Format and clean the phone number
+                            number = cleanPhoneNumber(number);
+                            emergencyContactEditText.setText(number);
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error fetching contact", e);
+                        Toast.makeText(this, "Error fetching contact", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            }
+        }
+    }
+
+    private String cleanPhoneNumber(String phoneNumber) {
+        if (phoneNumber == null) return "";
+
+        // Remove any non-digit characters
+        String cleaned = phoneNumber.replaceAll("[^\\d]", "");
+
+        // If it has a country code, remove it
+        if (cleaned.startsWith("91") && cleaned.length() > 10) {
+            cleaned = cleaned.substring(2);
+        }
+
+        // Ensure it's just 10 digits
+        if (cleaned.length() > 10) {
+            cleaned = cleaned.substring(cleaned.length() - 10);
+        }
+
+        return cleaned;
+    }
+
     private boolean validateInput() {
         boolean isValid = true;
 
-        // Validate first name
-        String firstName = firstNameEditText.getText().toString().trim();
-        if (TextUtils.isEmpty(firstName)) {
-            firstNameEditText.setError("First name is required");
-            firstNameEditText.requestFocus();
+        // Validate full name
+        String fullName = fullNameEditText.getText().toString().trim();
+        if (TextUtils.isEmpty(fullName)) {
+            fullNameEditText.setError("Full name is required");
+            fullNameEditText.requestFocus();
             isValid = false;
-        } else if (firstName.length() < 2) {
-            firstNameEditText.setError("First name must be at least 2 characters");
-            firstNameEditText.requestFocus();
+        } else if (fullName.length() < 3) {
+            fullNameEditText.setError("Full name must be at least 3 characters");
+            fullNameEditText.requestFocus();
             isValid = false;
         }
 
-        // Validate last name
-        String lastName = lastNameEditText.getText().toString().trim();
-        if (TextUtils.isEmpty(lastName)) {
-            lastNameEditText.setError("Last name is required");
-            if (isValid) lastNameEditText.requestFocus();
+        // Validate date of birth
+        String dob = dobEditText.getText().toString().trim();
+        if (TextUtils.isEmpty(dob)) {
+            dobEditText.setError("Date of birth is required");
+            if (isValid) dobEditText.requestFocus();
             isValid = false;
-        } else if (lastName.length() < 2) {
-            lastNameEditText.setError("Last name must be at least 2 characters");
-            if (isValid) lastNameEditText.requestFocus();
+        }
+
+        // Validate gender
+        String gender = genderDropdown.getText().toString().trim();
+        if (TextUtils.isEmpty(gender)) {
+            genderDropdown.setError("Gender is required");
+            if (isValid) genderDropdown.requestFocus();
+            isValid = false;
+        }
+
+        // Validate state
+        String state = stateDropdown.getText().toString().trim();
+        if (TextUtils.isEmpty(state)) {
+            stateDropdown.setError("State is required");
+            if (isValid) stateDropdown.requestFocus();
             isValid = false;
         }
 
@@ -101,44 +299,29 @@ public class ProfileCompletionActivity extends AppCompatActivity {
         }
 
         // Remove any non-digit characters
-        String cleaned = phoneNumber.replaceAll("[^\\d+]", "");
+        String cleaned = phoneNumber.replaceAll("[^\\d]", "");
 
-        // Valid formats: +91XXXXXXXXXX or just XXXXXXXXXX (10 digits)
-        if (cleaned.startsWith("+91")) {
-            return cleaned.length() == 10 && Pattern.matches("^[6-9]\\d{9}$", cleaned);
-        } else {
-            return cleaned.length() == 10 && Pattern.matches("^[6-9]\\d{9}$", cleaned);
-        }
+        // Should be exactly 10 digits and start with 6, 7, 8, or 9
+        return cleaned.length() == 10 && Pattern.matches("^[6-9]\\d{9}$", cleaned);
     }
 
     private void saveProfile() {
-        // Validate input
-        String firstName = firstNameEditText.getText().toString().trim();
-        String lastName = lastNameEditText.getText().toString().trim();
+        // Get values from UI
+        String fullName = fullNameEditText.getText().toString().trim();
         String emergencyContact = emergencyContactEditText.getText().toString().trim();
+        String gender = genderDropdown.getText().toString().trim();
+        String state = stateDropdown.getText().toString().trim();
+        boolean isVolunteer = volunteerYesRadio.isChecked();
 
-        if (TextUtils.isEmpty(firstName)) {
-            firstNameEditText.setError("First name is required");
-            firstNameEditText.requestFocus();
-            return;
-        }
-
-        if (TextUtils.isEmpty(lastName)) {
-            lastNameEditText.setError("Last name is required");
-            lastNameEditText.requestFocus();
-            return;
-        }
-
-        if (TextUtils.isEmpty(emergencyContact)) {
-            emergencyContactEditText.setError("Emergency contact is required");
-            emergencyContactEditText.requestFocus();
+        // Validate again just to be sure
+        if (!validateInput()) {
             return;
         }
 
         showLoading(true);
 
-        // Save profile
-        sessionManager.updateUserProfile(firstName, lastName, emergencyContact, new OnCompleteListener() {
+        // Save profile with the new fields
+        sessionManager.updateUserProfile(fullName, emergencyContact, selectedDob, gender, state, isVolunteer, new OnCompleteListener() {
             @Override
             public void onSuccess() {
                 showLoading(false);
@@ -162,9 +345,13 @@ public class ProfileCompletionActivity extends AppCompatActivity {
     private void showLoading(boolean isLoading) {
         progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
         saveButton.setEnabled(!isLoading);
-        firstNameEditText.setEnabled(!isLoading);
-        lastNameEditText.setEnabled(!isLoading);
+        fullNameEditText.setEnabled(!isLoading);
+        dobEditText.setEnabled(!isLoading);
+        genderDropdown.setEnabled(!isLoading);
+        stateDropdown.setEnabled(!isLoading);
         emergencyContactEditText.setEnabled(!isLoading);
+        volunteerYesRadio.setEnabled(!isLoading);
+        volunteerNoRadio.setEnabled(!isLoading);
     }
 
     private void navigateToMain() {

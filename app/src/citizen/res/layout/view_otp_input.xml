@@ -7,85 +7,97 @@
 
     <EditText
         android:id="@+id/otp_box_1"
-        android:layout_width="40dp"
-        android:layout_height="48dp"
+        android:layout_width="48dp"
+        android:layout_height="56dp"
         android:layout_margin="4dp"
         android:background="@drawable/bg_otp_box"
         android:gravity="center"
-        android:hint="@string/zero"
+        android:importantForAccessibility="yes"
         android:inputType="number"
         android:maxLength="1"
-        android:textColor="@color/colorSecondaryText"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:cursorVisible="false"
+        android:padding="8dp" />
 
     <EditText
         android:id="@+id/otp_box_2"
-        android:layout_width="40dp"
-        android:layout_height="48dp"
+        android:layout_width="48dp"
+        android:layout_height="56dp"
         android:layout_margin="4dp"
         android:background="@drawable/bg_otp_box"
-        android:textColor="@color/colorSecondaryText"
-        android:hint="@string/zero"
         android:gravity="center"
+        android:importantForAccessibility="yes"
         android:inputType="number"
         android:maxLength="1"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:cursorVisible="false"
+        android:padding="8dp" />
 
     <EditText
         android:id="@+id/otp_box_3"
-        android:layout_width="40dp"
-        android:hint="@string/zero"
-        android:layout_height="48dp"
+        android:layout_width="48dp"
+        android:layout_height="56dp"
         android:layout_margin="4dp"
         android:background="@drawable/bg_otp_box"
-        android:textColor="@color/colorSecondaryText"
         android:gravity="center"
+        android:importantForAccessibility="yes"
         android:inputType="number"
         android:maxLength="1"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:cursorVisible="false"
+        android:padding="8dp" />
 
     <EditText
         android:id="@+id/otp_box_4"
-        android:layout_width="40dp"
-        android:layout_height="48dp"
+        android:layout_width="48dp"
+        android:layout_height="56dp"
         android:layout_margin="4dp"
         android:background="@drawable/bg_otp_box"
-        android:textColor="@color/colorSecondaryText"
-        android:hint="@string/zero"
         android:gravity="center"
+        android:importantForAccessibility="yes"
         android:inputType="number"
         android:maxLength="1"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:cursorVisible="false"
+        android:padding="8dp" />
 
     <EditText
         android:id="@+id/otp_box_5"
-        android:layout_width="40dp"
-        android:layout_height="48dp"
+        android:layout_width="48dp"
+        android:layout_height="56dp"
         android:layout_margin="4dp"
         android:background="@drawable/bg_otp_box"
-        android:textColor="@color/colorSecondaryText"
         android:gravity="center"
-        android:hint="@string/zero"
+        android:importantForAccessibility="yes"
         android:inputType="number"
         android:maxLength="1"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:cursorVisible="false"
+        android:padding="8dp" />
 
     <EditText
         android:id="@+id/otp_box_6"
-        android:layout_width="40dp"
-        android:layout_height="48dp"
+        android:layout_width="48dp"
+        android:layout_height="56dp"
         android:layout_margin="4dp"
         android:background="@drawable/bg_otp_box"
-        android:textColor="@color/colorSecondaryText"
-        android:hint="@string/zero"
         android:gravity="center"
+        android:importantForAccessibility="yes"
         android:inputType="number"
         android:maxLength="1"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:cursorVisible="false"
+        android:padding="8dp" />
 </LinearLayout>

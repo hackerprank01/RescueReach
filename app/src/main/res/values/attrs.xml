@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Custom theme attributes -->
+    <attr name="gradientBackgroundStart" format="color" />
+    <attr name="gradientBackgroundEnd" format="color" />
+    <attr name="backgroundColor" format="color" />
+    <attr name="cardBackgroundColor" format="color" />
+</resources>

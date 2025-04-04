@@ -4,11 +4,15 @@ import java.util.Date;
 
 public class User {
     private String userId;
-    private String firstName;
-    private String lastName;
+    private String fullName;
     private String phoneNumber; // Always starts with +91
     private String emergencyContact; // Always starts with +91
     private Date createdAt;
+    // New fields
+    private Date dateOfBirth;
+    private String gender;
+    private String state;
+    private boolean isVolunteer;
 
     // Required for Firestore
     public User() {
@@ -20,12 +24,25 @@ public class User {
         this.createdAt = new Date();
     }
 
-    public User(String userId, String firstName, String lastName, String phoneNumber, String emergencyContact) {
+    public User(String userId, String fullName, String phoneNumber, String emergencyContact) {
         this.userId = userId;
-        this.firstName = firstName;
-        this.lastName = lastName;
+        this.fullName = fullName;
         this.phoneNumber = phoneNumber;
         this.emergencyContact = emergencyContact;
+        this.createdAt = new Date();
+    }
+
+    // Full constructor with all fields
+    public User(String userId, String fullName, String phoneNumber, String emergencyContact,
+                Date dateOfBirth, String gender, String state, boolean isVolunteer) {
+        this.userId = userId;
+        this.fullName = fullName;
+        this.phoneNumber = phoneNumber;
+        this.emergencyContact = emergencyContact;
+        this.dateOfBirth = dateOfBirth;
+        this.gender = gender;
+        this.state = state;
+        this.isVolunteer = isVolunteer;
         this.createdAt = new Date();
     }
 
@@ -38,20 +55,12 @@ public class User {
         this.userId = userId;
     }
 
-    public String getFirstName() {
-        return firstName;
+    public String getFullName() {
+        return fullName;
     }
 
-    public void setFirstName(String firstName) {
-        this.firstName = firstName;
-    }
-
-    public String getLastName() {
-        return lastName;
-    }
-
-    public void setLastName(String lastName) {
-        this.lastName = lastName;
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
     }
 
     public String getPhoneNumber() {
@@ -78,15 +87,75 @@ public class User {
         this.createdAt = createdAt;
     }
 
-    public String getFullName() {
-        if (firstName != null && lastName != null) {
-            return firstName + " " + lastName;
-        } else if (firstName != null) {
-            return firstName;
-        } else if (lastName != null) {
-            return lastName;
+    // New getters and setters
+    public Date getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(Date dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
+    public String getGender() {
+        return gender;
+    }
+
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public void setState(String state) {
+        this.state = state;
+    }
+
+    public boolean isVolunteer() {
+        return isVolunteer;
+    }
+
+    public void setVolunteer(boolean volunteer) {
+        isVolunteer = volunteer;
+    }
+
+    // For backward compatibility with code that may still use firstName/lastName
+    @Deprecated
+    public String getFirstName() {
+        if (fullName != null && fullName.contains(" ")) {
+            return fullName.substring(0, fullName.indexOf(" "));
+        }
+        return fullName;
+    }
+
+    @Deprecated
+    public String getLastName() {
+        if (fullName != null && fullName.contains(" ")) {
+            return fullName.substring(fullName.indexOf(" ") + 1);
+        }
+        return "";
+    }
+
+    @Deprecated
+    public void setFirstName(String firstName) {
+        if (this.fullName == null) {
+            this.fullName = firstName;
+        } else if (this.fullName.contains(" ")) {
+            this.fullName = firstName + this.fullName.substring(this.fullName.indexOf(" "));
         } else {
-            return "Unknown";
+            this.fullName = firstName;
+        }
+    }
+
+    @Deprecated
+    public void setLastName(String lastName) {
+        if (this.fullName == null) {
+            this.fullName = lastName;
+        } else if (this.fullName.contains(" ")) {
+            this.fullName = this.fullName.substring(0, this.fullName.indexOf(" ") + 1) + lastName;
+        } else {
+            this.fullName = this.fullName + " " + lastName;
         }
     }
 }

@@ -1,0 +1,139 @@
+/**
+ * Searches for nearby places using direct web service calls to Places API
+ * Note: This approach requires adding okhttp3 to your dependencies:
+ * implementation 'com.squareup.okhttp3:okhttp:4.9.3'
+ * implementation 'com.google.code.gson:gson:2.9.0'
+ *
+ * @param location The user's current location
+ * @param placeType The type of place to search for (hospital, police, fire_station)
+ * @param markerColor The color for markers of this place type
+ */
+private void searchNearbyPlacesWebService(LatLng location, String placeType, float markerColor) {
+    // Create the Places API URL
+    String url = String.format(Locale.US,
+            "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" +
+            "location=%f,%f&radius=%d&type=%s&key=%s",
+            location.latitude, location.longitude, SEARCH_RADIUS,
+            placeType, getString(R.string.google_maps_key));
+
+    // Use a background thread to execute the HTTP request
+    new Thread(() -> {
+        OkHttpClient client = new OkHttpClient();
+        Request request = new Request.Builder()
+                .url(url)
+                .build();
+
+        try {
+            // Execute the HTTP request
+            Response response = client.newCall(request).execute();
+            if (response.isSuccessful() && response.body() != null) {
+                // Parse the JSON response
+                String jsonData = response.body().string();
+                JSONObject jsonObject = new JSONObject(jsonData);
+
+                // Check if the request was successful
+                String status = jsonObject.getString("status");
+                if ("OK".equals(status) || "ZERO_RESULTS".equals(status)) {
+                    // Get the results array
+                    JSONArray results = jsonObject.getJSONArray("results");
+
+                    // Process each place
+                    for (int i = 0; i < Math.min(results.length(), MAX_RESULTS); i++) {
+                        JSONObject place = results.getJSONObject(i);
+
+                        // Get place details
+                        String name = place.getString("name");
+                        JSONObject geometry = place.getJSONObject("geometry");
+                        JSONObject locationJson = geometry.getJSONObject("location");
+                        double lat = locationJson.getDouble("lat");
+                        double lng = locationJson.getDouble("lng");
+
+                        // Create place location
+                        LatLng placeLatLng = new LatLng(lat, lng);
+
+                        // Calculate distance
+                        float[] distanceResults = new float[1];
+                        Location.distanceBetween(
+                                location.latitude, location.longitude,
+                                placeLatLng.latitude, placeLatLng.longitude,
+                                distanceResults);
+                        float distanceKm = distanceResults[0] / 1000;
+
+                        // Create marker on main thread
+                        final String placeName = name;
+                        final float finalDistance = distanceKm;
+                        final LatLng finalLocation = placeLatLng;
+
+                        runOnUiThread(() -> {
+                            googleMap.addMarker(new MarkerOptions()
+                                    .position(finalLocation)
+                                    .title(placeName)
+                                    .snippet(String.format(Locale.getDefault(),
+                                            getString(R.string.place_distance), finalDistance))
+                                    .icon(BitmapDescriptorFactory.defaultMarker(markerColor)));
+                        });
+                    }
+
+                    // Update UI with completion message
+                    runOnUiThread(() -> {
+                        Toast.makeText(CitizenMainActivity.this,
+                                getString(R.string.places_loaded), Toast.LENGTH_SHORT).show();
+                    });
+                } else {
+                    // Handle API error
+                    Log.e(TAG, "Places API returned error status: " + status);
+                    runOnUiThread(() -> {
+                        Toast.makeText(CitizenMainActivity.this,
+                                getString(R.string.places_error), Toast.LENGTH_SHORT).show();
+                    });
+                }
+            } else {
+                // Handle HTTP error
+                Log.e(TAG, "HTTP error: " + response.code());
+                runOnUiThread(() -> {
+                    Toast.makeText(CitizenMainActivity.this,
+                            getString(R.string.places_error), Toast.LENGTH_SHORT).show();
+                });
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error in Places API web service request", e);
+            runOnUiThread(() -> {
+                Toast.makeText(CitizenMainActivity.this,
+                        getString(R.string.places_error), Toast.LENGTH_SHORT).show();
+            });
+        }
+    }).start();
+}
+
+/**
+ * TESTING GUIDE FOR PLACES API:
+ *
+ * 1. SETUP REQUIREMENTS:
+ *    - Enable Places API in Google Cloud Console
+ *    - Ensure billing is enabled for your Google Cloud project
+ *    - Use a valid API key with appropriate restrictions
+ *    - Add OkHttp and JSON dependencies to your build.gradle file
+ *
+ * 2. TESTING IMPLEMENTATION:
+ *    - Uncomment the import statements for OkHttp and JSON
+ *    - To test this method, replace your searchNearbyEmergencyServices with:
+ *
+ *      private void searchNearbyEmergencyServices(LatLng location) {
+ *          Toast.makeText(this, R.string.loading_places, Toast.LENGTH_SHORT).show();
+ *          searchNearbyPlacesWebService(location, "hospital", BitmapDescriptorFactory.HUE_RED);
+ *          searchNearbyPlacesWebService(location, "police", BitmapDescriptorFactory.HUE_BLUE);
+ *          searchNearbyPlacesWebService(location, "fire_station", BitmapDescriptorFactory.HUE_ORANGE);
+ *      }
+ *
+ * 3. DEBUGGING TIPS:
+ *    - Log the complete URL to verify it's formed correctly
+ *    - Check your API key restrictions in Google Cloud Console
+ *    - Log the raw JSON response for debugging
+ *    - If no results appear, try increasing the search radius
+ *
+ * 4. COMMON ISSUES:
+ *    - "OVER_QUERY_LIMIT": You've exceeded your API quota
+ *    - "REQUEST_DENIED": Invalid API key or key not authorized
+ *    - No results: May need to increase radius or try different coordinates
+ *    - Markers not appearing: Check if UI updates are on main thread
+ */

@@ -19,6 +19,8 @@ import android.content.pm.PackageManager;
 
 import com.google.firebase.messaging.BuildConfig;
 
+
+import java.util.Date;
 import com.rescuereach.service.auth.AppSignatureHelper;
 import android.widget.Button;
 import android.widget.EditText;
@@ -50,6 +52,7 @@ import com.rescuereach.service.auth.AuthServiceProvider;
 import com.rescuereach.service.auth.SMSRetrieverHelper;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.ui.common.OTPInputView;
+
 
 import java.util.regex.Pattern;
 
@@ -483,10 +486,15 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
             resendCooldownTimer = null;
         }
 
-        // Reset UI
-        resendCodeText.setEnabled(true);
-        countdownTimerText.setVisibility(View.GONE);
+        // Add null checks before accessing UI elements
+        if (resendCodeText != null) {
+            resendCodeText.setEnabled(true);
+        }
+        if (countdownTimerText != null) {
+            countdownTimerText.setVisibility(View.GONE);
+        }
     }
+
 
     private void showRateLimitErrorDialog() {
         if (isFinishing() || isDestroyed()) return;
@@ -714,11 +722,14 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
 
                 // If user profile data exists in database but not in shared prefs,
                 // update shared prefs with this data
-                if (user.getFirstName() != null && user.getLastName() != null) {
+                if (user.getFullName() != null) {
                     sessionManager.saveUserProfileData(
-                            user.getFirstName(),
-                            user.getLastName(),
-                            user.getEmergencyContact() != null ? user.getEmergencyContact() : ""
+                            user.getFirstName(), // first name
+                            user.getLastName(), // last name
+                            user.getDateOfBirth() != null ? user.getDateOfBirth() : new Date(), // date of birth
+                            user.getState() != null ? user.getState() : "", // state, or "" as default
+                            user.getEmergencyContact() != null ? user.getEmergencyContact() : "", // emergency contact
+                            user.isVolunteer() // isVolunteer flag
                     );
                 }
 
@@ -830,23 +841,37 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private void showLoading(boolean isLoading) {
         if (isFinishing() || isDestroyed()) return;
 
-        progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
-
-        // Disable UI interaction during loading
-        sendCodeButton.setEnabled(!isLoading);
-        clearButton.setEnabled(!isLoading);
-
-        // Only enable verify button if OTP is complete
-        if (otpInputView != null) {
-            String currentOtp = otpInputView.getOTP();
-            verifyCodeButton.setEnabled(!isLoading && currentOtp != null && currentOtp.length() == 6);
-        } else {
-            verifyCodeButton.setEnabled(!isLoading);
+        if (progressBar != null) {
+            progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
         }
 
-        backButton.setEnabled(!isLoading);
+        // Disable UI interaction during loading with null checks
+        if (sendCodeButton != null) {
+            sendCodeButton.setEnabled(!isLoading);
+        }
+        if (clearButton != null) {
+            clearButton.setEnabled(!isLoading);
+        }
+
+        // Only enable verify button if OTP is complete
+        if (verifyCodeButton != null) {
+            if (otpInputView != null) {
+                String currentOtp = otpInputView.getOTP();
+                verifyCodeButton.setEnabled(!isLoading && currentOtp != null && currentOtp.length() == 6);
+            } else {
+                verifyCodeButton.setEnabled(!isLoading);
+            }
+        }
+
+        if (backButton != null) {
+            backButton.setEnabled(!isLoading);
+        }
+
         // Don't change resendCodeText enabled state here - it's managed by the cooldown timer
-        phoneEditText.setEnabled(!isLoading);
+
+        if (phoneEditText != null) {
+            phoneEditText.setEnabled(!isLoading);
+        }
 
         if (otpInputView != null) {
             otpInputView.setEnabled(!isLoading);
@@ -859,7 +884,7 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         cancelResendCooldown();
         isRequestInProgress = false;
 
-        // Reset input fields
+        // Reset input fields with null checks
         if (phoneEditText != null) {
             phoneEditText.setText("");
             phoneEditText.setError(null);

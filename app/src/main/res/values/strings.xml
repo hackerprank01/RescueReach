@@ -1,9 +1,157 @@
 <resources>
+
     <string name="app_name">RescueReach</string>
+    <string name="zero">0</string>
+    <string name="app_logo_desc">RescueReach App Logo</string>
+    <string name="auth_title">Your Safety is Our Priority</string>
+    <string name="auth_subtitle">Emergency Response System</string>
+    <string name="login_with_phone">Login with Phone</string>
+    <string name="verification_code_info">We\'ll send you a verification code</string>
+    <string name="phone_helper_text">Enter your 10-digit mobile number</string>
+    <string name="phone_number">Phone Number</string>
+    <string name="send_otp">Send OTP</string>
+    <string name="clear">Clear</string>
+    <string name="back_button_desc">Go back to phone input</string>
+    <string name="verify_phone">Verify Phone</string>
+    <string name="code_sent_to_placeholder">Code sent to +91 XXXXXXXXXX</string>
+    <string name="enter_otp">Enter 6-digit OTP</string>
+    <string name="verify">Verify</string>
+    <string name="resend_code">Didn\'t receive code? Resend</string>
+    <string name="resend_countdown">Resend available in %1$ds</string>
+    <string name="app_version">RescueReach v1.0</string>
+    <string name="report_emergency">Report Emergency</string>
+
+
+    <!-- Profile Completion Strings -->
+    <string name="complete_profile">Complete Your Profile</string>
+    <string name="profile_subtitle">Let us know more about you</string>
+    <string name="full_name">Full Name</string>
+    <string name="date_of_birth">Date of Birth</string>
+    <string name="gender">Gender</string>
+    <string name="state">State</string>
+    <string name="emergency_contact">Emergency Contact</string>
+    <string name="emergency_contact_info">This number will be contacted in case of an emergency</string>
+    <string name="volunteer_question">Would you like to volunteer in emergency situations?</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="save_and_continue">Save and Continue</string>
+
+    <!-- Gender options -->
+    <string-array name="gender_options">
+        <item>Male</item>
+        <item>Female</item>
+        <item>Other</item>
+    </string-array>
+
+    <!-- Indian states -->
+    <string-array name="indian_states">
+        <item>Andhra Pradesh</item>
+        <item>Arunachal Pradesh</item>
+        <item>Assam</item>
+        <item>Bihar</item>
+        <item>Chhattisgarh</item>
+        <item>Goa</item>
+        <item>Gujarat</item>
+        <item>Haryana</item>
+        <item>Himachal Pradesh</item>
+        <item>Jharkhand</item>
+        <item>Karnataka</item>
+        <item>Kerala</item>
+        <item>Madhya Pradesh</item>
+        <item>Maharashtra</item>
+        <item>Manipur</item>
+        <item>Meghalaya</item>
+        <item>Mizoram</item>
+        <item>Nagaland</item>
+        <item>Odisha</item>
+        <item>Punjab</item>
+        <item>Rajasthan</item>
+        <item>Sikkim</item>
+        <item>Tamil Nadu</item>
+        <item>Telangana</item>
+        <item>Tripura</item>
+        <item>Uttar Pradesh</item>
+        <item>Uttarakhand</item>
+        <item>West Bengal</item>
+        <item>Andaman and Nicobar Islands</item>
+        <item>Chandigarh</item>
+        <item>Dadra and Nagar Haveli and Daman and Diu</item>
+        <item>Delhi</item>
+        <item>Jammu and Kashmir</item>
+        <item>Ladakh</item>
+        <item>Lakshadweep</item>
+        <item>Puducherry</item>
+    </string-array>
+
+
+    <!-- Navigation Drawer -->
     <string name="navigation_drawer_open">Open navigation drawer</string>
     <string name="navigation_drawer_close">Close navigation drawer</string>
-    <string name="action_logout">Logout</string>
-    <string name="report_emergency">Report Emergency</string>
-    <string name="zero">0</string>
-    <string name="break_line">---------------------------------------------------------------------------------------</string>
+
+    <!-- Menu Headers -->
+    <string name="menu_header_emergency">Emergency &amp; Reports</string>
+    <string name="menu_header_volunteer">Volunteer &amp; Community Support</string>
+    <string name="menu_header_safety">Safety &amp; Assistance</string>
+    <string name="menu_header_account">User &amp; App Settings</string>
+
+    <!-- Menu Items -->
+    <string name="menu_home">Home</string>
+    <string name="menu_my_reports">My Reports</string>
+    <string name="menu_community_support">Community Support</string>
+    <string name="menu_volunteer_alerts">Volunteer Alerts</string>
+    <string name="menu_safety_features">Safety Features</string>
+    <string name="menu_help_support">Help &amp; Support</string>
+    <string name="menu_profile">Profile</string>
+    <string name="menu_logout">Logout</string>
+
+    <!-- Navigation Header -->
+    <string name="nav_header_user_name">User Name</string>
+    <string name="nav_header_phone">+91 XXXXXXXXXX</string>
+    <string name="map_view_placeholder">Location Map (Coming Soon)</string>
+
+    <!-- Placeholder Descriptions -->
+    <string name="placeholder_icon_desc">Feature icon</string>
+    <string name="placeholder_home_description">Report emergencies, send media/voice and get immediate assistance.</string>
+    <string name="placeholder_my_reports_description">View your past emergency reports and their status.</string>
+    <string name="placeholder_community_description">Find nearby volunteer help for non-emergency situations.</string>
+    <string name="placeholder_volunteer_description">Receive alerts about nearby emergencies you can help with.</string>
+    <string name="placeholder_safety_description">Find nearby hospitals, police stations, and fire stations.</string>
+    <string name="placeholder_help_description">Important emergency numbers and contact information.</string>
+    <string name="placeholder_profile_description">View and update your personal information and volunteer status.</string>
+
+    <!-- Dialogs -->
+    <string name="logout_dialog_title">Logout</string>
+    <string name="logout_dialog_message">Are you sure you want to logout?</string>
+    <string name="exit_dialog_title">Exit App</string>
+    <string name="exit_dialog_message">Are you sure you want to exit?</string>
+    <string name="logout_message">Logging out...</string>
+
+    <!-- Emergency Button -->
+    <string name="sos_button_desc">Emergency SOS button</string>
+
+    <!-- Add these new strings to your existing strings.xml -->
+    <string name="your_location">Your Location</string>
+    <string name="awaiting_location">Awaiting location information…</string>
+    <string name="zoom_in">Zoom in</string>
+    <string name="zoom_out">Zoom out</string>
+    <string name="nearby">Nearby</string>
+    <string name="hospitals">Hospitals</string>
+    <string name="police">Police</string>
+    <string name="nearby_emergency">Nearby Emergency Services</string>
+    <string name="fire">Fire Stations</string>
+    <string name="loading_places">Loading nearby emergency services…</string>
+    <string name="place_distance">%.1f km away</string>
+    <string name="places_loaded">Emergency services loaded</string>
+    <string name="places_error">Error loading some services</string>
+
+    <!-- Map-related strings -->
+    <string name="current_location">Current Location</string>
+    <string name="waiting_for_location">Waiting for location...</string>
+    <string name="center_on_location">Center on current location</string>
+    <string name="location_permission_denied">Location permissions are required for this feature</string>
+
+
 </resources>
+
+
+

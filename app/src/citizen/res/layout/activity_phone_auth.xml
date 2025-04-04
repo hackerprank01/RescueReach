@@ -4,7 +4,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/gradient_background"
+    android:background="@drawable/enhanced_gradient_background"
+    android:animateLayoutChanges="true"
     tools:context=".citizen.PhoneAuthActivity">
 
     <ImageView
@@ -12,8 +13,9 @@
         android:layout_width="120dp"
         android:layout_height="120dp"
         android:layout_marginTop="48dp"
-        android:contentDescription="RescueReach Logo"
+        android:contentDescription="@string/app_logo_desc"
         android:src="@drawable/app_logo"
+        android:importantForAccessibility="yes"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -23,10 +25,12 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="Your Safety is Our Priority"
-        android:textColor="@color/black"
+        android:text="@string/auth_title"
+        android:textColor="?attr/android:textColorPrimary"
         android:textSize="24sp"
         android:textStyle="bold"
+        android:textAlignment="center"
+        android:gravity="center"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/logoImage" />
@@ -36,22 +40,24 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Emergency Response System"
-        android:textColor="@color/black"
+        android:text="@string/auth_subtitle"
+        android:textColor="?attr/android:textColorSecondary"
         android:textSize="16sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/titleText" />
 
-    <androidx.cardview.widget.CardView
-        android:layout_width="match_parent"
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/authCard"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginTop="40dp"
         android:layout_marginEnd="24dp"
         app:cardCornerRadius="16dp"
-        app:cardElevation="8dp"
-        app:cardBackgroundColor="@color/white"
+        app:cardElevation="4dp"
+        app:strokeWidth="0dp"
+        app:cardBackgroundColor="?attr/cardBackgroundColor"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/subtitleText">
@@ -60,7 +66,8 @@
             android:id="@+id/viewFlipper"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/white">
+            android:inAnimation="@anim/slide_in_right"
+            android:outAnimation="@anim/slide_out_left">
 
             <!-- Phone Input View -->
             <LinearLayout
@@ -72,8 +79,8 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Login with Phone"
-                    android:textColor="@color/colorPrimaryText"
+                    android:text="@string/login_with_phone"
+                    android:textColor="?android:attr/textColorPrimary"
                     android:textSize="20sp"
                     android:textStyle="bold" />
 
@@ -81,49 +88,60 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="We'll send you a verification code"
-                    android:textColor="@color/colorSecondaryText"
+                    android:text="@string/verification_code_info"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:textSize="14sp" />
 
                 <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/phoneInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
                     app:prefixText="+91"
-                    android:textColor="@color/black"
-                    app:prefixTextColor="@color/black"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                    app:prefixTextColor="?android:attr/textColorPrimary"
+                    app:errorEnabled="true"
+                    app:helperTextEnabled="true"
+                    app:helperText="@string/phone_helper_text"
+                    app:helperTextTextColor="?android:attr/textColorSecondary"
+                    app:boxStrokeColor="@color/rescue_primary"
+                    app:hintTextColor="@color/rescue_primary">
 
-                    <EditText
+                    <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/edit_phone"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Phone Number"
-                        android:textColorHint="@color/black"
-                        android:textColor="@color/black"
-                        android:inputType="phone" />
+                        android:hint="@string/phone_number"
+                        android:inputType="phone"
+                        android:maxLength="10"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:imeOptions="actionDone" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_send_code"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="32dp"
-                    android:background="@drawable/button_background"
                     android:padding="12dp"
-                    android:text="Send OTP"
-                    android:textColor="@android:color/black" />
+                    android:text="@string/send_otp"
+                    android:textColor="@color/white"
+                    app:backgroundTint="@color/rescue_primary"
+                    app:cornerRadius="8dp"
+                    android:elevation="2dp" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_clear"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:background="@drawable/button_secondary_background"
+                    android:layout_marginTop="12dp"
                     android:padding="12dp"
-                    android:text="Clear"
-                    android:textColor="@android:color/black" />
+                    android:text="@string/clear"
+                    android:textColor="?android:attr/textColorPrimary"
+                    app:strokeColor="@color/rescue_primary"
+                    app:cornerRadius="8dp" />
 
             </LinearLayout>
 
@@ -142,19 +160,20 @@
 
                     <ImageButton
                         android:id="@+id/button_back"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Back"
-                        android:padding="8dp"
+                        android:contentDescription="@string/back_button_desc"
+                        android:padding="12dp"
+                        app:tint="?android:attr/textColorPrimary"
                         android:src="@drawable/ic_arrow_back" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:text="Verify Phone"
-                        android:textColor="@color/colorPrimaryText"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/verify_phone"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:textSize="20sp"
                         android:textStyle="bold" />
 
@@ -165,16 +184,16 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="Code sent to +91 1234567890"
-                    android:textColor="@color/colorSecondaryText"
+                    android:text="@string/code_sent_to_placeholder"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:textSize="14sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
-                    android:text="Enter 6-digit OTP"
-                    android:textColor="@color/colorPrimaryText"
+                    android:text="@string/enter_otp"
+                    android:textColor="?android:attr/textColorPrimary"
                     android:textSize="16sp" />
 
                 <com.rescuereach.ui.common.OTPInputView
@@ -183,15 +202,17 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_verify_code"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="32dp"
-                    android:background="@drawable/button_background"
                     android:padding="12dp"
-                    android:text="Verify"
-                    android:textColor="@color/black"
+                    android:text="@string/verify"
+                    android:textColor="@color/white"
+                    app:backgroundTint="@color/rescue_primary"
+                    app:cornerRadius="8dp"
+                    android:elevation="2dp"
                     android:enabled="false" />
 
                 <LinearLayout
@@ -202,23 +223,16 @@
                     android:layout_marginTop="16dp">
 
                     <TextView
-                        android:id="@+id/text_timer"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Resend available in 60 seconds"
-                        android:textColor="@color/colorSecondaryText"
-                        android:textSize="12sp"
-                        android:visibility="gone"/>
-
-                    <TextView
                         android:id="@+id/text_resend_code"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:clickable="true"
                         android:focusable="true"
-                        android:text="Didn't receive code? Resend"
-                        android:textColor="@color/colorPrimary" />
+                        android:text="@string/resend_code"
+                        android:textColor="@color/rescue_primary"
+                        android:padding="8dp"
+                        android:background="?attr/selectableItemBackground" />
 
                     <TextView
                         android:id="@+id/text_countdown_timer"
@@ -226,27 +240,40 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"
                         android:layout_marginTop="8dp"
-                        android:text="Resend available in 60s"
-                        android:textColor="@color/colorSecondaryText"
+                        android:text="@string/resend_countdown"
+                        android:textColor="?android:attr/textColorSecondary"
                         android:textSize="14sp"
                         android:visibility="gone" />
-                    
+
                 </LinearLayout>
 
             </LinearLayout>
 
         </ViewFlipper>
 
-    </androidx.cardview.widget.CardView>
+    </com.google.android.material.card.MaterialCardView>
 
     <ProgressBar
         android:id="@+id/progress_bar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:visibility="gone"
+        android:indeterminateTint="@color/rescue_primary"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/text_version"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:text="@string/app_version"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

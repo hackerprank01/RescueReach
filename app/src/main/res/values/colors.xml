@@ -1,27 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <!-- Base colors -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
 
+    <!-- Brand colors -->
+    <color name="rescue_primary">#FF5722</color>
+    <color name="rescue_primary_dark">#E64A19</color>
+    <color name="rescue_primary_light">#FFCCBC</color>
+    <color name="rescue_accent">#03A9F4</color>
+    <color name="rescue_accent_dark">#0288D1</color>
+    <color name="rescue_accent_light">#B3E5FC</color>
+
+    <!-- Text colors - Light Theme -->
+    <color name="text_primary_light">#212121</color>
+    <color name="text_secondary_light">#757575</color>
+
+    <!-- Text colors - Dark Theme -->
+    <color name="text_primary_dark">#E1E1E1</color>
+    <color name="text_secondary_dark">#B3B3B3</color>
+
+    <!-- Background colors - Light Theme -->
+    <color name="background_light">#F5F5F5</color>
+    <color name="card_background_light">#FFFFFF</color>
+    <color name="gradient_start_light">#FFFDE7</color>
+    <color name="gradient_end_light">#FFF8E1</color>
+
+    <!-- Background colors - Dark Theme -->
+    <color name="background_dark">#121212</color>
+    <color name="card_background_dark">#1F1F1F</color>
+    <color name="gradient_start_dark">#1A1A1A</color>
+    <color name="gradient_end_dark">#212121</color>
+
+    <!-- Functional colors -->
+    <color name="emergency_red">#F44336</color>
+    <color name="success_green">#4CAF50</color>
+    <color name="warning_amber">#FFC107</color>
+    <color name="info_blue">#2196F3</color>
+
+    <!-- Legacy colors for backward compatibility -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
+    <color name="blue_200">#90CAF9</color>
+    <color name="blue_500">#2196F3</color>
+    <color name="blue_700">#1976D2</color>
     <color name="teal_200">#FF03DAC5</color>
-    <color name="purple_100">#B39DDB</color>
     <color name="teal_700">#FF018786</color>
 
-    <color name="safety_card_1">#FFF8E1</color>
-    <color name="safety_card_2">#E1F5FE</color>
-    <color name="safety_card_3">#F3E5F5</color>
-    <color name="safety_card_4">#E8F5E9</color>
-
-    <!-- Custom colors for RescueReach -->
-    <color name="colorPrimary">#E7190A</color>
-    <color name="colorPrimaryDark">#388E3C</color>
-    <color name="colorAccent">#FF5722</color>
-    <color name="colorPrimaryText">#000000</color>
-    <color name="colorSecondaryText">#000000</color>
-    <color name="blue_700">#1976D2</color>
-    <color name="blue_500">#2196F3</color>
-    <color name="blue_200">#90CAF9</color>
+    <!-- Legacy semantic colors -->
+    <color name="colorPrimary">@color/rescue_primary</color>
+    <color name="colorPrimaryDark">@color/rescue_primary_dark</color>
+    <color name="colorAccent">@color/rescue_accent</color>
+    <color name="colorPrimaryText">@color/text_primary_light</color>
+    <color name="colorSecondaryText">@color/text_secondary_light</color>
 </resources>

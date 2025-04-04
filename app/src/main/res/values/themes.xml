@@ -1,12 +1,30 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.RescueReach" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+    <!-- Base application theme - Light Mode -->
+    <style name="Theme.RescueReach" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <!-- Primary brand color -->
+        <item name="colorPrimary">@color/rescue_primary</item>
+        <item name="colorPrimaryVariant">@color/rescue_primary_dark</item>
+        <item name="colorOnPrimary">@color/white</item>
 
+        <!-- Secondary brand color -->
+        <item name="colorSecondary">@color/rescue_accent</item>
+        <item name="colorSecondaryVariant">@color/rescue_accent_dark</item>
+        <item name="colorOnSecondary">@color/black</item>
+
+        <!-- Status bar color -->
+        <item name="android:statusBarColor">@color/rescue_primary_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+
+        <!-- Text colors -->
+        <item name="android:textColorPrimary">@color/text_primary_light</item>
+        <item name="android:textColorSecondary">@color/text_secondary_light</item>
+
+        <!-- Background colors -->
+        <item name="backgroundColor">@color/background_light</item>
+        <item name="cardBackgroundColor">@color/card_background_light</item>
+
+        <!-- Custom attributes -->
+        <item name="gradientBackgroundStart">@color/gradient_start_light</item>
+        <item name="gradientBackgroundEnd">@color/gradient_end_light</item>
     </style>
-
-    <style name="Theme.RescueReach" parent="Base.Theme.RescueReach" />
-
-
 </resources>

@@ -6,10 +6,8 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ServerValue;
 import com.google.firebase.firestore.CollectionReference;
 import com.google.firebase.firestore.DocumentReference;
-import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.SetOptions;
@@ -52,7 +50,6 @@ public class FirebaseUserRepository implements UserRepository {
 
     @Override
     public void getUserById(String userId, OnUserFetchedListener listener) {
-        // Existing implementation remains the same
         Log.d(TAG, "Getting user by ID: " + userId);
 
         if (userId == null || userId.isEmpty()) {
@@ -79,7 +76,6 @@ public class FirebaseUserRepository implements UserRepository {
 
     @Override
     public void getUserByPhoneNumber(String phoneNumber, OnUserFetchedListener listener) {
-        // Existing implementation remains the same
         Log.d(TAG, "Getting user by phone number: " + phoneNumber);
 
         if (phoneNumber == null || phoneNumber.isEmpty()) {
@@ -136,7 +132,7 @@ public class FirebaseUserRepository implements UserRepository {
 
         // Add formatted timestamp to the user object
         Map<String, Object> userMap = userToMap(user);
-        userMap.put(FIELD_CREATED_AT_FORMATTED, dateFormatter.format(user.getCreatedAt()));
+//        userMap.put(FIELD_CREATED_AT_FORMATTED, dateFormatter.format(user.getCreatedAt()));
 
         // Document ID is now the formatted phone number
         DocumentReference userDoc = usersCollection.document(formattedPhone);
@@ -164,10 +160,25 @@ public class FirebaseUserRepository implements UserRepository {
         }
 
         map.put("phoneNumber", user.getPhoneNumber());
-        map.put("firstName", user.getFirstName());
-        map.put("lastName", user.getLastName());
+        map.put("fullName", user.getFullName());
         map.put("emergencyContact", user.getEmergencyContact());
         map.put("createdAt", user.getCreatedAt());
+
+        // For backward compatibility
+        map.put("firstName", user.getFirstName());
+        map.put("lastName", user.getLastName());
+
+        // Add new fields
+        if (user.getDateOfBirth() != null) {
+            map.put("dateOfBirth", user.getDateOfBirth());
+        }
+        if (user.getGender() != null) {
+            map.put("gender", user.getGender());
+        }
+        if (user.getState() != null) {
+            map.put("state", user.getState());
+        }
+        map.put("isVolunteer", user.isVolunteer());
 
         return map;
     }
@@ -204,12 +215,7 @@ public class FirebaseUserRepository implements UserRepository {
         // Document ID is the formatted phone number
         DocumentReference userDoc = usersCollection.document(formattedPhone);
 
-        Map<String, Object> updates = new HashMap<>();
-        updates.put("userId", currentUser.getUid());  // Always include this for security rules
-        updates.put("firstName", user.getFirstName());
-        updates.put("lastName", user.getLastName());
-        updates.put("emergencyContact", user.getEmergencyContact());
-        updates.put("phoneNumber", formattedPhone);
+        Map<String, Object> updates = userToMap(user);
 
         // Using set with merge option instead of update
         // This can help with certain security rule configurations
@@ -247,10 +253,24 @@ public class FirebaseUserRepository implements UserRepository {
         String phoneKey = user.getPhoneNumber().replaceAll("[^\\d]", ""); // Remove non-digits
 
         Map<String, Object> updates = new HashMap<>();
+        updates.put("fullName", user.getFullName() != null ? user.getFullName() : "");
+        updates.put("emergencyContact", user.getEmergencyContact() != null ? user.getEmergencyContact() : "");
+
+        // For backward compatibility
         updates.put("firstName", user.getFirstName() != null ? user.getFirstName() : "");
         updates.put("lastName", user.getLastName() != null ? user.getLastName() : "");
-        updates.put("fullName", user.getFullName());
-        updates.put("emergencyContact", user.getEmergencyContact() != null ? user.getEmergencyContact() : "");
+
+        // Add new fields
+        if (user.getDateOfBirth() != null) {
+            updates.put("dateOfBirth", user.getDateOfBirth());
+        }
+        if (user.getGender() != null) {
+            updates.put("gender", user.getGender());
+        }
+        if (user.getState() != null) {
+            updates.put("state", user.getState());
+        }
+        updates.put("isVolunteer", user.isVolunteer());
 
         // Critical for security rules: Include the userId that matches the authenticated UID
         updates.put("userId", currentUser != null ? currentUser.getUid() : user.getUserId());
@@ -290,16 +310,52 @@ public class FirebaseUserRepository implements UserRepository {
                 });
     }
 
-    // The rest of the methods remain largely the same
-
     @Override
     public void deleteUser(String phoneNumber, OnCompleteListener listener) {
-        // Implementation remains the same
+        if (phoneNumber == null || phoneNumber.isEmpty()) {
+            listener.onError(new IllegalArgumentException("Phone number cannot be null or empty"));
+            return;
+        }
+
+        String formattedPhone = formatPhoneNumber(phoneNumber);
+        usersCollection.document(formattedPhone).delete()
+                .addOnSuccessListener(aVoid -> {
+                    Log.d(TAG, "User deleted successfully from Firestore");
+
+                    // Also delete from Realtime Database
+                    String phoneKey = formattedPhone.replaceAll("[^\\d]", "");
+                    FirebaseDatabase.getInstance().getReference("users").child(phoneKey).removeValue()
+                            .addOnSuccessListener(innerVoid -> {
+                                Log.d(TAG, "User deleted successfully from Realtime Database");
+                                listener.onSuccess();
+                            })
+                            .addOnFailureListener(e -> {
+                                Log.e(TAG, "Error deleting user from Realtime Database", e);
+                                // Still consider the operation successful if Firestore delete worked
+                                listener.onSuccess();
+                            });
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error deleting user", e);
+                    listener.onError(e);
+                });
     }
 
     @Override
     public void getAllUsers(OnUserListFetchedListener listener) {
-        // Implementation remains the same
+        usersCollection.get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    List<User> userList = new ArrayList<>();
+                    for (int i = 0; i < queryDocumentSnapshots.size(); i++) {
+                        User user = queryDocumentSnapshots.getDocuments().get(i).toObject(User.class);
+                        userList.add(user);
+                    }
+                    listener.onSuccess(userList);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error getting all users", e);
+                    listener.onError(e);
+                });
     }
 
     private void saveUserToRealtimeDatabase(User user, OnCompleteListener listener) {
@@ -316,12 +372,24 @@ public class FirebaseUserRepository implements UserRepository {
         Map<String, Object> userBasicInfo = new HashMap<>();
         userBasicInfo.put("phoneNumber", user.getPhoneNumber());
         userBasicInfo.put("userId", currentUser.getUid());  // Use authenticated UID
+        userBasicInfo.put("fullName", user.getFullName() != null ? user.getFullName() : "");
         userBasicInfo.put("firstName", user.getFirstName() != null ? user.getFirstName() : "");
         userBasicInfo.put("lastName", user.getLastName() != null ? user.getLastName() : "");
-        userBasicInfo.put("fullName", user.getFullName());
         userBasicInfo.put("emergencyContact", user.getEmergencyContact() != null ? user.getEmergencyContact() : "");
-        userBasicInfo.put("createdAt", user.getCreatedAt());
+//        userBasicInfo.put("createdAt", user.getCreatedAt());
         userBasicInfo.put("status", "online");
+
+        // Add new fields
+        if (user.getDateOfBirth() != null) {
+            userBasicInfo.put("dateOfBirth", user.getDateOfBirth());
+        }
+        if (user.getGender() != null) {
+            userBasicInfo.put("gender", user.getGender());
+        }
+        if (user.getState() != null) {
+            userBasicInfo.put("state", user.getState());
+        }
+        userBasicInfo.put("isVolunteer", user.isVolunteer());
 
         // Try both phone-key and UID approaches
         String phoneKey = user.getPhoneNumber().replaceAll("[^\\d]", ""); // Remove non-digits
