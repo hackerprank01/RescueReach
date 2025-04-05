@@ -34,11 +34,9 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.rescuereach.R;
-import com.rescuereach.citizen.settings.NotificationSettingsActivity;
 import com.rescuereach.citizen.settings.PrivacySettingsActivity;
 import com.rescuereach.citizen.settings.AppearanceSettingsActivity;
-import com.rescuereach.citizen.settings.EmergencySettingsActivity;
-import com.rescuereach.citizen.settings.DataManagementActivity;;
+import com.rescuereach.citizen.settings.DataManagementActivity;
 import com.rescuereach.service.auth.UserSessionManager;
 
 import java.text.SimpleDateFormat;
@@ -149,18 +147,6 @@ public class ProfileFragment extends Fragment {
         // Progress indicator
         progressIndicator = view.findViewById(R.id.progress_indicator);
 
-        // Settings click listeners
-        view.findViewById(R.id.layout_notification_settings).setOnClickListener(v ->
-                showNotImplementedToast("Notification Settings"));
-        view.findViewById(R.id.layout_privacy_settings).setOnClickListener(v ->
-                showNotImplementedToast("Privacy Settings"));
-        view.findViewById(R.id.layout_appearance_settings).setOnClickListener(v ->
-                showNotImplementedToast("Appearance Settings"));
-        view.findViewById(R.id.layout_emergency_settings).setOnClickListener(v ->
-                showNotImplementedToast("Emergency Settings"));
-        view.findViewById(R.id.layout_data_management).setOnClickListener(v ->
-                showNotImplementedToast("Data Management"));
-
         // Setup dropdowns
         setupDropdowns();
     }
@@ -265,17 +251,12 @@ public class ProfileFragment extends Fragment {
         });
 
         // Settings click listeners
-        requireView().findViewById(R.id.layout_notification_settings).setOnClickListener(v ->
-                startActivity(new Intent(requireContext(), NotificationSettingsActivity.class)));
 
         requireView().findViewById(R.id.layout_privacy_settings).setOnClickListener(v ->
                 startActivity(new Intent(requireContext(), PrivacySettingsActivity.class)));
 
         requireView().findViewById(R.id.layout_appearance_settings).setOnClickListener(v ->
                 startActivity(new Intent(requireContext(), AppearanceSettingsActivity.class)));
-
-        requireView().findViewById(R.id.layout_emergency_settings).setOnClickListener(v ->
-                startActivity(new Intent(requireContext(), EmergencySettingsActivity.class)));
 
         requireView().findViewById(R.id.layout_data_management).setOnClickListener(v ->
                 startActivity(new Intent(requireContext(), DataManagementActivity.class)));

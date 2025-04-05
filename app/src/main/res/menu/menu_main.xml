@@ -15,12 +15,8 @@
             android:title="@string/menu_my_reports" />
     </group>
 
-    <item android:title="@string/menu_header_volunteer">
+    <item android:title="@string/menu_header_volunteer_support">
         <menu>
-            <item
-                android:id="@+id/nav_community_support"
-                android:icon="@drawable/ic_community"
-                android:title="@string/menu_community_support" />
             <item
                 android:id="@+id/nav_volunteer_alerts"
                 android:icon="@drawable/ic_alerts"

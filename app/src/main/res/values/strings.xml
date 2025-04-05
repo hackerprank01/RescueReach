@@ -89,14 +89,13 @@
 
     <!-- Menu Headers -->
     <string name="menu_header_emergency">Emergency &amp; Reports</string>
-    <string name="menu_header_volunteer">Volunteer &amp; Community Support</string>
+    <string name="menu_header_volunteer_support">Volunteer Support</string>
     <string name="menu_header_safety">Safety &amp; Assistance</string>
     <string name="menu_header_account">User &amp; App Settings</string>
 
     <!-- Menu Items -->
     <string name="menu_home">Home</string>
     <string name="menu_my_reports">My Reports</string>
-    <string name="menu_community_support">Community Support</string>
     <string name="menu_volunteer_alerts">Volunteer Alerts</string>
     <string name="menu_safety_features">Safety Features</string>
     <string name="menu_help_support">Help &amp; Support</string>

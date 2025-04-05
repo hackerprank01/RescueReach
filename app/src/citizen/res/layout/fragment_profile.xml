@@ -357,38 +357,7 @@
 
                     <!-- Settings items remain unchanged -->
                     <!-- Notification Settings -->
-                    <LinearLayout
-                        android:id="@+id/layout_notification_settings"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:padding="12dp"
-                        android:background="?attr/selectableItemBackground"
-                        android:clickable="true"
-                        android:focusable="true">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:layout_marginEnd="16dp"
-                            android:contentDescription="@string/notifications"
-                            android:src="@drawable/ic_notifications"
-                            app:tint="?android:attr/textColorPrimary" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/notifications"
-                            android:textAppearance="@style/TextAppearance.AppCompat.Body1"
-                            android:textSize="16sp" />
-
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/ic_arrow_right"
-                            app:tint="?android:attr/textColorSecondary" />
-                    </LinearLayout>
 
                     <View
                         android:layout_width="match_parent"
@@ -473,39 +442,6 @@
                         android:layout_height="1dp"
                         android:background="?android:attr/listDivider" />
 
-                    <!-- Emergency Settings -->
-                    <LinearLayout
-                        android:id="@+id/layout_emergency_settings"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:padding="12dp"
-                        android:background="?attr/selectableItemBackground"
-                        android:clickable="true"
-                        android:focusable="true">
-
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:layout_marginEnd="16dp"
-                            android:contentDescription="@string/emergency_settings"
-                            android:src="@drawable/ic_sos"
-                            app:tint="?android:attr/textColorPrimary" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/emergency_settings"
-                            android:textAppearance="@style/TextAppearance.AppCompat.Body1"
-                            android:textSize="16sp" />
-
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/ic_arrow_right"
-                            app:tint="?android:attr/textColorSecondary" />
-                    </LinearLayout>
 
                     <View
                         android:layout_width="match_parent"

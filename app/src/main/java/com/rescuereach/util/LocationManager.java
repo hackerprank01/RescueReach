@@ -45,7 +45,6 @@ public class LocationManager {
         setupLocationRequest();
     }
 
-
     private void setupLocationRequest() {
         locationRequest = new LocationRequest.Builder(UPDATE_INTERVAL)
                 .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
@@ -56,8 +55,6 @@ public class LocationManager {
     public void setLocationUpdateListener(LocationUpdateListener listener) {
         this.locationUpdateListener = listener;
     }
-
-
 
     public void startLocationUpdates() {
         // Check privacy settings first
@@ -201,6 +198,12 @@ public class LocationManager {
         }
 
         // Get high-accuracy location for emergency
+        LocationRequest emergencyRequest = new LocationRequest.Builder(0)
+                .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                .setMaxUpdateDelayMillis(0)
+                .setWaitForAccurateLocation(true)
+                .build();
+
         try {
             // Try to get the current location with high accuracy
             fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)

@@ -10,7 +10,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.Menu;
 import android.view.MenuItem;
+import android.view.SubMenu;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -69,6 +71,8 @@ public class CitizenMainActivity extends AppCompatActivity
     private static final String TAG = "CitizenMainActivity";
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
     private static final String MAPVIEW_BUNDLE_KEY = "MapViewBundleKey";
+
+    private boolean emergencyServicesLoadedToastShown = false;
 
     private DrawerLayout drawer;
     private UserSessionManager sessionManager;
@@ -155,6 +159,55 @@ public class CitizenMainActivity extends AppCompatActivity
         toggle.syncState();
 
         navigationView.setNavigationItemSelectedListener(this);
+
+        // Check volunteer status and update menu visibility
+        updateNavigationMenuBasedOnVolunteerStatus(navigationView);
+    }
+
+    private void updateNavigationMenuBasedOnVolunteerStatus(NavigationView navigationView) {
+        // Get volunteer status from session manager
+        boolean isVolunteer = sessionManager.isVolunteer();
+
+        // Get the menu to modify items
+        Menu navMenu = navigationView.getMenu();
+
+        // Remove community support item completely
+        MenuItem volunteerSupportItem = navMenu.findItem(R.id.nav_community_support);
+        if (communitySupportItem != null) {
+            navMenu.removeItem(R.id.nav_community_support);
+        }
+
+        // Show volunteer alerts only if user is a volunteer
+        MenuItem volunteerAlertsItem = navMenu.findItem(R.id.nav_volunteer_alerts);
+        if (volunteerAlertsItem != null) {
+            volunteerAlertsItem.setVisible(isVolunteer);
+        }
+
+        // If user is not a volunteer, check if volunteer section is empty and hide the header
+        if (!isVolunteer) {
+            // Find the volunteer section header (this is tricky in Android's menu system)
+            // We'll need to iterate through submenus to find it
+            for (int i = 0; i < navMenu.size(); i++) {
+                MenuItem item = navMenu.getItem(i);
+                if (item.hasSubMenu() &&
+                        item.getTitle().toString().equals(getString(R.string.menu_header_volunteer_support))) {
+                    // If the volunteer section is now empty (no visible items), hide the whole section
+                    boolean anyVisibleItems = false;
+                    SubMenu subMenu = item.getSubMenu();
+
+                    for (int j = 0; j < subMenu.size(); j++) {
+                        if (subMenu.getItem(j).isVisible()) {
+                            anyVisibleItems = true;
+                            break;
+                        }
+                    }
+
+                    // If no visible items in submenu, hide the header
+                    item.setVisible(anyVisibleItems);
+                    break;
+                }
+            }
+        }
     }
 
     private void setupSosButton() {
@@ -353,8 +406,14 @@ public class CitizenMainActivity extends AppCompatActivity
         // Mark as searching
         isSearchingPlaces = true;
 
-        // Show loading message once
-        showToast(getString(R.string.loading_places), Toast.LENGTH_SHORT);
+        // Show loading message only once per app session
+        if (!placesLoadingToastShown) {
+            showToast(getString(R.string.loading_places), Toast.LENGTH_SHORT);
+            placesLoadingToastShown = true;
+        }
+
+        // Reset the completion counter
+        placeRequestsCompleted.set(0);
 
         // Counter to track completion of all searches
         AtomicInteger searchCounter = new AtomicInteger(0);
@@ -481,7 +540,11 @@ public class CitizenMainActivity extends AppCompatActivity
         if (counter.incrementAndGet() >= totalSearches) {
             // All searches completed
             isSearchingPlaces = false;
-            showToast(getString(R.string.places_loaded), Toast.LENGTH_SHORT);
+            // Show "places loaded" toast only once
+            if (!emergencyServicesLoadedToastShown) {
+                showToast(getString(R.string.places_loaded), Toast.LENGTH_SHORT);
+                emergencyServicesLoadedToastShown = true;
+            }
         }
     }
 
@@ -683,12 +746,6 @@ public class CitizenMainActivity extends AppCompatActivity
                     title,
                     getString(R.string.placeholder_my_reports_description),
                     R.drawable.ic_reports);
-        } else if (fragmentId == R.id.nav_community_support) {
-            title = getString(R.string.menu_community_support);
-            fragment = PlaceholderFragment.newInstance(
-                    title,
-                    getString(R.string.placeholder_community_description),
-                    R.drawable.ic_community);
         } else if (fragmentId == R.id.nav_volunteer_alerts) {
             title = getString(R.string.menu_volunteer_alerts);
             fragment = PlaceholderFragment.newInstance(
