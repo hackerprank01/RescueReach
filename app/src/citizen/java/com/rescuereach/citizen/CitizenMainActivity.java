@@ -1,6 +1,8 @@
 package com.rescuereach.citizen;
 
 import android.Manifest;
+import android.app.ProgressDialog;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Location;
@@ -10,6 +12,8 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -44,8 +48,10 @@ import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRe
 import com.google.android.libraries.places.api.net.PlacesClient;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
+import com.google.firebase.auth.FirebaseAuth;
 import com.rescuereach.R;
 import com.rescuereach.citizen.fragments.PlaceholderFragment;
+import com.rescuereach.citizen.fragments.ProfileFragment;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.util.LocationManager;
 
@@ -644,7 +650,15 @@ public class CitizenMainActivity extends AppCompatActivity
         int id = item.getItemId();
 
         if (id == R.id.nav_logout) {
-            showLogoutConfirmationDialog();
+            // Check if we should skip confirmation
+            boolean skipConfirmation = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                    .getBoolean("skip_logout_confirmation", false);
+
+            if (skipConfirmation) {
+                performLogout();
+            } else {
+                showLogoutConfirmationDialog();
+            }
         } else {
             navigateToFragment(id);
         }
@@ -695,10 +709,7 @@ public class CitizenMainActivity extends AppCompatActivity
                     R.drawable.ic_help);
         } else if (fragmentId == R.id.nav_profile) {
             title = getString(R.string.menu_profile);
-            fragment = PlaceholderFragment.newInstance(
-                    title,
-                    getString(R.string.placeholder_profile_description),
-                    R.drawable.ic_profile);
+            fragment = new ProfileFragment();
         } else {
             title = getString(R.string.menu_home);
             fragment = PlaceholderFragment.newInstance(
@@ -722,18 +733,103 @@ public class CitizenMainActivity extends AppCompatActivity
     }
 
     private void showLogoutConfirmationDialog() {
-        new AlertDialog.Builder(this)
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_logout_confirmation, null);
+        CheckBox doNotShowAgain = dialogView.findViewById(R.id.checkbox_do_not_show_again);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.logout_dialog_title)
-                .setMessage(R.string.logout_dialog_message)
-                .setPositiveButton(R.string.yes, (dialog, which) -> performLogout())
-                .setNegativeButton(R.string.no, null)
-                .show();
+                .setView(dialogView)
+                .setPositiveButton(R.string.logout, (dialogInterface, i) -> {
+                    // Save preference if "Do not show again" is checked
+                    if (doNotShowAgain.isChecked()) {
+                        getSharedPreferences("app_prefs", MODE_PRIVATE)
+                                .edit()
+                                .putBoolean("skip_logout_confirmation", true)
+                                .apply();
+                    }
+
+                    // Perform logout
+                    performLogout();
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .create();
+
+        dialog.setOnShowListener(dialogInterface -> {
+            // Style the positive button as an accent/warning color
+            Button positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            positiveButton.setTextColor(getResources().getColor(R.color.emergency_red, null));
+        });
+
+        dialog.show();
     }
 
+
     private void performLogout() {
-        // This is just the UI portion - actual logout functionality will be implemented later
-        Toast.makeText(this, R.string.logout_message, Toast.LENGTH_SHORT).show();
-        // For now, just show a toast message
+        // Show loading dialog
+        ProgressDialog progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage(getString(R.string.logging_out));
+        progressDialog.setCancelable(false);
+        progressDialog.show();
+
+        // Create a task to perform logout operations
+        new Thread(() -> {
+            try {
+                // Sign out from Firebase Auth
+                FirebaseAuth.getInstance().signOut();
+
+                // Clear user session data
+                UserSessionManager.getInstance(this).clearSession();
+
+                // Wait briefly to ensure operations complete
+                Thread.sleep(500);
+
+                // Update UI on main thread
+                runOnUiThread(() -> {
+                    // Dismiss progress dialog
+                    if (progressDialog.isShowing()) {
+                        progressDialog.dismiss();
+                    }
+
+                    // Show success message
+                    Toast.makeText(this, R.string.logout_success, Toast.LENGTH_SHORT).show();
+
+                    // Navigate to authentication screen
+                    navigateToAuthScreen();
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "Error during logout: " + e.getMessage());
+
+                // Update UI on main thread
+                runOnUiThread(() -> {
+                    // Dismiss progress dialog
+                    if (progressDialog.isShowing()) {
+                        progressDialog.dismiss();
+                    }
+
+                    // Show error message
+                    Toast.makeText(this,
+                            getString(R.string.logout_error, e.getMessage()),
+                            Toast.LENGTH_LONG).show();
+                });
+            }
+        }).start();
+    }
+
+    private void navigateToAuthScreen() {
+        // Create intent for PhoneAuthActivity
+        Intent intent = new Intent(this, PhoneAuthActivity.class);
+
+        // Clear the activity stack so the user can't go back
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+
+        // Start the activity
+        startActivity(intent);
+
+        // Apply a transition animation
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+
+        // Finish the current activity
+        finish();
     }
 
     @Override

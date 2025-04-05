@@ -28,6 +28,11 @@ public class UserSessionManager {
     private static final String KEY_USER_STATE = "user_state";
     private static final String KEY_USER_IS_VOLUNTEER = "user_is_volunteer";
 
+    // Additional profile keys for the new UI
+    private static final String KEY_EMERGENCY_CONTACT_NAME = "emergency_contact_name";
+    private static final String KEY_EMERGENCY_CONTACT_RELATIONSHIP = "emergency_contact_relationship";
+    private static final String KEY_EMERGENCY_CONTACT_PHONE = "emergency_contact_phone";
+
     // For backward compatibility
     private static final String KEY_USER_FIRST_NAME = "user_first_name";
     private static final String KEY_USER_LAST_NAME = "user_last_name";
@@ -339,5 +344,197 @@ public class UserSessionManager {
     public interface OnUserLoadedListener {
         void onUserLoaded(User user);
         void onError(Exception e);
+    }
+
+    //------------------------------------------------------------------------------
+    // New methods for the Profile UI implementation
+    //------------------------------------------------------------------------------
+
+    // Set the full name directly
+    public void setFullName(String fullName) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_USER_FULL_NAME, fullName);
+
+        // For backward compatibility - extract first and last name
+        String firstName = "";
+        String lastName = "";
+        if (fullName != null && !fullName.isEmpty()) {
+            int spaceIndex = fullName.indexOf(' ');
+            if (spaceIndex > 0) {
+                firstName = fullName.substring(0, spaceIndex);
+                lastName = fullName.substring(spaceIndex + 1);
+            } else {
+                firstName = fullName;
+            }
+        }
+        editor.putString(KEY_USER_FIRST_NAME, firstName);
+        editor.putString(KEY_USER_LAST_NAME, lastName);
+        editor.apply();
+    }
+
+    // Set and get date of birth as string (for UI)
+    public void setDateOfBirth(String dobString) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_USER_DOB, dobString);
+        editor.apply();
+    }
+
+    public String getDateOfBirthString() {
+        return sharedPreferences.getString(KEY_USER_DOB, "");
+    }
+
+    // Set gender directly
+    public void setGender(String gender) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_USER_GENDER, gender);
+        editor.apply();
+    }
+
+    // Set state directly
+    public void setState(String state) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_USER_STATE, state);
+        editor.apply();
+    }
+
+    // Set volunteer status directly
+    public void setVolunteer(boolean isVolunteer) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putBoolean(KEY_USER_IS_VOLUNTEER, isVolunteer);
+        editor.apply();
+    }
+
+    // Emergency contact methods
+    public void setEmergencyContactName(String name) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_EMERGENCY_CONTACT_NAME, name);
+        editor.apply();
+    }
+
+    public String getEmergencyContactName() {
+        return sharedPreferences.getString(KEY_EMERGENCY_CONTACT_NAME, "");
+    }
+
+    public void setEmergencyContactPhone(String phone) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_EMERGENCY_CONTACT_PHONE, formatPhoneNumber(phone));
+        // For backward compatibility
+        editor.putString(KEY_USER_EMERGENCY_CONTACT, formatPhoneNumber(phone));
+        editor.apply();
+    }
+
+    public String getUserId() {
+        return authService.getCurrentUserId();
+    }
+    public String getEmergencyContactPhone() {
+        String phone = sharedPreferences.getString(KEY_EMERGENCY_CONTACT_PHONE, "");
+        if (phone == null || phone.isEmpty()) {
+            // Fall back to the legacy key
+            return sharedPreferences.getString(KEY_USER_EMERGENCY_CONTACT, "");
+        }
+        return phone;
+    }
+
+    public void setEmergencyContactRelationship(String relationship) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_EMERGENCY_CONTACT_RELATIONSHIP, relationship);
+        editor.apply();
+    }
+
+    public String getEmergencyContactRelationship() {
+        return sharedPreferences.getString(KEY_EMERGENCY_CONTACT_RELATIONSHIP, "");
+    }
+
+    public boolean getNotificationPreference(String key, boolean defaultValue) {
+        return sharedPreferences.getBoolean("notification_" + key, defaultValue);
+    }
+
+    public void setNotificationPreference(String key, boolean value) {
+        sharedPreferences.edit().putBoolean("notification_" + key, value).apply();
+    }
+
+    // Privacy preferences
+    public boolean getPrivacyPreference(String key, boolean defaultValue) {
+        return sharedPreferences.getBoolean("privacy_" + key, defaultValue);
+    }
+
+    public void setPrivacyPreference(String key, boolean value) {
+        sharedPreferences.edit().putBoolean("privacy_" + key, value).apply();
+    }
+
+    // Appearance preferences
+    public String getAppearancePreference(String key, String defaultValue) {
+        return sharedPreferences.getString("appearance_" + key, defaultValue);
+    }
+
+    public void setAppearancePreference(String key, String value) {
+        sharedPreferences.edit().putString("appearance_" + key, value).apply();
+    }
+
+    // Emergency settings preferences
+    public boolean getEmergencyPreference(String key, boolean defaultValue) {
+        return sharedPreferences.getBoolean("emergency_" + key, defaultValue);
+    }
+
+    public void setEmergencyPreference(String key, boolean value) {
+        sharedPreferences.edit().putBoolean("emergency_" + key, value).apply();
+    }
+
+    // Data management preferences
+    public boolean getDataPreference(String key, boolean defaultValue) {
+        return sharedPreferences.getBoolean("data_" + key, defaultValue);
+    }
+
+    public void setDataPreference(String key, boolean value) {
+        sharedPreferences.edit().putBoolean("data_" + key, value).apply();
+    }
+
+    public int getIntPreference(String key, int defaultValue) {
+        return sharedPreferences.getInt(key, defaultValue);
+    }
+
+    public void setIntPreference(String key, int value) {
+        sharedPreferences.edit().putInt(key, value).apply();
+    }
+
+    public long getLongPreference(String key, long defaultValue) {
+        return sharedPreferences.getLong(key, defaultValue);
+    }
+
+    public void setLongPreference(String key, long value) {
+        sharedPreferences.edit().putLong(key, value).apply();
+    }
+
+    public String getStringPreference(String key, String defaultValue) {
+        return sharedPreferences.getString(key, defaultValue);
+    }
+
+    public void setStringPreference(String key, String value) {
+        sharedPreferences.edit().putString(key, value).apply();
+    }
+
+    // Clear specific types of data
+    public void clearLocalData() {
+        // This clears app data but preserves login information
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+
+        // Keep login information
+        String userId = getUserId();
+        String phoneNumber = getSavedPhoneNumber();
+        boolean isLoggedIn = isLoggedIn();
+
+        // Clear everything
+        editor.clear();
+
+        // Restore login information
+        if (userId != null) {
+            editor.putString(KEY_USER_ID, userId);
+        }
+        if (phoneNumber != null) {
+            editor.putString(KEY_USER_PHONE, phoneNumber);
+        }
+        editor.putBoolean(KEY_LOGGED_IN, isLoggedIn);
+
+        editor.apply();
     }
 }
