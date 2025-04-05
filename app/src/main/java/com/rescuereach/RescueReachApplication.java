@@ -1,46 +1,50 @@
 package com.rescuereach;
 
 import android.app.Application;
-import android.util.Log;
+
+import androidx.work.Constraints;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.NetworkType;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
 
 import com.google.firebase.FirebaseApp;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.FirebaseFirestoreSettings;
-import com.rescuereach.data.repository.RepositoryProvider;
-import com.rescuereach.service.auth.AuthServiceProvider;
+import com.rescuereach.service.background.BackupWorker;
+import com.rescuereach.service.auth.UserSessionManager;
+
+import java.util.concurrent.TimeUnit;
 
 public class RescueReachApplication extends Application {
-    private static final String TAG = "RescueReachApp";
 
     @Override
     public void onCreate() {
         super.onCreate();
 
         // Initialize Firebase
-        initializeFirebase();
-
-        // Initialize service providers
-        initializeServiceProviders();
-
-        Log.d(TAG, "Application initialized");
-    }
-
-    private void initializeFirebase() {
-        // Initialize Firebase
         FirebaseApp.initializeApp(this);
 
-        // Configure Firestore settings for offline persistence
-        FirebaseFirestoreSettings settings = new FirebaseFirestoreSettings.Builder()
-                .setPersistenceEnabled(true)
-                .build();
-        FirebaseFirestore.getInstance().setFirestoreSettings(settings);
+        // Initialize background tasks
+        setupBackgroundTasks();
     }
 
-    private void initializeServiceProviders() {
-        // Initialize the AuthServiceProvider
-        AuthServiceProvider.getInstance();
+    private void setupBackgroundTasks() {
+        // Set up constraints for auto-backup
+        Constraints constraints = new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresBatteryNotLow(true)
+                .build();
 
-        // Initialize the RepositoryProvider
-        RepositoryProvider.getInstance();
+        // Create the periodic backup work request
+        // Run once per day
+        PeriodicWorkRequest backupWorkRequest =
+                new PeriodicWorkRequest.Builder(BackupWorker.class, 1, TimeUnit.DAYS)
+                        .setConstraints(constraints)
+                        .build();
+
+        // Enqueue the work request
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                "auto_backup",
+                ExistingPeriodicWorkPolicy.KEEP,
+                backupWorkRequest);
     }
 }

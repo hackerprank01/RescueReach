@@ -147,7 +147,6 @@
     <string name="current_location">Current Location</string>
     <string name="waiting_for_location">Waiting for location...</string>
     <string name="center_on_location">Center on current location</string>
-    <string name="location_permission_denied">Location permissions are required for this feature</string>
 
     <string name="logout">Logout</string>
     <string name="cancel">Cancel</string>
@@ -218,6 +217,17 @@
     <string name="profile_visibility">Profile Visibility</string>
     <string name="profile_visibility_desc">Make my profile visible to emergency responders</string>
     <string name="privacy_settings_saved">Privacy settings saved</string>
+    <string name="location_permission_title">Location Permission</string>
+    <string name="location_permission_message">RescueReach needs location permission to send emergency alerts and help responders locate you during emergencies.</string>
+    <string name="location_permission_granted">Location permission granted</string>
+    <string name="location_permission_denied">Location sharing disabled. Location services won\'t work.</string>
+    <string name="anonymous_reporting_enabled">Anonymous reporting enabled</string>
+    <string name="anonymous_reporting_disabled">Anonymous reporting disabled</string>
+    <string name="data_collection_enabled">Data collection enabled</string>
+    <string name="data_collection_disabled">Data collection disabled</string>
+    <string name="profile_visibility_enabled">Profile visible to emergency responders</string>
+    <string name="profile_visibility_disabled">Profile hidden from emergency responders</string>
+    <string name="error_user_not_logged_in">Error: User not logged in</string>
 
     <!-- Other Settings Strings -->
     <string name="appearance_settings_saved">Appearance settings saved</string>
@@ -236,6 +246,13 @@
     <string name="accessibility">Accessibility</string>
     <string name="high_contrast">High Contrast Mode</string>
     <string name="high_contrast_desc">Increase contrast for better readability</string>
+    <string name="theme_changed">Theme changed. Restart for full effect.</string>
+    <string name="font_size_changed">Font size changed. Restart for full effect.</string>
+    <string name="restart_now">Restart Now</string>
+    <string name="high_contrast_enabled">High contrast mode enabled</string>
+    <string name="high_contrast_disabled">High contrast mode disabled</string>
+    <string name="font_size_sample">This is a sample text to preview the font size</string>
+
 
     <!-- Emergency Settings -->
     <string name="sos_options">SOS Options</string>
@@ -251,6 +268,27 @@
     <string name="template_saved">Message template saved</string>
     <string name="template_empty_error">Template cannot be empty</string>
     <string name="default_emergency_message">I need help! This is an emergency. My current location is:</string>
+    <string name="sms_permission_title">SMS Permission</string>
+    <string name="sms_permission_message">RescueReach needs SMS permission to notify your emergency contacts during an emergency.</string>
+    <string name="sms_permission_granted">SMS permission granted</string>
+    <string name="sms_permission_denied">Alert contacts disabled. SMS permission required.</string>
+    <string name="sms_permission_required">SMS permission required for this feature</string>
+    <string name="location_permission_required">Location permission required for this feature</string>
+    <string name="quick_sos_enabled">Quick SOS enabled</string>
+    <string name="quick_sos_disabled">Quick SOS disabled</string>
+    <string name="location_sharing_emergency_enabled">Location sharing during emergency enabled</string>
+    <string name="location_sharing_emergency_disabled">Location sharing during emergency disabled</string>
+    <string name="alert_contacts_enabled">Alert contacts during emergency enabled</string>
+    <string name="alert_contacts_disabled">Alert contacts during emergency disabled</string>
+    <string name="test_sos">Test SOS Feature</string>
+    <string name="test_sos_desc">Use this button to test the SOS feature and verify your settings. This will create a test emergency alert. Your emergency contact will receive an SMS if enabled.</string>
+    <string name="test_sos_button">Test SOS Feature Now</string>
+    <string name="test_sos_title">Test SOS Feature</string>
+    <string name="test_sos_message">This will create a real emergency entry in the system and notify your emergency contact if enabled. Are you sure you want to proceed?</string>
+    <string name="proceed">Proceed</string>
+    <string name="sending_test_sos">Sending test SOS alert…</string>
+    <string name="test_sos_sent">Test SOS successfully sent! Emergency ID: %1$s</string>
+    <string name="test_sos_failed">Test SOS failed: %1$s</string>
 
     <!-- Data Management -->
     <string name="backup_and_restore">Backup and Restore</string>
@@ -278,6 +316,33 @@
     <string name="deleting_account">Deleting account…</string>
     <string name="account_deleted">Account deleted successfully</string>
     <string name="delete_account_error">Error deleting account: %1$s</string>
+        <string name="auto_backup_enabled">Automatic backups enabled</string>
+        <string name="auto_backup_disabled">Automatic backups disabled</string>
+        <string name="backup_failed">Backup failed: %1$s</string>
+        <string name="storage_permission_title">Storage Permission</string>
+        <string name="storage_permission_message">RescueReach needs storage permission to export your data to a file.</string>
+        <string name="storage_permission_denied">Cannot export data without storage permission</string>
+        <string name="export_complete_path">Export completed. File saved to:\n%1$s</string>
+        <string name="export_failed">Export failed: %1$s</string>
+        <string name="clear_data_failed">Failed to clear data: %1$s</string>
+        <string name="final_confirmation">Final Confirmation</string>
+        <string name="app_version_confirmation">App Version: %  s</string>
+        <string name="delete_confirmation_prompt">To confirm deletion, please type \"DELETE\" in all caps:</string>
+        <string name="type_delete">Type DELETE to confirm</string>
+        <string name="confirm_delete">Confirm Delete</string>
+        <string name="delete_confirmation_text">DELETE</string>
+        <string name="confirmation_text_mismatch">Confirmation text does not match</string>
+        <string name="delete_warning">This action is permanent and cannot be undone!</string>
+        <string name="data_export_subject">RescueReach Data Export</string>
+        <string name="data_export_text">This file contains your exported RescueReach data.</string>
+        <string name="share_data_via">Share data via</string>
+
+    <!-- New notification strings -->
+    <string name="notification_permission_title">Notification Permission</string>
+    <string name="notification_permission_message">RescueReach needs permission to send you notifications about emergencies and important alerts.</string>
+    <string name="grant_permission">Grant Permission</string>
+    <string name="notification_permission_denied">Notifications disabled. You won\'t receive emergency alerts.</string>
+
 
 
 </resources>

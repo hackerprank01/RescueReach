@@ -191,6 +191,35 @@
                 android:layout_gravity="end"
                 android:layout_marginTop="8dp" />
 
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?android:attr/listDivider"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/test_sos"
+                android:textAppearance="@style/TextAppearance.AppCompat.Medium"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/test_sos_desc"
+                android:textAppearance="@style/TextAppearance.AppCompat.Body2"
+                android:layout_marginBottom="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_test_sos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/test_sos_button"
+                android:layout_marginBottom="16dp" />
+
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

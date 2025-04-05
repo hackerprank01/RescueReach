@@ -20,14 +20,18 @@
 
     <!-- Camera and Storage Permissions -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="34" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="34" />
 
     <uses-permission android:name="android.permission.BROADCAST_SMS"
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.SEND_SMS"/>
     <uses-permission android:name="android.permission.READ_SMS"/>
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
 
     <application
         android:icon="@mipmap/app_icon"
@@ -70,20 +74,30 @@
             android:exported="false"
             android:parentActivityName=".citizen.CitizenMainActivity" />
 
-<!--        <activity-->
-<!--            android:name=".citizen.settings.AppearanceSettingsActivity"-->
-<!--            android:exported="false"-->
-<!--            android:parentActivityName=".citizen.CitizenMainActivity" />-->
+        <activity
+            android:name=".citizen.settings.AppearanceSettingsActivity"
+            android:exported="false"
+            android:parentActivityName=".citizen.CitizenMainActivity" />
 
-<!--        <activity-->
-<!--            android:name=".citizen.settings.EmergencySettingsActivity"-->
-<!--            android:exported="false"-->
-<!--            android:parentActivityName=".citizen.CitizenMainActivity" />-->
+        <activity
+            android:name=".citizen.settings.EmergencySettingsActivity"
+            android:exported="false"
+            android:parentActivityName=".citizen.CitizenMainActivity" />
 
-<!--        <activity-->
-<!--            android:name=".citizen.settings.DataManagementActivity"-->
-<!--            android:exported="false"-->
-<!--            android:parentActivityName=".citizen.CitizenMainActivity" />-->
+        <activity
+            android:name=".citizen.settings.DataManagementActivity"
+            android:exported="false"
+            android:parentActivityName=".citizen.CitizenMainActivity" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>
