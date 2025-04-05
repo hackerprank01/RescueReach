@@ -5,6 +5,10 @@
     <color name="black">#000000</color>
     <color name="high_contrast_text">#FFFFFF</color>
     <color name="high_contrast_background">#000000</color>
+
+    <!-- Data Management Colors -->
+    <color name="warning_color">#FFA000</color>
+    <color name="danger_color">#D32F2F</color>
     <!-- Brand colors -->
     <color name="rescue_primary">#FF5722</color>
     <color name="rescue_primary_dark">#E64A19</color>

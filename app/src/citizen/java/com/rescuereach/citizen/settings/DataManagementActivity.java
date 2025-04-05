@@ -1,40 +1,30 @@
 package com.rescuereach.citizen.settings;
 
-import android.app.AlertDialog;
-import android.content.ActivityNotFoundException;
+import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.os.Environment;
-import android.provider.Settings;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
-import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.switchmaterial.SwitchMaterial;
-import com.google.firebase.auth.FirebaseAuth;
-
 import com.rescuereach.R;
-import com.rescuereach.data.repository.firebase.FirebaseUserRepository;
+import com.rescuereach.citizen.PhoneAuthActivity;
+import com.rescuereach.base.BaseActivity;
 import com.rescuereach.data.repository.OnCompleteListener;
-import com.rescuereach.data.repository.UserRepository;
 import com.rescuereach.service.auth.UserSessionManager;
-import com.rescuereach.service.data.DataManager;
+import com.rescuereach.service.backup.LocalBackupManager;
+import com.rescuereach.service.data.AccountDeletionManager;
+import com.rescuereach.service.data.DataClearManager;
 
-import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -42,47 +32,36 @@ import java.util.Locale;
 public class DataManagementActivity extends AppCompatActivity {
 
     private UserSessionManager sessionManager;
-    private DataManager dataManager;
-    private UserRepository userRepository;
+    private LocalBackupManager backupManager;
+    private DataClearManager dataClearManager;
+    private AccountDeletionManager accountDeletionManager;
 
     private SwitchMaterial switchAutoBackup;
-    private TextView textLastBackupDate;
-    private MaterialButton btnBackupNow;
-    private MaterialButton btnExportData;
-    private MaterialButton btnClearData;
-    private MaterialButton btnDeleteAccount;
+    private TextView lastBackupDate;
+    private LinearLayout layoutClearData;
+    private LinearLayout layoutDeleteAccount;
     private CircularProgressIndicator progressIndicator;
-
-    private static final int WRITE_STORAGE_PERMISSION_CODE = 101;
-
-    private final ActivityResultLauncher<String> requestStoragePermissionLauncher =
-            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
-                if (isGranted) {
-                    // Permission granted, proceed with export
-                    performDataExport();
-                } else {
-                    // Permission denied
-                    showStoragePermissionDeniedMessage();
-                }
-            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_data_management);
 
-        // Initialize repositories and managers
+        // Initialize managers
         sessionManager = UserSessionManager.getInstance(this);
-        userRepository = new FirebaseUserRepository();
-        dataManager = DataManager.getInstance(this, userRepository);
+        backupManager = new LocalBackupManager(this);
+        dataClearManager = new DataClearManager(this);
+        accountDeletionManager = new AccountDeletionManager(this);
 
         // Set up toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        getSupportActionBar().setTitle(R.string.data_management);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setTitle(R.string.data_management);
+        }
 
-        // Initialize UI elements
+        // Initialize UI
         initUI();
 
         // Load saved preferences
@@ -94,79 +73,87 @@ public class DataManagementActivity extends AppCompatActivity {
 
     private void initUI() {
         switchAutoBackup = findViewById(R.id.switch_auto_backup);
-        textLastBackupDate = findViewById(R.id.text_last_backup_date);
-        btnBackupNow = findViewById(R.id.btn_backup_now);
-        btnExportData = findViewById(R.id.btn_export_data);
-        btnClearData = findViewById(R.id.btn_clear_data);
-        btnDeleteAccount = findViewById(R.id.btn_delete_account);
+        lastBackupDate = findViewById(R.id.text_last_backup_date);
+        layoutClearData = findViewById(R.id.layout_clear_data);
+        layoutDeleteAccount = findViewById(R.id.layout_delete_account);
         progressIndicator = findViewById(R.id.progress_indicator);
-
-        // Set progress indicator visibility
-        progressIndicator.setVisibility(android.view.View.GONE);
     }
 
     private void loadSavedPreferences() {
-        // Auto backup preference
-        switchAutoBackup.setChecked(dataManager.isAutoBackupEnabled());
+        // Load auto backup preference
+        boolean autoBackupEnabled = sessionManager.getBackupPreference("auto_backup_enabled", false);
+        switchAutoBackup.setChecked(autoBackupEnabled);
 
-        // Last backup date
-        long lastBackupTimestamp = dataManager.getLastBackupTimestamp();
-        updateLastBackupText(lastBackupTimestamp);
-    }
-
-    private void updateLastBackupText(long timestamp) {
-        if (timestamp > 0) {
-            SimpleDateFormat sdf = new SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault());
-            String lastBackupDate = sdf.format(new Date(timestamp));
-            textLastBackupDate.setText(getString(R.string.last_backup_date, lastBackupDate));
+        // Load last backup date
+        long lastBackupTimestamp = sessionManager.getLongPreference("last_backup_timestamp", 0);
+        if (lastBackupTimestamp > 0) {
+            SimpleDateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault());
+            String formattedDate = dateFormat.format(new Date(lastBackupTimestamp));
+            lastBackupDate.setText(getString(R.string.last_backup, formattedDate));
+            lastBackupDate.setVisibility(View.VISIBLE);
         } else {
-            textLastBackupDate.setText(R.string.no_backup_yet);
+            lastBackupDate.setText(R.string.no_backup_yet);
         }
     }
 
     private void setupListeners() {
+        // Auto backup toggle
         switchAutoBackup.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            sessionManager.setDataPreference("auto_backup", isChecked);
-            Toast.makeText(this, isChecked ?
-                    R.string.auto_backup_enabled :
-                    R.string.auto_backup_disabled, Toast.LENGTH_SHORT).show();
+            sessionManager.setBackupPreference("auto_backup_enabled", isChecked);
+
+            if (isChecked) {
+                // Schedule auto backup
+                backupManager.scheduleAutoBackup();
+                Toast.makeText(this, R.string.auto_backup_enabled, Toast.LENGTH_SHORT).show();
+
+                // Create initial backup if none exists
+                if (sessionManager.getLongPreference("last_backup_timestamp", 0) == 0) {
+                    createBackupNow();
+                }
+            } else {
+                // Cancel scheduled backups
+                backupManager.cancelAutoBackup();
+                Toast.makeText(this, R.string.auto_backup_disabled, Toast.LENGTH_SHORT).show();
+            }
         });
 
-        btnBackupNow.setOnClickListener(v -> performBackup());
+        // Create backup now option
+        findViewById(R.id.layout_backup_now).setOnClickListener(v -> createBackupNow());
 
-        btnExportData.setOnClickListener(v -> checkStoragePermissionAndExport());
+        // Clear data option
+        layoutClearData.setOnClickListener(v -> showClearDataConfirmation());
 
-        btnClearData.setOnClickListener(v -> confirmClearData());
-
-        btnDeleteAccount.setOnClickListener(v -> confirmDeleteAccount());
+        // Delete account option
+        layoutDeleteAccount.setOnClickListener(v -> showDeleteAccountConfirmation());
     }
 
-    private void showLoading(boolean show) {
-        progressIndicator.setVisibility(show ? android.view.View.VISIBLE : android.view.View.GONE);
-        btnBackupNow.setEnabled(!show);
-        btnExportData.setEnabled(!show);
-        btnClearData.setEnabled(!show);
-        btnDeleteAccount.setEnabled(!show);
-    }
+    private void createBackupNow() {
+        showProgress(true);
 
-    private void performBackup() {
-        showLoading(true);
-
-        dataManager.backupData(new DataManager.OnBackupListener() {
+        backupManager.createBackup(new OnCompleteListener() {
             @Override
-            public void onSuccess(long timestamp) {
+            public void onSuccess() {
                 runOnUiThread(() -> {
-                    updateLastBackupText(timestamp);
-                    showLoading(false);
+                    showProgress(false);
+
+                    // Update last backup date
+                    long currentTime = System.currentTimeMillis();
+                    sessionManager.setLongPreference("last_backup_timestamp", currentTime);
+
+                    SimpleDateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault());
+                    String formattedDate = dateFormat.format(new Date(currentTime));
+                    lastBackupDate.setText(getString(R.string.last_backup, formattedDate));
+                    lastBackupDate.setVisibility(View.VISIBLE);
+
                     Toast.makeText(DataManagementActivity.this,
-                            R.string.backup_complete, Toast.LENGTH_SHORT).show();
+                            R.string.backup_created_successfully, Toast.LENGTH_SHORT).show();
                 });
             }
 
             @Override
             public void onError(Exception e) {
                 runOnUiThread(() -> {
-                    showLoading(false);
+                    showProgress(false);
                     Toast.makeText(DataManagementActivity.this,
                             getString(R.string.backup_failed, e.getMessage()),
                             Toast.LENGTH_LONG).show();
@@ -175,200 +162,101 @@ public class DataManagementActivity extends AppCompatActivity {
         });
     }
 
-    private boolean checkStoragePermission() {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
-                PackageManager.PERMISSION_GRANTED) {
-
-            // Permission not granted, request it
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                // Show an explanation
-                showStoragePermissionRationale();
-            } else {
-                // No explanation needed, request the permission
-                requestStoragePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
-            }
-            return false;
-        }
-        return true;
-    }
-
-    private void showStoragePermissionRationale() {
-        new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.storage_permission_title)
-                .setMessage(R.string.storage_permission_message)
-                .setPositiveButton(R.string.grant_permission, (dialog, which) -> {
-                    requestStoragePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
-                })
-                .setNegativeButton(R.string.cancel, (dialog, which) -> {
-                    dialog.dismiss();
-                    showStoragePermissionDeniedMessage();
-                })
-                .show();
-    }
-
-    private void showStoragePermissionDeniedMessage() {
-        Snackbar.make(findViewById(android.R.id.content),
-                        R.string.storage_permission_denied, Snackbar.LENGTH_LONG)
-                .setAction(R.string.settings, view -> {
-                    // Open app settings
-                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                    android.net.Uri uri = android.net.Uri.fromParts("package", getPackageName(), null);
-                    intent.setData(uri);
-                    startActivity(intent);
-                })
-                .show();
-    }
-
-    private void checkStoragePermissionAndExport() {
-        if (checkStoragePermission()) {
-            performDataExport();
-        }
-    }
-
-    private void performDataExport() {
-        showLoading(true);
-
-        // Create exports directory if it doesn't exist
-        File exportDir = new File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "exports");
-        if (!exportDir.exists()) {
-            exportDir.mkdirs();
-        }
-
-        dataManager.exportUserData(new DataManager.OnExportListener() {
-            @Override
-            public void onSuccess(String filePath) {
-                runOnUiThread(() -> {
-                    showLoading(false);
-                    Toast.makeText(DataManagementActivity.this,
-                            getString(R.string.export_complete_path, filePath),
-                            Toast.LENGTH_LONG).show();
-                });
-            }
-
-            @Override
-            public void onError(Exception e) {
-                runOnUiThread(() -> {
-                    showLoading(false);
-                    Toast.makeText(DataManagementActivity.this,
-                            getString(R.string.export_failed, e.getMessage()),
-                            Toast.LENGTH_LONG).show();
-                });
-            }
-        });
-    }
-
-    private void confirmClearData() {
+    private void showClearDataConfirmation() {
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.clear_data_title)
                 .setMessage(R.string.clear_data_message)
-                .setPositiveButton(R.string.clear, (dialog, which) -> {
-                    clearLocalData();
-                })
+                .setPositiveButton(R.string.clear_data, (dialog, which) -> clearUserData())
                 .setNegativeButton(R.string.cancel, null)
-                .setIcon(R.drawable.ic_emergency)
                 .show();
     }
 
-    private void clearLocalData() {
-        showLoading(true);
+    private void clearUserData() {
+        showProgress(true);
 
-        dataManager.clearLocalData(new OnCompleteListener() {
+        dataClearManager.clearUserData(new OnCompleteListener() {
             @Override
             public void onSuccess() {
                 runOnUiThread(() -> {
-                    showLoading(false);
+                    showProgress(false);
                     Toast.makeText(DataManagementActivity.this,
-                            R.string.data_cleared, Toast.LENGTH_SHORT).show();
+                            R.string.data_cleared_successfully, Toast.LENGTH_SHORT).show();
 
-                    // Reload preferences after clearing
-                    loadSavedPreferences();
+                    // Navigate to auth screen
+                    navigateToAuthScreen();
                 });
             }
 
             @Override
             public void onError(Exception e) {
                 runOnUiThread(() -> {
-                    showLoading(false);
+                    showProgress(false);
                     Toast.makeText(DataManagementActivity.this,
-                            getString(R.string.clear_data_failed, e.getMessage()),
+                            getString(R.string.data_clear_failed, e.getMessage()),
                             Toast.LENGTH_LONG).show();
                 });
             }
         });
     }
 
-    private void confirmDeleteAccount() {
+    private void showDeleteAccountConfirmation() {
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.delete_account_title)
                 .setMessage(R.string.delete_account_message)
-                .setPositiveButton(R.string.delete, (dialog, which) -> {
-                    // Add extra confirmation for deletion
-                    confirmFinalAccountDeletion();
+                .setPositiveButton(R.string.delete_account, (dialog, which) -> {
+                    // Double confirmation
+                    showFinalDeleteConfirmation();
                 })
                 .setNegativeButton(R.string.cancel, null)
-                .setIcon(R.drawable.ic_emergency)
                 .show();
     }
 
-    private void confirmFinalAccountDeletion() {
-        // Second confirmation with password
-        final View passwordView = getLayoutInflater().inflate(R.layout.dialog_confirm_deletion, null);
-        final TextView appVersionText = passwordView.findViewById(R.id.text_app_version);
-
-        // Show app version for verification
-        appVersionText.setText(getString(R.string.app_version_confirmation, "1.0"));
-
+    private void showFinalDeleteConfirmation() {
         new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.final_confirmation)
-                .setView(passwordView)
-                .setPositiveButton(R.string.confirm_delete, (dialog, which) -> {
-                    // Final confirmation text
-                    TextView confirmText = passwordView.findViewById(R.id.edit_confirm_text);
-                    if (confirmText.getText().toString().equals(getString(R.string.delete_confirmation_text))) {
-                        deleteUserAccount();
-                    } else {
-                        Toast.makeText(this, R.string.confirmation_text_mismatch, Toast.LENGTH_SHORT).show();
-                    }
-                })
+                .setTitle(R.string.confirm_delete_account)
+                .setMessage(R.string.final_delete_account_message)
+                .setPositiveButton(R.string.confirm_delete, (dialog, which) -> deleteUserAccount())
                 .setNegativeButton(R.string.cancel, null)
-                .setIcon(R.drawable.ic_emergency)
                 .show();
     }
 
     private void deleteUserAccount() {
-        showLoading(true);
-        Toast.makeText(this, R.string.deleting_account, Toast.LENGTH_SHORT).show();
+        showProgress(true);
 
-        dataManager.deleteUserAccount(new OnCompleteListener() {
+        accountDeletionManager.deleteUserAccount(new OnCompleteListener() {
             @Override
             public void onSuccess() {
                 runOnUiThread(() -> {
-                    showLoading(false);
+                    showProgress(false);
                     Toast.makeText(DataManagementActivity.this,
-                            R.string.account_deleted, Toast.LENGTH_SHORT).show();
+                            R.string.account_deleted_successfully, Toast.LENGTH_SHORT).show();
 
-                    // Navigate back to login screen
-                    finishAffinity();
-
-                    // Start login activity
-                    Intent intent = new Intent(DataManagementActivity.this,
-                            com.rescuereach.citizen.PhoneAuthActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
+                    // Navigate to auth screen
+                    navigateToAuthScreen();
                 });
             }
 
             @Override
             public void onError(Exception e) {
                 runOnUiThread(() -> {
-                    showLoading(false);
+                    showProgress(false);
                     Toast.makeText(DataManagementActivity.this,
-                            getString(R.string.delete_account_error, e.getMessage()),
+                            getString(R.string.account_deletion_failed, e.getMessage()),
                             Toast.LENGTH_LONG).show();
                 });
             }
         });
+    }
+
+    private void navigateToAuthScreen() {
+        Intent intent = new Intent(this, PhoneAuthActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
+    }
+
+    private void showProgress(boolean show) {
+        progressIndicator.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
     @Override

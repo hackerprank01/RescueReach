@@ -248,13 +248,16 @@
     <string name="default_text">Default</string>
     <string name="accessibility">Accessibility</string>
     <string name="high_contrast">High Contrast Mode</string>
-    <string name="high_contrast_desc">Increase contrast for better readability</string>
-    <string name="theme_changed">Theme changed. Restart for full effect.</string>
-    <string name="font_size_changed">Font size changed. Restart for full effect.</string>
-    <string name="restart_now">Restart Now</string>
+    <string name="high_contrast_desc">Increase contrast for better readability</string>>
     <string name="high_contrast_enabled">High contrast mode enabled</string>
     <string name="high_contrast_disabled">High contrast mode disabled</string>
-    <string name="font_size_sample">This is a sample text to preview the font size</string>
+    <string name="default_size">Default</string>
+    <string name="medium_size">Medium</string>
+    <string name="large_size">Large</string>
+    <string name="font_size_sample">This is a sample text to demonstrate how your selected font size will appear throughout the app.</string>
+    <string name="theme_changed">Theme changed. Restart app to apply all changes.</string>
+    <string name="font_size_changed">Font size changed. Restart app to apply all changes.</string>
+    <string name="restart_now">Restart Now</string>
 
 
     <!-- Emergency Settings -->
@@ -302,6 +305,24 @@
     <string name="backup_now">Backup Now</string>
     <string name="backup_complete">Backup completed successfully</string>
     <string name="data_export">Data Export</string>
+    <!-- Data Management Strings -->
+
+    <string name="backup">Backup</string>
+    <string name="backup_now_desc">Create a backup of your data</string>
+    <string name="last_backup">Last backup: %1$s</string>
+    <string name="backup_created_successfully">Backup created successfully</string>
+
+    <string name="data_options">Data Options</string>
+    <string name="clear_saved_data">Clear Saved Data</string>
+    <string name="clear_saved_data_desc">Remove all your profile data while keeping your account</string>
+    <string name="delete_account_desc">Permanently delete your account and all data</string>
+    <string name="clear_data">Clear Data</string>
+    <string name="data_cleared_successfully">Data cleared successfully</string>
+    <string name="data_clear_failed">Failed to clear data: %1$s</string>
+    <string name="confirm_delete_account">Confirm Account Deletion</string>
+    <string name="final_delete_account_message">Are you absolutely sure you want to delete your account? All your data will be permanently lost.</string>
+    <string name="account_deleted_successfully">Account deleted successfully</string>
+    <string name="account_deletion_failed">Failed to delete account: %1$s</string>
     <string name="export_data">Export My Data</string>
     <string name="export_data_desc">Download a copy of all your data in JSON format</string>
     <string name="export_started">Export started…</string>
@@ -319,7 +340,7 @@
     <string name="deleting_account">Deleting account…</string>
     <string name="account_deleted">Account deleted successfully</string>
     <string name="delete_account_error">Error deleting account: %1$s</string>
-        <string name="auto_backup_enabled">Automatic backups enabled</string>
+    <string name="auto_backup_enabled">Automatic backups enabled</string>
         <string name="auto_backup_disabled">Automatic backups disabled</string>
         <string name="backup_failed">Backup failed: %1$s</string>
         <string name="storage_permission_title">Storage Permission</string>

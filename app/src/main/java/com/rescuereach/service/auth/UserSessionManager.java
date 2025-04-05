@@ -499,4 +499,78 @@ public class UserSessionManager {
     }
 
 
+    // Appearance preferences
+    public String getAppearancePreference(String key, String defaultValue) {
+        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        return prefs.getString("appearance_" + key, defaultValue);
+    }
+
+    public void setAppearancePreference(String key, String value) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
+        editor.putString("appearance_" + key, value);
+        editor.apply();
+    }
+
+    // Int preferences
+    public int getIntPreference(String key, int defaultValue) {
+        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        return prefs.getInt(key, defaultValue);
+    }
+
+    public void setIntPreference(String key, int value) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
+        editor.putInt(key, value);
+        editor.apply();
+    }
+
+    // Float preferences
+    public float getFloatPreference(String key, float defaultValue) {
+        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        return prefs.getFloat(key, defaultValue);
+    }
+
+    public void setFloatPreference(String key, float value) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
+        editor.putFloat(key, value);
+        editor.apply();
+    }
+
+    // BackupManager-related preferences
+    public boolean getBackupPreference(String key, boolean defaultValue) {
+        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        return prefs.getBoolean("backup_" + key, defaultValue);
+    }
+
+    public void setBackupPreference(String key, boolean value) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
+        editor.putBoolean("backup_" + key, value);
+        editor.apply();
+    }
+
+    public long getLongPreference(String key, long defaultValue) {
+        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        return prefs.getLong(key, defaultValue);
+    }
+
+    public void setLongPreference(String key, long value) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
+        editor.putLong(key, value);
+        editor.apply();
+    }
+
+    // Method to clear all user data but keep essential info like userId
+    public void clearAllUserData() {
+        // Save essential data
+        String phoneNumber = getSavedPhoneNumber();
+
+        // Clear all preferences
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
+        editor.clear();
+        editor.apply();
+
+        // Restore essential data
+        saveUserPhoneNumber(phoneNumber);
+    }
+
+
 }

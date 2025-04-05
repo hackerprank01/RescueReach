@@ -80,41 +80,34 @@
                 android:textStyle="bold"
                 android:layout_marginBottom="8dp" />
 
-            <LinearLayout
+            <RadioGroup
+                android:id="@+id/radio_group_font_size"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
+                android:orientation="vertical"
                 android:padding="8dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <RadioButton
+                    android:id="@+id/radio_font_default"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/small"
-                    android:layout_marginEnd="8dp" />
+                    android:text="@string/default_size"
+                    android:padding="8dp" />
 
-                <SeekBar
-                    android:id="@+id/seekbar_font_size"
-                    android:layout_width="0dp"
+                <RadioButton
+                    android:id="@+id/radio_font_medium"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:max="4"
-                    android:progress="1" />
+                    android:text="@string/medium_size"
+                    android:padding="8dp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <RadioButton
+                    android:id="@+id/radio_font_large"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/large"
-                    android:layout_marginStart="8dp" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/text_font_size_value"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/default_text"
-                android:gravity="center"
-                android:layout_marginBottom="8dp" />
+                    android:text="@string/large_size"
+                    android:padding="8dp" />
+            </RadioGroup>
 
             <!-- Sample text to preview font size -->
             <TextView
@@ -123,58 +116,10 @@
                 android:layout_height="wrap_content"
                 android:text="@string/font_size_sample"
                 android:gravity="center"
-                android:padding="16dp"
-                android:layout_marginBottom="16dp" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="?android:attr/listDivider"
-                android:layout_marginBottom="16dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/accessibility"
-                android:textAppearance="@style/TextAppearance.AppCompat.Medium"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
-
-            <!-- High Contrast Mode -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="12dp"
-                android:gravity="center_vertical">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/high_contrast"
-                        android:textSize="16sp"
-                        android:textAppearance="@style/TextAppearance.AppCompat.Body1" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/high_contrast_desc"
-                        android:textAppearance="@style/TextAppearance.AppCompat.Caption"
-                        android:textColor="?android:attr/textColorSecondary" />
-                </LinearLayout>
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switch_high_contrast"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="false" />
-            </LinearLayout>
+                android:padding="24dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/rounded_sample_text_background" />
 
         </LinearLayout>
     </ScrollView>

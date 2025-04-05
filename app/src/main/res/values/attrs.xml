@@ -5,4 +5,9 @@
     <attr name="gradientBackgroundEnd" format="color" />
     <attr name="backgroundColor" format="color" />
     <attr name="cardBackgroundColor" format="color" />
+        <!-- Attributes for FontSizeAwareTextView -->
+        <declare-styleable name="FontSizeAwareTextView">
+            <attr name="respectFontScaling" format="boolean" />
+        </declare-styleable>
+
 </resources>

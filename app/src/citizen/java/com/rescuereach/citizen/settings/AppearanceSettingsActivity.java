@@ -1,24 +1,20 @@
 package com.rescuereach.citizen.settings;
 
 import android.content.Intent;
-import android.content.res.Configuration;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.MenuItem;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
-import android.widget.SeekBar;
+import android.widget.RadioGroup.OnCheckedChangeListener;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.Toolbar;
-import androidx.core.content.ContextCompat;
 
 import com.google.android.material.snackbar.Snackbar;
-import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.rescuereach.R;
 import com.rescuereach.service.appearance.AppearanceManager;
 import com.rescuereach.service.auth.UserSessionManager;
@@ -29,10 +25,9 @@ public class AppearanceSettingsActivity extends AppCompatActivity {
     private AppearanceManager appearanceManager;
     private RadioGroup themeGroup;
     private RadioButton radioLight, radioDark, radioSystem;
-    private SeekBar fontSizeSeekbar;
-    private TextView fontSizeValue;
+    private RadioGroup fontSizeGroup;
+    private RadioButton radioFontDefault, radioFontMedium, radioFontLarge;
     private TextView sampleText;
-    private SwitchMaterial switchHighContrast;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,8 +45,10 @@ public class AppearanceSettingsActivity extends AppCompatActivity {
         // Set up toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        getSupportActionBar().setTitle(R.string.appearance);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setTitle(R.string.appearance);
+        }
 
         // Initialize UI elements
         initUI();
@@ -69,14 +66,12 @@ public class AppearanceSettingsActivity extends AppCompatActivity {
         radioDark = findViewById(R.id.radio_dark);
         radioSystem = findViewById(R.id.radio_system);
 
-        fontSizeSeekbar = findViewById(R.id.seekbar_font_size);
-        fontSizeValue = findViewById(R.id.text_font_size_value);
+        fontSizeGroup = findViewById(R.id.radio_group_font_size);
+        radioFontDefault = findViewById(R.id.radio_font_default);
+        radioFontMedium = findViewById(R.id.radio_font_medium);
+        radioFontLarge = findViewById(R.id.radio_font_large);
+
         sampleText = findViewById(R.id.sample_text);
-
-        switchHighContrast = findViewById(R.id.switch_high_contrast);
-
-        // Configure font size seekbar
-        fontSizeSeekbar.setMax(4); // 0 = Small, 1 = Default, 2 = Large, 3 = X-Large, 4 = XX-Large
     }
 
     private void loadSavedPreferences() {
@@ -94,106 +89,82 @@ public class AppearanceSettingsActivity extends AppCompatActivity {
                 break;
         }
 
-        // Font size
-        int fontSizeProgress = sessionManager.getIntPreference("font_size", 1);
-        fontSizeSeekbar.setProgress(fontSizeProgress);
-        updateFontSizeText(fontSizeProgress);
+        // Font size (0=default, 1=medium, 2=large)
+        int fontSizeIndex = sessionManager.getIntPreference("font_size", 0);
+        switch (fontSizeIndex) {
+            case 1:
+                radioFontMedium.setChecked(true);
+                break;
+            case 2:
+                radioFontLarge.setChecked(true);
+                break;
+            default:
+                radioFontDefault.setChecked(true);
+                break;
+        }
 
         // Update sample text to show the current font size
-        updateSampleTextSize(fontSizeProgress);
-
-        // High contrast
-        boolean highContrast = sessionManager.getAppearancePreference("high_contrast", "false").equals("true");
-        switchHighContrast.setChecked(highContrast);
-
-        // If high contrast is enabled, apply it to the sample text
-        if (highContrast) {
-            applyHighContrast(true);
-        }
+        updateSampleTextSize(fontSizeIndex);
     }
 
     private void setupListeners() {
-        themeGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            String newTheme;
-            if (checkedId == R.id.radio_light) {
-                newTheme = "light";
-                appearanceManager.setTheme(AppearanceManager.THEME_LIGHT);
-            } else if (checkedId == R.id.radio_dark) {
-                newTheme = "dark";
-                appearanceManager.setTheme(AppearanceManager.THEME_DARK);
-            } else {
-                newTheme = "system";
-                appearanceManager.setTheme(AppearanceManager.THEME_SYSTEM);
-            }
-            sessionManager.setAppearancePreference("theme", newTheme);
+        themeGroup.setOnCheckedChangeListener(new OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                String newTheme;
+                if (checkedId == R.id.radio_light) {
+                    newTheme = "light";
+                    appearanceManager.setTheme(AppearanceManager.THEME_LIGHT);
+                } else if (checkedId == R.id.radio_dark) {
+                    newTheme = "dark";
+                    appearanceManager.setTheme(AppearanceManager.THEME_DARK);
+                } else {
+                    newTheme = "system";
+                    appearanceManager.setTheme(AppearanceManager.THEME_SYSTEM);
+                }
+                sessionManager.setAppearancePreference("theme", newTheme);
 
-            // Show confirmation and inform about restart
-            Snackbar.make(findViewById(android.R.id.content),
-                            R.string.theme_changed, Snackbar.LENGTH_LONG)
-                    .setAction(R.string.restart_now, v -> recreateApp())
-                    .show();
+                // Show confirmation and inform about restart
+                Snackbar.make(findViewById(android.R.id.content),
+                                R.string.theme_changed, Snackbar.LENGTH_LONG)
+                        .setAction(R.string.restart_now, v -> recreateApp())
+                        .show();
+            }
         });
 
-        fontSizeSeekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        fontSizeGroup.setOnCheckedChangeListener(new OnCheckedChangeListener() {
             @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                updateFontSizeText(progress);
-                updateSampleTextSize(progress);
-                sessionManager.setIntPreference("font_size", progress);
-                appearanceManager.setFontScale(progress);
-            }
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                int fontSizeIndex;
+                if (checkedId == R.id.radio_font_medium) {
+                    fontSizeIndex = 1;
+                } else if (checkedId == R.id.radio_font_large) {
+                    fontSizeIndex = 2;
+                } else {
+                    fontSizeIndex = 0;
+                }
 
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {}
+                sessionManager.setIntPreference("font_size", fontSizeIndex);
+                appearanceManager.setFontScale(fontSizeIndex);
+                updateSampleTextSize(fontSizeIndex);
 
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
+                // Show notification
                 Snackbar.make(findViewById(android.R.id.content),
                                 R.string.font_size_changed, Snackbar.LENGTH_LONG)
                         .setAction(R.string.restart_now, v -> recreateApp())
                         .show();
             }
         });
-
-        switchHighContrast.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            sessionManager.setAppearancePreference("high_contrast", isChecked ? "true" : "false");
-            appearanceManager.setHighContrast(isChecked);
-
-            // Apply high contrast to sample text
-            applyHighContrast(isChecked);
-
-            // Show confirmation and inform about restart
-            Snackbar.make(findViewById(android.R.id.content),
-                            isChecked ? R.string.high_contrast_enabled : R.string.high_contrast_disabled,
-                            Snackbar.LENGTH_LONG)
-                    .setAction(R.string.restart_now, v -> recreateApp())
-                    .show();
-        });
     }
 
-    private void updateFontSizeText(int progress) {
-        String[] sizes = {"Small", "Default", "Large", "X-Large", "XX-Large"};
-        fontSizeValue.setText(sizes[progress]);
-    }
-
-    private void updateSampleTextSize(int progress) {
-        float[] scaleFactor = {0.8f, 1.0f, 1.3f, 1.6f, 2.0f};
+    private void updateSampleTextSize(int fontSizeIndex) {
+        // Map fontSizeIndex to scale factors: 0=1.0, 1=1.2, 2=1.4
+        float[] scaleFactor = {1.0f, 1.2f, 1.4f};
 
         // Set the text size based on the selected scale factor
         // This only affects this sample text, not the entire app
-        sampleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16 * scaleFactor[progress]);
-    }
-
-    private void applyHighContrast(boolean enabled) {
-        if (enabled) {
-            // Apply high contrast to sample text
-            sampleText.setTextColor(ContextCompat.getColor(this, R.color.high_contrast_text));
-            sampleText.setBackgroundColor(ContextCompat.getColor(this, R.color.high_contrast_background));
-        } else {
-            // Reset to default
-            sampleText.setTextColor(ContextCompat.getColor(this, android.R.color.primary_text_light));
-            sampleText.setBackgroundColor(ContextCompat.getColor(this, android.R.color.transparent));
-        }
+        float defaultSize = getResources().getDimension(R.dimen.text_size_normal) / getResources().getDisplayMetrics().density;
+        sampleText.setTextSize(TypedValue.COMPLEX_UNIT_SP, defaultSize * scaleFactor[fontSizeIndex]);
     }
 
     private void recreateApp() {
