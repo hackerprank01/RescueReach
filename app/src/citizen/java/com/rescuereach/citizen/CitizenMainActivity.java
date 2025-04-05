@@ -132,6 +132,8 @@ public class CitizenMainActivity extends AppCompatActivity
         requestLocationPermissions();
     }
 
+
+
     private void setupPlaceTypeKeywords() {
         // Setup keywords for each emergency service type
         placeTypeKeywords.put("hospital", Arrays.asList(
@@ -165,44 +167,67 @@ public class CitizenMainActivity extends AppCompatActivity
         updateNavigationMenuBasedOnVolunteerStatus(navigationView);
     }
 
+    /**
+     * Updates navigation menu items based on the user's volunteer status
+     * This method handles both volunteer-specific menu items and their section headers
+     */
     private void updateNavigationMenuBasedOnVolunteerStatus(NavigationView navigationView) {
-        // Get volunteer status from session manager
-        boolean isVolunteer = sessionManager.isVolunteer();
+        if (navigationView == null) return;
 
-        // Get the menu to modify items
-        Menu navMenu = navigationView.getMenu();
+        try {
+            // Get current volunteer status from session manager
+            boolean isVolunteer = sessionManager.isVolunteer();
+            Log.d(TAG, "Updating navigation menu - volunteer status: " + isVolunteer);
 
+            Menu navMenu = navigationView.getMenu();
 
-        // Show volunteer alerts only if user is a volunteer
-        MenuItem volunteerAlertsItem = navMenu.findItem(R.id.nav_volunteer_alerts);
-        if (volunteerAlertsItem != null) {
-            volunteerAlertsItem.setVisible(isVolunteer);
+            // Update volunteer-specific menu items
+            MenuItem volunteerAlertsItem = navMenu.findItem(R.id.nav_volunteer_alerts);
+            if (volunteerAlertsItem != null) {
+                volunteerAlertsItem.setVisible(isVolunteer);
+            }
+
+            // Handle other volunteer-specific items if any
+            // Add additional items here as needed
+
+            // Handle section headers - find the volunteer section header if it exists
+            MenuItem volunteerSectionHeader = navMenu.findItem(R.id.nav_volunteer_alerts);
+            if (volunteerSectionHeader != null) {
+                // Hide section header if no volunteer items are visible
+                boolean hasVisibleItems = hasVisibleItems(navMenu, R.id.nav_volunteer_alerts);
+                volunteerSectionHeader.setVisible(hasVisibleItems);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error updating navigation based on volunteer status", e);
         }
+    }
 
-        // If user is not a volunteer, check if volunteer section is empty and hide the header
-        if (!isVolunteer) {
-            // Find the volunteer section header
-            for (int i = 0; i < navMenu.size(); i++) {
-                MenuItem item = navMenu.getItem(i);
-                if (item.hasSubMenu() &&
-                        item.getTitle().toString().equals(getString(R.string.menu_header_volunteer_support))) {
-                    // If the volunteer section is now empty (no visible items), hide the whole section
-                    boolean anyVisibleItems = false;
-                    SubMenu subMenu = item.getSubMenu();
-
-                    for (int j = 0; j < subMenu.size(); j++) {
-                        if (subMenu.getItem(j).isVisible()) {
-                            anyVisibleItems = true;
-                            break;
-                        }
-                    }
-
-                    // If no visible items in submenu, hide the header
-                    item.setVisible(anyVisibleItems);
-                    break;
-                }
+    private boolean hasVisibleItems(Menu menu, int sectionId) {
+        // Get the position of the section header
+        int position = -1;
+        for (int i = 0; i < menu.size(); i++) {
+            if (menu.getItem(i).getItemId() == sectionId) {
+                position = i;
+                break;
             }
         }
+
+        if (position == -1) return false;
+
+        // Check all items after the section header until we hit another section header
+        for (int i = position + 1; i < menu.size(); i++) {
+            MenuItem item = menu.getItem(i);
+            // If we hit another section (items with no action), stop checking
+            if (item.hasSubMenu() || !item.isCheckable()) {
+                break;
+            }
+            // If any item is visible, return true
+            if (item.isVisible()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void setupSosButton() {
@@ -965,10 +990,40 @@ public class CitizenMainActivity extends AppCompatActivity
     }
 
     public void refreshNavigationDrawer() {
-        // Get reference to navigation view
-        NavigationView navigationView = findViewById(R.id.nav_view);
+        try {
+            // Get reference to navigation view
+            NavigationView navigationView = findViewById(R.id.nav_view);
 
-        // Update navigation menu based on current volunteer status
-        updateNavigationMenuBasedOnVolunteerStatus(navigationView);
+            // Get current volunteer status directly from session
+            UserSessionManager sessionManager = UserSessionManager.getInstance(this);
+            boolean isVolunteer = sessionManager.isVolunteer();
+
+            Log.d(TAG, "Refreshing drawer with volunteer status: " + isVolunteer);
+
+            // Completely recreate the menu to fix visibility issues
+            Menu navMenu = navigationView.getMenu();
+            navMenu.clear();
+            navigationView.inflateMenu(R.menu.drawer_menu);
+
+            // Now set the visibility of volunteer items
+            MenuItem volunteerAlertsItem = navMenu.findItem(R.id.nav_volunteer_alerts);
+            if (volunteerAlertsItem != null) {
+                volunteerAlertsItem.setVisible(isVolunteer);
+                Log.d(TAG, "Set volunteer alerts item visibility to " + isVolunteer);
+            }
+
+            // If in volunteer section and no longer a volunteer, switch to home
+            if (!isVolunteer && currentFragmentId == R.id.nav_volunteer_alerts) {
+                navigateToFragment(R.id.nav_home);
+            }
+
+            // Update header info
+            updateNavigationHeader();
+
+            // Mark the current item as selected
+            navigationView.setCheckedItem(currentFragmentId);
+        } catch (Exception e) {
+            Log.e(TAG, "Error refreshing navigation drawer", e);
+        }
     }
 }

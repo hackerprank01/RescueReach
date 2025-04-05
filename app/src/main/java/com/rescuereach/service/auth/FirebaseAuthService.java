@@ -1,6 +1,11 @@
 package com.rescuereach.service.auth;
 
+import static android.content.ContentValues.TAG;
+
 import android.app.Activity;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 
 import com.google.firebase.FirebaseException;
 import com.google.firebase.FirebaseTooManyRequestsException;
@@ -10,6 +15,8 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.PhoneAuthCredential;
 import com.google.firebase.auth.PhoneAuthOptions;
 import com.google.firebase.auth.PhoneAuthProvider;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,10 +59,82 @@ public class FirebaseAuthService implements AuthService {
         return firebaseAuth.getCurrentUser() != null;
     }
 
+// Replace the signOut method in FirebaseAuthService.java
+
     @Override
     public void signOut(AuthCallback callback) {
-        firebaseAuth.signOut();
-        callback.onSuccess();
+        try {
+            // First sign out from Firebase Auth
+            firebaseAuth.signOut();
+
+            // Use a background thread to avoid blocking the UI
+            new Thread(() -> {
+                try {
+                    // Clear any locally cached Firestore data
+                    try {
+                        FirebaseFirestore.getInstance().terminate();
+                    } catch (Exception e) {
+                        Log.e("FirebaseAuthService", "Error terminating Firestore", e);
+                    }
+
+                    // Clear Firebase Database cache
+                    try {
+                        FirebaseDatabase.getInstance().purgeOutstandingWrites();
+                    } catch (Exception e) {
+                        Log.e("FirebaseAuthService", "Error purging database writes", e);
+                    }
+
+                    // Small delay to ensure operations complete
+                    Thread.sleep(500);
+
+                    // Notify on main thread
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        try {
+                            callback.onSuccess();
+                        } catch (Exception e) {
+                            Log.e("FirebaseAuthService", "Error in callback", e);
+                        }
+                    });
+                } catch (Exception e) {
+                    Log.e("FirebaseAuthService", "Error during sign out cleanup", e);
+
+                    // Notify on main thread even if there was an error
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        try {
+                            callback.onSuccess();
+                        } catch (Exception ex) {
+                            Log.e("FirebaseAuthService", "Error in callback", ex);
+                        }
+                    });
+                }
+            }).start();
+        } catch (Exception e) {
+            Log.e("FirebaseAuthService", "Error during sign out", e);
+
+            // Always call callback
+            try {
+                callback.onSuccess();
+            } catch (Exception ex) {
+                Log.e("FirebaseAuthService", "Error in callback", ex);
+            }
+        }
+    }
+
+    // Helper method to finish sign out process
+    private void finishSignOut(AuthCallback callback) {
+        try {
+            // Give Firebase some time to complete operations
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    callback.onSuccess();
+                } catch (Exception e) {
+                    Log.e("FirebaseAuthService", "Error in sign out callback", e);
+                }
+            }, 300); // 300ms delay
+        } catch (Exception e) {
+            Log.e("FirebaseAuthService", "Error in delayed sign out", e);
+            callback.onSuccess(); // Call callback immediately as fallback
+        }
     }
 
     @Override
@@ -127,6 +206,10 @@ public class FirebaseAuthService implements AuthService {
                     // Preserve exception type for better error handling
                     callback.onError(e);
                 });
+    }
+
+    private void performSignOut() {
+
     }
 
     @Override

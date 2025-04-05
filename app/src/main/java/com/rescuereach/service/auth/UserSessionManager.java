@@ -344,16 +344,46 @@ public class UserSessionManager {
     }
 
     public void clearAllPreferences() {
-        SharedPreferences preferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        editor.clear();
-        editor.apply();
+        try {
+            // Clear main preferences
+            SharedPreferences preferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            preferences.edit().clear().apply();
 
-        // Also clear any other shared preference files used by the app
-        clearPreferencesByName("app_prefs");
-        clearPreferencesByName("privacy_settings");
-        clearPreferencesByName("appearance_settings");
-        clearPreferencesByName("data_management_settings");
+            // List of all preference files to clear
+            String[] prefNames = {
+                    "app_prefs",
+                    "privacy_settings",
+                    "appearance_settings",
+                    "data_management_settings",
+                    "auth_prefs",
+                    "firebase_prefs",
+                    "app_version"
+            };
+
+            // Clear all preference files
+            for (String prefName : prefNames) {
+                try {
+                    context.getSharedPreferences(prefName, Context.MODE_PRIVATE)
+                            .edit().clear().apply();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error clearing preferences: " + prefName, e);
+                }
+            }
+
+            // Hard reset for secure preferences if available
+            try {
+                Class<?> securePrefsClass = Class.forName("androidx.security.crypto.EncryptedSharedPreferences");
+                if (securePrefsClass != null) {
+                    // Try to clear encrypted preferences if they exist
+                    context.getSharedPreferences("secure_prefs", Context.MODE_PRIVATE)
+                            .edit().clear().apply();
+                }
+            } catch (Exception e) {
+                // Ignore - secure prefs might not be in use
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error during preference clearing", e);
+        }
     }
 
     private void clearPreferencesByName(String prefName) {

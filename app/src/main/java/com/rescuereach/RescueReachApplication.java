@@ -12,6 +12,8 @@ import androidx.work.NetworkType;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseApp;
 import com.rescuereach.service.appearance.AppearanceManager;
 import com.rescuereach.service.auth.UserSessionManager;
@@ -71,6 +73,26 @@ public class RescueReachApplication extends Application {
         }
 
         super.attachBaseContext(base);
+    }
+
+    private void fixPlayServices() {
+        try {
+            // Fix for "Unknown calling package name 'com.google.android.gms'" error
+            // by ensuring Google Play Services is properly initialized
+            GoogleApiAvailability apiAvailability = GoogleApiAvailability.getInstance();
+            int resultCode = apiAvailability.isGooglePlayServicesAvailable(this);
+            if (resultCode != ConnectionResult.SUCCESS) {
+                Log.w("RescueReachApplication", "Google Play Services not available: " + resultCode);
+
+                // Try to fix the issue
+                if (apiAvailability.isUserResolvableError(resultCode)) {
+                    // Let the system handle this when needed
+                    Log.d("RescueReachApplication", "User resolvable Google Play Services error");
+                }
+            }
+        } catch (Exception e) {
+            Log.e("RescueReachApplication", "Error checking Google Play Services", e);
+        }
     }
 
     private void setupBackgroundTasks() {

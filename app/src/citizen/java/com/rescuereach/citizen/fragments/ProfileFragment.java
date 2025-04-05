@@ -7,6 +7,8 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.ContactsContract;
 import android.text.TextUtils;
 import android.util.Log;
@@ -43,6 +45,7 @@ import com.rescuereach.service.auth.UserSessionManager;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -159,19 +162,30 @@ public class ProfileFragment extends Fragment {
             return "";
         }
 
-        // Clean the phone number to digits only
-        String digitsOnly = phone.replaceAll("[^0-9]", "");
+        try {
+            // Clean the phone number to digits only
+            String digitsOnly = phone.replaceAll("[^0-9]", "");
 
-        // If already has country code, use as is
-        if (digitsOnly.length() > 10) {
-            return "+91" + digitsOnly.substring(digitsOnly.length() - 10);
+            // Log the extracted digits for debugging
+            Log.d("ProfileFragment", "Formatting phone number - digits only: " + digitsOnly);
+
+            // If already has country code (more than 10 digits), format properly
+            if (digitsOnly.length() > 10) {
+                // Extract the last 10 digits
+                String last10Digits = digitsOnly.substring(digitsOnly.length() - 10);
+                Log.d("ProfileFragment", "Formatting with existing prefix: +91" + last10Digits);
+                return "+91" + last10Digits;
+            }
+
+            // Get last 10 digits or all if less than 10
+            String formattedNumber = "+91" + digitsOnly;
+            Log.d("ProfileFragment", "Formatted phone number: " + formattedNumber);
+            return formattedNumber;
+        } catch (Exception e) {
+            Log.e("ProfileFragment", "Error formatting phone number", e);
+            // Return original with prefix as fallback
+            return "+91" + phone;
         }
-
-        // Get last 10 digits or all if less than 10
-        int startIndex = Math.max(0, digitsOnly.length() - 10);
-        String lastTenDigits = digitsOnly.substring(startIndex);
-
-        return "+91" + lastTenDigits;
     }
 
     private String extractTenDigits(String phone) {
@@ -183,18 +197,21 @@ public class ProfileFragment extends Fragment {
             // Extract only digits
             String digitsOnly = phone.replaceAll("[^0-9]", "");
 
-            // If has country code (more than 10 digits), remove it
-            if (digitsOnly.length() > 10) {
-                return digitsOnly.substring(digitsOnly.length() - 10);
+            // Handle different formats
+            if (digitsOnly.startsWith("91") && digitsOnly.length() > 10) {
+                // Remove country code if present
+                digitsOnly = digitsOnly.substring(2);
             }
 
-            // Get last 10 digits or all if less than 10
-            int startIndex = Math.max(0, digitsOnly.length() - 10);
-            return digitsOnly.substring(startIndex);
+            // Get last 10 digits (or all if less than 10)
+            if (digitsOnly.length() > 10) {
+                return digitsOnly.substring(digitsOnly.length() - 10);
+            } else {
+                return digitsOnly;
+            }
         } catch (Exception e) {
-            Log.e("ProfileFragment", "Error extracting phone digits: " + e.getMessage(), e);
-            // Return original as fallback
-            return phone;
+            Log.e("ProfileFragment", "Error extracting phone digits", e);
+            return phone; // Return original as fallback
         }
     }
     private void setupDropdowns() {
@@ -260,27 +277,27 @@ public class ProfileFragment extends Fragment {
         });
 
         // Settings click listeners
-        View view = getView();
-        if (view != null) {
-            // Use the view variable instead of requireView() which can crash
-            View privacySettings = view.findViewById(R.id.layout_privacy_settings);
-            if (privacySettings != null) {
-                privacySettings.setOnClickListener(v ->
-                        startActivity(new Intent(requireContext(), PrivacySettingsActivity.class)));
-            }
-
-            View appearanceSettings = view.findViewById(R.id.layout_appearance_settings);
-            if (appearanceSettings != null) {
-                appearanceSettings.setOnClickListener(v ->
-                        startActivity(new Intent(requireContext(), AppearanceSettingsActivity.class)));
-            }
-
-            View dataManagement = view.findViewById(R.id.layout_data_management);
-            if (dataManagement != null) {
-                dataManagement.setOnClickListener(v ->
-                        startActivity(new Intent(requireContext(), DataManagementActivity.class)));
-            }
-        }
+//        View view = getView();
+//        if (view != null) {
+//            // Use the view variable instead of requireView() which can crash
+//            View privacySettings = view.findViewById(R.id.layout_privacy_settings);
+//            if (privacySettings != null) {
+//                privacySettings.setOnClickListener(v ->
+//                        startActivity(new Intent(requireContext(), PrivacySettingsActivity.class)));
+//            }
+//
+//            View appearanceSettings = view.findViewById(R.id.layout_appearance_settings);
+//            if (appearanceSettings != null) {
+//                appearanceSettings.setOnClickListener(v ->
+//                        startActivity(new Intent(requireContext(), AppearanceSettingsActivity.class)));
+//            }
+//
+//            View dataManagement = view.findViewById(R.id.layout_data_management);
+//            if (dataManagement != null) {
+//                dataManagement.setOnClickListener(v ->
+//                        startActivity(new Intent(requireContext(), DataManagementActivity.class)));
+//            }
+//        }
     }
 
     private void loadUserDataFromFirebase() {
@@ -315,84 +332,199 @@ public class ProfileFragment extends Fragment {
                 });
     }
 
+// Update the updateUIWithFirebaseData method for correct field mapping
+
     private void updateUIWithFirebaseData(DocumentSnapshot document) {
         try {
-            // Extract data from Firestore
-            String fullName = document.getString("fullName");
-            String phoneNum = document.getString("phoneNumber");
-            String dob = document.getString("dateOfBirth");
-            String gender = document.getString("gender");
-            String state = document.getString("state");
-            Boolean volunteer = document.getBoolean("isVolunteer");
+            // Clear all fields first to prevent data mixing
+            inputFullName.setText("");
+            inputPhone.setText("");
+            inputDob.setText("");
+            dropdownGender.setText("", false);
+            dropdownState.setText("", false);
+            inputContactPhone.setText("");
 
-            // Emergency contact details - add additional null check and formatting
-            String emergencyContact = document.getString("emergencyContact");
-            if (emergencyContact != null && !emergencyContact.isEmpty()) {
-                try {
-                    // Format and display emergency contact
-                    inputContactPhone.setText(extractTenDigits(emergencyContact));
-                } catch (Exception e) {
-                    Log.e("ProfileFragment", "Error formatting emergency contact: " + e.getMessage());
-                    // Use raw value as fallback
-                    inputContactPhone.setText(emergencyContact);
+            // Extract data with safe type handling
+            String fullName = safeGetString(document, "fullName");
+            String phoneNum = safeGetString(document, "phoneNumber");
+            String gender = safeGetString(document, "gender");
+            String state = safeGetString(document, "state");
+            String emergencyContact = safeGetString(document, "emergencyContact");
+
+            // Handle date of birth specially (could be Date, Timestamp or String)
+            String dob = "";
+            try {
+                if (document.contains("dateOfBirth")) {
+                    Object dateObj = document.get("dateOfBirth");
+                    if (dateObj instanceof String) {
+                        dob = (String) dateObj;
+                    } else if (dateObj instanceof com.google.firebase.Timestamp) {
+                        com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) dateObj;
+                        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
+                        dob = sdf.format(timestamp.toDate());
+                    } else if (dateObj instanceof Date) {
+                        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
+                        dob = sdf.format((Date) dateObj);
+                    } else if (dateObj != null) {
+                        // Last resort, convert to string
+                        dob = dateObj.toString();
+                    }
                 }
+            } catch (Exception e) {
+                Log.e("ProfileFragment", "Error parsing date of birth", e);
             }
 
-            // Update UI with null checks for all fields
+            // Handle volunteer status
+            Boolean volunteer = null;
+            try {
+                if (document.contains("isVolunteer")) {
+                    volunteer = document.getBoolean("isVolunteer");
+                }
+            } catch (Exception e) {
+                Log.e("ProfileFragment", "Error parsing volunteer status", e);
+            }
+
+            // Debug log
+            Log.d("ProfileFragment", "Parsed fields - " +
+                    "fullName: " + fullName +
+                    ", phone: " + phoneNum +
+                    ", dob: " + dob +
+                    ", gender: " + gender +
+                    ", state: " + state +
+                    ", emergencyContact: " + emergencyContact +
+                    ", volunteer: " + volunteer);
+
+            // Update UI with null checks
             if (fullName != null && !fullName.isEmpty()) inputFullName.setText(fullName);
             if (phoneNum != null && !phoneNum.isEmpty()) inputPhone.setText(phoneNum);
             if (dob != null && !dob.isEmpty()) inputDob.setText(dob);
             if (gender != null && !gender.isEmpty()) dropdownGender.setText(gender, false);
             if (state != null && !state.isEmpty()) dropdownState.setText(state, false);
 
-            // Handle volunteer status with null check
-            isVolunteer = volunteer != null ? volunteer : false;
+            // Format emergency contact properly
+            if (emergencyContact != null && !emergencyContact.isEmpty()) {
+                String digits = extractTenDigits(emergencyContact);
+                inputContactPhone.setText(digits);
+            }
+
+            // Set volunteer status with null check
+            isVolunteer = (volunteer != null) ? volunteer : false;
             initialVolunteerStatus = isVolunteer;
             switchVolunteer.setChecked(isVolunteer);
 
-            // Save to local session
+            // Save values to session
             updateSessionWithCurrentValues();
 
         } catch (Exception e) {
-            Log.e("ProfileFragment", "Error parsing profile data: " + e.getMessage(), e);
-            showError("Error loading profile data: " + e.getMessage());
-            // Load from session as fallback
+            Log.e("ProfileFragment", "Error updating UI with Firebase data", e);
+            showError("Error showing profile data. Loading from local storage.");
             loadUserDataFromLocalSession();
         }
     }
 
+    // Helper method to safely get strings
+    private String safeGetString(DocumentSnapshot document, String fieldName) {
+        try {
+            if (document.contains(fieldName)) {
+                Object value = document.get(fieldName);
+                if (value != null) {
+                    return value.toString();
+                }
+            }
+        } catch (Exception e) {
+            Log.e("ProfileFragment", "Error getting field: " + fieldName, e);
+        }
+        return "";
+    }
 
+    private boolean isValidGender(String gender) {
+        String[] validGenders = {"Male", "Female", "Other", "Prefer not to say"};
+        for (String validGender : validGenders) {
+            if (validGender.equalsIgnoreCase(gender)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isValidState(String state) {
+        String[] states = {
+                "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
+                "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh",
+                "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra",
+                "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha",
+                "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana",
+                "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
+        };
+
+        for (String validState : states) {
+            if (validState.equalsIgnoreCase(state)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Improve loadUserDataFromLocalSession to prevent wrong field mapping
     private void loadUserDataFromLocalSession() {
-        // Load user data from session manager
-        inputFullName.setText(sessionManager.getFullName());
-        inputPhone.setText(sessionManager.getSavedPhoneNumber());
+        try {
+            // Clear all fields first to avoid data bleed-through
+            inputFullName.setText("");
+            inputPhone.setText("");
+            inputDob.setText("");
+            dropdownGender.setText("", false);
+            dropdownState.setText("", false);
+            inputContactPhone.setText("");
 
-        // Load other saved data
-        String dob = sessionManager.getDateOfBirthString();
-        if (dob != null && !dob.isEmpty()) {
-            inputDob.setText(dob);
+            // Load user data with explicit logging
+            String fullName = sessionManager.getFullName();
+            Log.d("ProfileFragment", "Session full name: " + fullName);
+            if (fullName != null && !fullName.isEmpty()) {
+                inputFullName.setText(fullName);
+            }
+
+            String phone = sessionManager.getSavedPhoneNumber();
+            Log.d("ProfileFragment", "Session phone: " + phone);
+            if (phone != null && !phone.isEmpty()) {
+                inputPhone.setText(phone);
+            }
+
+            // Load other saved data
+            String dob = sessionManager.getDateOfBirthString();
+            Log.d("ProfileFragment", "Session DOB: " + dob);
+            if (dob != null && !dob.isEmpty()) {
+                inputDob.setText(dob);
+            }
+
+            String gender = sessionManager.getGender();
+            Log.d("ProfileFragment", "Session gender: " + gender);
+            if (gender != null && !gender.isEmpty()) {
+                dropdownGender.setText(gender, false);
+            }
+
+            String state = sessionManager.getState();
+            Log.d("ProfileFragment", "Session state: " + state);
+            if (state != null && !state.isEmpty()) {
+                dropdownState.setText(state, false);
+            }
+
+            // Emergency contact phone - extract 10 digits for display
+            String contactPhone = sessionManager.getEmergencyContactPhone();
+            Log.d("ProfileFragment", "Session emergency contact: " + contactPhone);
+            if (contactPhone != null && !contactPhone.isEmpty()) {
+                String digits = extractTenDigits(contactPhone);
+                inputContactPhone.setText(digits);
+            }
+
+            // Volunteer status
+            isVolunteer = sessionManager.isVolunteer();
+            Log.d("ProfileFragment", "Session volunteer status: " + isVolunteer);
+            initialVolunteerStatus = isVolunteer; // Store initial value
+            switchVolunteer.setChecked(isVolunteer);
+        } catch (Exception e) {
+            Log.e("ProfileFragment", "Error loading data from session", e);
+            showError("Error loading profile data from local storage");
         }
-
-        String gender = sessionManager.getGender();
-        if (gender != null && !gender.isEmpty()) {
-            dropdownGender.setText(gender, false);
-        }
-
-        String state = sessionManager.getState();
-        if (state != null && !state.isEmpty()) {
-            dropdownState.setText(state, false);
-        }
-
-        // Emergency contact phone - extract 10 digits for display
-        String contactPhone = sessionManager.getEmergencyContactPhone();
-        if (contactPhone != null && !contactPhone.isEmpty()) {
-            inputContactPhone.setText(extractTenDigits(contactPhone));
-        }
-
-        // Volunteer status
-        isVolunteer = sessionManager.isVolunteer();
-        initialVolunteerStatus = isVolunteer; // Store initial value
-        switchVolunteer.setChecked(isVolunteer);
     }
 
     private void showDatePicker() {
@@ -489,6 +621,8 @@ public class ProfileFragment extends Fragment {
         return phone.length() >= 10;
     }
 
+// Update the saveProfile method in ProfileFragment.java to properly handle navigation refresh
+
     private void saveProfile() {
         if (!validateInputs()) {
             return;
@@ -496,13 +630,17 @@ public class ProfileFragment extends Fragment {
 
         showLoading(true);
 
-        // Store initial value to check if it changed
+        // Track if volunteer status changed
         boolean volunteerStatusChanged = (initialVolunteerStatus != isVolunteer);
+        if (volunteerStatusChanged) {
+            Log.d("ProfileFragment", "Volunteer status changed from " +
+                    initialVolunteerStatus + " to " + isVolunteer);
+        }
 
         // Format the emergency contact with +91 prefix before saving
         String emergencyContactPhone = formatPhoneWithPrefix(inputContactPhone.getText().toString().trim());
 
-        // Update session with current values including formatted phone
+        // *** Important: Update session BEFORE Firebase to ensure local state is consistent ***
         sessionManager.setFullName(inputFullName.getText().toString().trim());
         sessionManager.setState(dropdownState.getText().toString().trim());
         sessionManager.setGender(dropdownGender.getText().toString().trim());
@@ -523,19 +661,23 @@ public class ProfileFragment extends Fragment {
         // Prepare data to update
         String fullName = inputFullName.getText().toString().trim();
         String state = dropdownState.getText().toString().trim();
+        String gender = dropdownGender.getText().toString().trim();
 
-        // Step 1: Update Firestore
+        // First update navigation drawer based on session changes
+        if (volunteerStatusChanged && getActivity() instanceof CitizenMainActivity) {
+            // Initial refresh based on session changes
+            Log.d("ProfileFragment", "Refreshing navigation drawer - initial");
+            ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
+        }
 
-        updateFirestoreProfile(userId, phoneNumber, fullName, state, emergencyContactPhone,volunteerStatusChanged );
+        // Now update Firebase data
+        updateFirestoreProfile(userId, phoneNumber, fullName, gender, state, emergencyContactPhone, volunteerStatusChanged);
     }
 
-    // New method to update Firestore
-    private void updateFirestoreProfile(String userId, String phoneNumber,
-                                        String fullName, String state, String emergencyContactPhone,
-                                        boolean volunteerStatusChanged) {
-        // Extract first and last name from full name - same as in updateRealtimeDatabase
-        String firstName;
-        String lastName;
+    private void updateFirestoreProfile(String userId, String phoneNumber, String fullName, String state, String gender, String emergencyContactPhone, boolean volunteerStatusChanged) {
+        // Extract first and last name from full name
+        String firstName = "";
+        String lastName = "";
 
         if (fullName != null && !fullName.isEmpty()) {
             int spaceIndex = fullName.indexOf(' ');
@@ -543,14 +685,23 @@ public class ProfileFragment extends Fragment {
                 firstName = fullName.substring(0, spaceIndex);
                 lastName = fullName.substring(spaceIndex + 1);
             } else {
-                lastName = "";
                 firstName = fullName;
+                lastName = "";
             }
-        } else {
-            lastName = "";
-            firstName = "";
         }
 
+        // Prepare update map with all required fields
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("fullName", fullName);
+        updates.put("firstName", firstName);
+        updates.put("lastName", lastName);
+        updates.put("userId", userId);
+        updates.put("state", state);
+        updates.put("gender", dropdownGender.getText().toString());
+        updates.put("emergencyContact", emergencyContactPhone);
+        updates.put("isVolunteer", isVolunteer);
+
+        // Create separate document ID lookup and update operations
         db.collection("users")
                 .whereEqualTo("phoneNumber", phoneNumber)
                 .limit(1)
@@ -560,41 +711,59 @@ public class ProfileFragment extends Fragment {
                         // Get the document ID
                         String documentId = querySnapshot.getDocuments().get(0).getId();
 
-                        // Now update the document using its ID
-                        db.collection("users")
-                                .document(documentId)
-                                .update(
-                                        "fullName", fullName,
-                                        "firstName", firstName, // Add firstName
-                                        "lastName", lastName,   // Add lastName
-                                        "userId", userId,       // Always include userId
-                                        "state", state,
-                                        "emergencyContact", emergencyContactPhone,
-                                        "isVolunteer", isVolunteer
-                                )
-                                .addOnSuccessListener(aVoid -> {
-                                    // Now update Realtime Database after Firestore success
-                                    updateRealtimeDatabase(userId, fullName, state, emergencyContactPhone, volunteerStatusChanged);
-                                })
-                                .addOnFailureListener(e -> {
-                                    showError("Failed to save profile to Firestore: " + e.getMessage());
-                                    showLoading(false);
-                                });
+                        try {
+                            // Now update the document using its ID with transaction for better consistency
+                            db.runTransaction(transaction -> {
+                                transaction.update(db.collection("users").document(documentId), updates);
+                                return null;
+                            }).addOnSuccessListener(aVoid -> {
+                                // Update realtime database after Firestore success
+                                updateRealtimeDatabase(userId, fullName, state, emergencyContactPhone, volunteerStatusChanged);
+                            }).addOnFailureListener(e -> {
+                                // If transaction fails, try normal update
+                                db.collection("users")
+                                        .document(documentId)
+                                        .update(updates)
+                                        .addOnSuccessListener(aVoid -> {
+                                            updateRealtimeDatabase(userId, fullName, state, emergencyContactPhone, volunteerStatusChanged);
+                                        })
+                                        .addOnFailureListener(e2 -> {
+                                            showError("Failed to save profile: " + e2.getMessage());
+                                            showLoading(false);
+                                        });
+                            });
+                        } catch (Exception e) {
+                            // Handle any transaction exceptions
+                            showError("Error updating profile: " + e.getMessage());
+                            showLoading(false);
+                        }
                     } else {
-                        showError("User profile not found in Firestore");
-                        showLoading(false);
+                        // User document not found - create it
+                        try {
+                            updates.put("phoneNumber", phoneNumber);
+                            updates.put("createdAt", new Date());
+
+                            db.collection("users").document().set(updates)
+                                    .addOnSuccessListener(aVoid -> {
+                                        updateRealtimeDatabase(userId, fullName, state, emergencyContactPhone, volunteerStatusChanged);
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        showError("Error creating user profile: " + e.getMessage());
+                                        showLoading(false);
+                                    });
+                        } catch (Exception e) {
+                            showError("Error creating profile: " + e.getMessage());
+                            showLoading(false);
+                        }
                     }
                 })
                 .addOnFailureListener(e -> {
-                    showError("Failed to find user profile: " + e.getMessage());
+                    showError("Error finding user profile: " + e.getMessage());
                     showLoading(false);
                 });
     }
 
-    // New method to update Realtime Database
-    private void updateRealtimeDatabase(String userId, String fullName,
-                                        String state, String emergencyContactPhone,
-                                        boolean volunteerStatusChanged) {
+    private void updateRealtimeDatabase(String userId, String fullName, String state, String emergencyContactPhone, boolean volunteerStatusChanged) {
         // Extract first and last name from full name
         String firstName = "";
         String lastName = "";
@@ -624,6 +793,7 @@ public class ProfileFragment extends Fragment {
         updates.put("fullName", fullName);
         updates.put("firstName", firstName);
         updates.put("lastName", lastName);
+        updates.put("gender", dropdownGender.getText().toString()); // Add gender explicitly
         updates.put("state", state);
         updates.put("emergencyContact", emergencyContactPhone);
         updates.put("isVolunteer", isVolunteer);
@@ -635,28 +805,38 @@ public class ProfileFragment extends Fragment {
                     // Show success message
                     Toast.makeText(requireContext(), R.string.profile_saved, Toast.LENGTH_SHORT).show();
 
-                    // If volunteer status changed, refresh navigation drawer
-                    if (volunteerStatusChanged) {
-                        refreshNavigationDrawer();
-                    }
+                    // Force the navigation drawer to refresh
+                    forceNavigationDrawerRefresh();
 
                     setEditMode(false);
                     showLoading(false);
                 })
                 .addOnFailureListener(e -> {
                     showError("Failed to save profile to Realtime Database: " + e.getMessage());
-                    // Even if Realtime DB fails, Firestore was updated successfully
 
-                    // If volunteer status changed, refresh navigation drawer 
-                    if (volunteerStatusChanged) {
-                        refreshNavigationDrawer();
-                    }
+                    // Force the navigation drawer to refresh anyway
+                    forceNavigationDrawerRefresh();
 
                     setEditMode(false);
                     showLoading(false);
                 });
     }
 
+
+    // Add a new method to force navigation drawer refresh with a slight delay
+    private void forceNavigationDrawerRefresh() {
+        if (getActivity() instanceof CitizenMainActivity) {
+            // First refresh
+            ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
+
+            // Second refresh with delay to ensure updates are applied
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (isAdded() && getActivity() instanceof CitizenMainActivity) {
+                    ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
+                }
+            }, 500); // 500ms delay
+        }
+    }
     private void refreshNavigationDrawer() {
         // Request the main activity to refresh its navigation drawer
         if (getActivity() instanceof CitizenMainActivity) {
