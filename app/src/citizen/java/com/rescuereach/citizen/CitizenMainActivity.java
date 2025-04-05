@@ -57,6 +57,7 @@ import com.rescuereach.citizen.fragments.ProfileFragment;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.util.LocationManager;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -171,11 +172,6 @@ public class CitizenMainActivity extends AppCompatActivity
         // Get the menu to modify items
         Menu navMenu = navigationView.getMenu();
 
-        // Remove community support item completely
-        MenuItem volunteerSupportItem = navMenu.findItem(R.id.nav_community_support);
-        if (communitySupportItem != null) {
-            navMenu.removeItem(R.id.nav_community_support);
-        }
 
         // Show volunteer alerts only if user is a volunteer
         MenuItem volunteerAlertsItem = navMenu.findItem(R.id.nav_volunteer_alerts);
@@ -185,8 +181,7 @@ public class CitizenMainActivity extends AppCompatActivity
 
         // If user is not a volunteer, check if volunteer section is empty and hide the header
         if (!isVolunteer) {
-            // Find the volunteer section header (this is tricky in Android's menu system)
-            // We'll need to iterate through submenus to find it
+            // Find the volunteer section header
             for (int i = 0; i < navMenu.size(); i++) {
                 MenuItem item = navMenu.getItem(i);
                 if (item.hasSubMenu() &&
@@ -660,6 +655,10 @@ public class CitizenMainActivity extends AppCompatActivity
         if (locationManager != null) {
             startLocationUpdates();
         }
+        // Refresh navigation drawer in case volunteer status changed
+        NavigationView navigationView = findViewById(R.id.nav_view);
+        updateNavigationMenuBasedOnVolunteerStatus(navigationView);
+
     }
 
     @Override
@@ -741,11 +740,20 @@ public class CitizenMainActivity extends AppCompatActivity
                     getString(R.string.placeholder_home_description),
                     R.drawable.ic_home);
         } else if (fragmentId == R.id.nav_my_reports) {
-            title = getString(R.string.menu_my_reports);
+            // Check if user is volunteer before allowing navigation
+            if (!sessionManager.isVolunteer()) {
+                // If not a volunteer, redirect to home
+                Toast.makeText(this, R.string.volunteer_access_denied,
+                        Toast.LENGTH_SHORT).show();
+                navigateToFragment(R.id.nav_home);
+                return;
+            }
+
+            title = getString(R.string.menu_volunteer_alerts);
             fragment = PlaceholderFragment.newInstance(
                     title,
-                    getString(R.string.placeholder_my_reports_description),
-                    R.drawable.ic_reports);
+                    getString(R.string.placeholder_volunteer_description),
+                    R.drawable.ic_alerts);
         } else if (fragmentId == R.id.nav_volunteer_alerts) {
             title = getString(R.string.menu_volunteer_alerts);
             fragment = PlaceholderFragment.newInstance(
@@ -834,8 +842,17 @@ public class CitizenMainActivity extends AppCompatActivity
                 // Sign out from Firebase Auth
                 FirebaseAuth.getInstance().signOut();
 
+                // Enhanced session clearing
+                UserSessionManager userSession = UserSessionManager.getInstance(this);
+
+                // Clear all session preferences before clearing session
+                userSession.clearAllPreferences(); // Add this method to UserSessionManager
+
                 // Clear user session data
-                UserSessionManager.getInstance(this).clearSession();
+                userSession.clearSession();
+
+                // Clear application cache and WebView data if any
+                clearApplicationData();
 
                 // Wait briefly to ensure operations complete
                 Thread.sleep(500);
@@ -872,6 +889,46 @@ public class CitizenMainActivity extends AppCompatActivity
         }).start();
     }
 
+    // Add this method to clear application cache
+    private void clearApplicationData() {
+        try {
+            // Clear app cache
+            File cache = getCacheDir();
+            File appDir = new File(cache.getParent());
+            if (appDir.exists()) {
+                String[] children = appDir.list();
+                if (children != null) {
+                    for (String s : children) {
+                        if (!s.equals("lib")) {
+                            deleteDir(new File(appDir, s));
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error clearing application data", e);
+        }
+    }
+
+    private boolean deleteDir(File dir) {
+        if (dir != null && dir.isDirectory()) {
+            String[] children = dir.list();
+            if (children != null) {
+                for (String child : children) {
+                    boolean success = deleteDir(new File(dir, child));
+                    if (!success) {
+                        return false;
+                    }
+                }
+            }
+            return dir.delete();
+        } else if (dir != null && dir.isFile()) {
+            return dir.delete();
+        } else {
+            return false;
+        }
+    }
+
     private void navigateToAuthScreen() {
         // Create intent for PhoneAuthActivity
         Intent intent = new Intent(this, PhoneAuthActivity.class);
@@ -905,5 +962,13 @@ public class CitizenMainActivity extends AppCompatActivity
                     .setNegativeButton(R.string.no, null)
                     .show();
         }
+    }
+
+    public void refreshNavigationDrawer() {
+        // Get reference to navigation view
+        NavigationView navigationView = findViewById(R.id.nav_view);
+
+        // Update navigation menu based on current volunteer status
+        updateNavigationMenuBasedOnVolunteerStatus(navigationView);
     }
 }

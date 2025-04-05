@@ -12,16 +12,12 @@ import com.rescuereach.data.repository.UserRepository;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
 
 public class UserSessionManager {
     private static final String TAG = "UserSessionManager";
     private static final String PREF_NAME = "RescueReachUserSession";
-    private static final String KEY_USER_ID = "userId";
-    private static final String KEY_USER_PHONE = "userPhone";
-    private static final String KEY_IS_LOGGED_IN = "isLoggedIn";
+    private static final String KEY_USER_PHONE = "user_phone";
     private static final String KEY_USER_FULL_NAME = "user_full_name";
     private static final String KEY_USER_EMERGENCY_CONTACT = "user_emergency_contact";
     private static final String KEY_IS_PROFILE_COMPLETE = "is_profile_complete";
@@ -35,9 +31,9 @@ public class UserSessionManager {
 
     private static final String KEY_EMERGENCY_CONTACT_PHONE = "emergency_contact_phone";
 
-    private static final String PREF_NOTIFICATION = "notification_";
+
     private static final String PREF_PRIVACY = "privacy_";
-    private static final String PREF_APPEARANCE = "appearance_";
+
     private static final String PREF_EMERGENCY = "emergency_";
     private static final String PREF_DATA = "data_";
 
@@ -131,156 +127,9 @@ public class UserSessionManager {
         // Use default values for new fields
         saveUserProfileData(fullName, emergencyContact, null, "", "", false);
     }
-    public boolean getNotificationPreference(String key, boolean defaultValue) {
-        return sharedPreferences.getBoolean(PREF_NOTIFICATION + key, defaultValue);
-    }
-    public void setNotificationPreference(String key, boolean value) {
-        sharedPreferences.edit().putBoolean(PREF_NOTIFICATION + key, value).apply();
-    }
-    public boolean getPrivacyPreference(String key, boolean defaultValue) {
-        return sharedPreferences.getBoolean(PREF_PRIVACY + key, defaultValue);
-    }
-    public void setPrivacyPreference(String key, boolean value) {
-        sharedPreferences.edit().putBoolean(PREF_PRIVACY + key, value).apply();
-    }
-    public String getAppearancePreference(String key, String defaultValue) {
-        return sharedPreferences.getString(PREF_APPEARANCE + key, defaultValue);
-    }
-    public void setAppearancePreference(String key, String value) {
-        sharedPreferences.edit().putString(PREF_APPEARANCE + key, value).apply();
-    }
-    public boolean getEmergencyPreference(String key, boolean defaultValue) {
-        return sharedPreferences.getBoolean(PREF_EMERGENCY + key, defaultValue);
-    }
-    public void setEmergencyPreference(String key, boolean value) {
-        sharedPreferences.edit().putBoolean(PREF_EMERGENCY + key, value).apply();
-    }
-    public boolean getDataPreference(String key, boolean defaultValue) {
-        return sharedPreferences.getBoolean(PREF_DATA + key, defaultValue);
-    }
-    public void setDataPreference(String key, boolean value) {
-        sharedPreferences.edit().putBoolean(PREF_DATA + key, value).apply();
-    }
-    public int getIntPreference(String key, int defaultValue) {
-        return sharedPreferences.getInt(key, defaultValue);
-    }
-    public void setIntPreference(String key, int value) {
-        sharedPreferences.edit().putInt(key, value).apply();
-    }
-    public long getLongPreference(String key, long defaultValue) {
-        return sharedPreferences.getLong(key, defaultValue);
-    }
-    public void setLongPreference(String key, long value) {
-        sharedPreferences.edit().putLong(key, value).apply();
-    }
-    public float getFloatPreference(String key, float defaultValue) {
-        return sharedPreferences.getFloat(key, defaultValue);
-    }
-    public void setFloatPreference(String key, float value) {
-        sharedPreferences.edit().putFloat(key, value).apply();
-    }
-    public String getStringPreference(String key, String defaultValue) {
-        return sharedPreferences.getString(key, defaultValue);
-    }
-    public void setStringPreference(String key, String value) {
-        sharedPreferences.edit().putString(key, value).apply();
-    }
 
     public boolean isProfileComplete() {
         return sharedPreferences.getBoolean(KEY_IS_PROFILE_COMPLETE, false);
-    }
-
-    public void clearLocalData() {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-
-        // Keep login information
-        String userId = getUserId();
-        String phoneNumber = getSavedPhoneNumber();
-        boolean isLoggedIn = isLoggedIn();
-
-        // Clear everything
-        editor.clear();
-
-        // Restore login information
-        if (userId != null) {
-            editor.putString(KEY_USER_ID, userId);
-        }
-        if (phoneNumber != null) {
-            editor.putString(KEY_USER_PHONE, phoneNumber);
-        }
-        editor.putBoolean(KEY_IS_LOGGED_IN, isLoggedIn);
-
-        editor.apply();
-    }
-
-    public boolean isLoggedIn() {
-        return sharedPreferences.getBoolean(KEY_IS_LOGGED_IN, false);
-    }
-
-    /**
-     * Get all preferences as a map
-     * @return Map of all preferences
-     */
-    public Map<String, Object> getAllPreferences() {
-        Map<String, Object> allPreferences = new HashMap<>();
-
-        // Get all preferences
-        Map<String, ?> all = sharedPreferences.getAll();
-
-        // Skip login/auth related keys
-        for (Map.Entry<String, ?> entry : all.entrySet()) {
-            String key = entry.getKey();
-            if (!key.equals(KEY_USER_ID) && !key.equals(KEY_USER_PHONE) &&
-                    !key.equals(KEY_IS_LOGGED_IN)) {
-                allPreferences.put(key, entry.getValue());
-            }
-        }
-
-        return allPreferences;
-    }
-
-    public void restorePreferences(Map<String, Object> preferences) {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-
-        // Keep login information
-        String userId = getUserId();
-        String phoneNumber = getSavedPhoneNumber();
-        boolean isLoggedIn = isLoggedIn();
-
-        // Restore all preferences
-        for (Map.Entry<String, Object> entry : preferences.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
-
-            // Skip login/auth related keys
-            if (key.equals(KEY_USER_ID) || key.equals(KEY_USER_PHONE) ||
-                    key.equals(KEY_IS_LOGGED_IN)) {
-                continue;
-            }
-
-            if (value instanceof String) {
-                editor.putString(key, (String) value);
-            } else if (value instanceof Boolean) {
-                editor.putBoolean(key, (Boolean) value);
-            } else if (value instanceof Integer) {
-                editor.putInt(key, (Integer) value);
-            } else if (value instanceof Long) {
-                editor.putLong(key, (Long) value);
-            } else if (value instanceof Float) {
-                editor.putFloat(key, (Float) value);
-            }
-        }
-
-        // Restore login information
-        if (userId != null) {
-            editor.putString(KEY_USER_ID, userId);
-        }
-        if (phoneNumber != null) {
-            editor.putString(KEY_USER_PHONE, phoneNumber);
-        }
-        editor.putBoolean(KEY_IS_LOGGED_IN, isLoggedIn);
-
-        editor.apply();
     }
 
     // Get user full name
@@ -494,6 +343,29 @@ public class UserSessionManager {
         currentUser = null;
     }
 
+    public void clearAllPreferences() {
+        SharedPreferences preferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.clear();
+        editor.apply();
+
+        // Also clear any other shared preference files used by the app
+        clearPreferencesByName("app_prefs");
+        clearPreferencesByName("privacy_settings");
+        clearPreferencesByName("appearance_settings");
+        clearPreferencesByName("data_management_settings");
+    }
+
+    private void clearPreferencesByName(String prefName) {
+        try {
+            SharedPreferences preferences = context.getSharedPreferences(prefName, Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = preferences.edit();
+            editor.clear();
+            editor.apply();
+        } catch (Exception e) {
+            Log.e(TAG, "Error clearing preferences: " + prefName, e);
+        }
+    }
     // Interface for user loading callback
     public interface OnUserLoadedListener {
         void onUserLoaded(User user);

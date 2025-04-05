@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.ContactsContract;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,6 +35,7 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.rescuereach.R;
+import com.rescuereach.citizen.CitizenMainActivity;
 import com.rescuereach.citizen.settings.PrivacySettingsActivity;
 import com.rescuereach.citizen.settings.AppearanceSettingsActivity;
 import com.rescuereach.citizen.settings.DataManagementActivity;
@@ -71,6 +73,7 @@ public class ProfileFragment extends Fragment {
 
     private static final int CONTACTS_PERMISSION_CODE = 100;
     private DatabaseReference rtDatabase;
+    private boolean initialVolunteerStatus = false;
 
     // Contact picker
     private final ActivityResultLauncher<Intent> contactPickerLauncher =
@@ -176,17 +179,23 @@ public class ProfileFragment extends Fragment {
             return "";
         }
 
-        // Extract only digits
-        String digitsOnly = phone.replaceAll("[^0-9]", "");
+        try {
+            // Extract only digits
+            String digitsOnly = phone.replaceAll("[^0-9]", "");
 
-        // If has country code (more than 10 digits), remove it
-        if (digitsOnly.length() > 10) {
-            return digitsOnly.substring(digitsOnly.length() - 10);
+            // If has country code (more than 10 digits), remove it
+            if (digitsOnly.length() > 10) {
+                return digitsOnly.substring(digitsOnly.length() - 10);
+            }
+
+            // Get last 10 digits or all if less than 10
+            int startIndex = Math.max(0, digitsOnly.length() - 10);
+            return digitsOnly.substring(startIndex);
+        } catch (Exception e) {
+            Log.e("ProfileFragment", "Error extracting phone digits: " + e.getMessage(), e);
+            // Return original as fallback
+            return phone;
         }
-
-        // Get last 10 digits or all if less than 10
-        int startIndex = Math.max(0, digitsOnly.length() - 10);
-        return digitsOnly.substring(startIndex);
     }
     private void setupDropdowns() {
         // Gender dropdown
@@ -304,33 +313,42 @@ public class ProfileFragment extends Fragment {
             String state = document.getString("state");
             Boolean volunteer = document.getBoolean("isVolunteer");
 
-            // Emergency contact details (only phone)
+            // Emergency contact details - add additional null check and formatting
             String emergencyContact = document.getString("emergencyContact");
-            if (emergencyContact != null) {
-                inputContactPhone.setText(extractTenDigits(emergencyContact));
+            if (emergencyContact != null && !emergencyContact.isEmpty()) {
+                try {
+                    // Format and display emergency contact
+                    inputContactPhone.setText(extractTenDigits(emergencyContact));
+                } catch (Exception e) {
+                    Log.e("ProfileFragment", "Error formatting emergency contact: " + e.getMessage());
+                    // Use raw value as fallback
+                    inputContactPhone.setText(emergencyContact);
+                }
             }
-            // Update UI
-            if (fullName != null) inputFullName.setText(fullName);
-            if (phoneNum != null) inputPhone.setText(phoneNum);
-            if (dob != null) inputDob.setText(dob);
-            if (gender != null) dropdownGender.setText(gender, false);
-            if (state != null) dropdownState.setText(state, false);
 
-            // Handle emergency contact
-            if (emergencyContact != null) inputContactPhone.setText(emergencyContact);
+            // Update UI with null checks for all fields
+            if (fullName != null && !fullName.isEmpty()) inputFullName.setText(fullName);
+            if (phoneNum != null && !phoneNum.isEmpty()) inputPhone.setText(phoneNum);
+            if (dob != null && !dob.isEmpty()) inputDob.setText(dob);
+            if (gender != null && !gender.isEmpty()) dropdownGender.setText(gender, false);
+            if (state != null && !state.isEmpty()) dropdownState.setText(state, false);
 
-            // Handle volunteer status
+            // Handle volunteer status with null check
             isVolunteer = volunteer != null ? volunteer : false;
+            initialVolunteerStatus = isVolunteer;
             switchVolunteer.setChecked(isVolunteer);
 
             // Save to local session
             updateSessionWithCurrentValues();
 
         } catch (Exception e) {
-            showError("Error parsing profile data: " + e.getMessage());
+            Log.e("ProfileFragment", "Error parsing profile data: " + e.getMessage(), e);
+            showError("Error loading profile data: " + e.getMessage());
+            // Load from session as fallback
             loadUserDataFromLocalSession();
         }
     }
+
 
     private void loadUserDataFromLocalSession() {
         // Load user data from session manager
@@ -361,6 +379,7 @@ public class ProfileFragment extends Fragment {
 
         // Volunteer status
         isVolunteer = sessionManager.isVolunteer();
+        initialVolunteerStatus = isVolunteer; // Store initial value
         switchVolunteer.setChecked(isVolunteer);
     }
 
@@ -465,6 +484,9 @@ public class ProfileFragment extends Fragment {
 
         showLoading(true);
 
+        // Store initial value to check if it changed
+        boolean volunteerStatusChanged = (initialVolunteerStatus != isVolunteer);
+
         // Format the emergency contact with +91 prefix before saving
         String emergencyContactPhone = formatPhoneWithPrefix(inputContactPhone.getText().toString().trim());
 
@@ -492,12 +514,31 @@ public class ProfileFragment extends Fragment {
 
         // Step 1: Update Firestore
 
-        updateFirestoreProfile(userId, phoneNumber, fullName, state, emergencyContactPhone);
+        updateFirestoreProfile(userId, phoneNumber, fullName, state, emergencyContactPhone,volunteerStatusChanged );
     }
 
     // New method to update Firestore
     private void updateFirestoreProfile(String userId, String phoneNumber,
-                                        String fullName, String state, String emergencyContactPhone) {
+                                        String fullName, String state, String emergencyContactPhone,
+                                        boolean volunteerStatusChanged) {
+        // Extract first and last name from full name - same as in updateRealtimeDatabase
+        String firstName;
+        String lastName;
+
+        if (fullName != null && !fullName.isEmpty()) {
+            int spaceIndex = fullName.indexOf(' ');
+            if (spaceIndex > 0) {
+                firstName = fullName.substring(0, spaceIndex);
+                lastName = fullName.substring(spaceIndex + 1);
+            } else {
+                lastName = "";
+                firstName = fullName;
+            }
+        } else {
+            lastName = "";
+            firstName = "";
+        }
+
         db.collection("users")
                 .whereEqualTo("phoneNumber", phoneNumber)
                 .limit(1)
@@ -512,13 +553,16 @@ public class ProfileFragment extends Fragment {
                                 .document(documentId)
                                 .update(
                                         "fullName", fullName,
+                                        "firstName", firstName, // Add firstName
+                                        "lastName", lastName,   // Add lastName
+                                        "userId", userId,       // Always include userId
                                         "state", state,
                                         "emergencyContact", emergencyContactPhone,
                                         "isVolunteer", isVolunteer
                                 )
                                 .addOnSuccessListener(aVoid -> {
                                     // Now update Realtime Database after Firestore success
-                                    updateRealtimeDatabase(userId, fullName, state, emergencyContactPhone);
+                                    updateRealtimeDatabase(userId, fullName, state, emergencyContactPhone, volunteerStatusChanged);
                                 })
                                 .addOnFailureListener(e -> {
                                     showError("Failed to save profile to Firestore: " + e.getMessage());
@@ -537,7 +581,8 @@ public class ProfileFragment extends Fragment {
 
     // New method to update Realtime Database
     private void updateRealtimeDatabase(String userId, String fullName,
-                                        String state, String emergencyContactPhone) {
+                                        String state, String emergencyContactPhone,
+                                        boolean volunteerStatusChanged) {
         // Extract first and last name from full name
         String firstName = "";
         String lastName = "";
@@ -575,16 +620,36 @@ public class ProfileFragment extends Fragment {
         // Use phone number as the document reference instead of userId
         rtDatabase.child("users").child(phoneKey).updateChildren(updates)
                 .addOnSuccessListener(aVoid -> {
+                    // Show success message
                     Toast.makeText(requireContext(), R.string.profile_saved, Toast.LENGTH_SHORT).show();
+
+                    // If volunteer status changed, refresh navigation drawer
+                    if (volunteerStatusChanged) {
+                        refreshNavigationDrawer();
+                    }
+
                     setEditMode(false);
                     showLoading(false);
                 })
                 .addOnFailureListener(e -> {
                     showError("Failed to save profile to Realtime Database: " + e.getMessage());
                     // Even if Realtime DB fails, Firestore was updated successfully
+
+                    // If volunteer status changed, refresh navigation drawer 
+                    if (volunteerStatusChanged) {
+                        refreshNavigationDrawer();
+                    }
+
                     setEditMode(false);
                     showLoading(false);
                 });
+    }
+
+    private void refreshNavigationDrawer() {
+        // Request the main activity to refresh its navigation drawer
+        if (getActivity() instanceof CitizenMainActivity) {
+            ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
+        }
     }
 
     private void updateSessionWithCurrentValues() {

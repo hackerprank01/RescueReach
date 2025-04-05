@@ -106,6 +106,8 @@
     <string name="nav_header_user_name">User Name</string>
     <string name="nav_header_phone">+91 XXXXXXXXXX</string>
     <string name="map_view_placeholder">Location Map (Coming Soon)</string>
+    <string name="volunteer_access_denied">You need to be a volunteer to access this section</string>
+
 
     <!-- Placeholder Descriptions -->
     <string name="placeholder_icon_desc">Feature icon</string>
