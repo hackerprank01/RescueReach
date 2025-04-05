@@ -190,21 +190,6 @@
     <string name="emergency_contact">Emergency Contact</string>
     <string name="emergency_contact_number">Emergency Contact Number</string>
 
-    <!-- Notification Settings -->
-    <string name="alert_preferences">Alert Preferences</string>
-    <string name="emergency_alerts">Emergency Alerts</string>
-    <string name="emergency_alerts_desc">Notify me about nearby emergencies</string>
-    <string name="community_alerts">Community Alerts</string>
-    <string name="community_alerts_desc">Notify me about community events and alerts</string>
-    <string name="news_updates">News Updates</string>
-    <string name="news_updates_desc">Notify me about emergency news and updates</string>
-    <string name="alert_options">Alert Options</string>
-    <string name="sound">Sound</string>
-    <string name="sound_desc">Play sound for notifications</string>
-    <string name="vibration">Vibration</string>
-    <string name="vibration_desc">Vibrate device for notifications</string>
-    <string name="notification_settings_saved">Notification settings saved</string>
-
     <!-- Privacy Settings -->
     <string name="location_settings">Location Settings</string>
     <string name="location_sharing">Location Sharing</string>
@@ -229,6 +214,23 @@
     <string name="profile_visibility_enabled">Profile visible to emergency responders</string>
     <string name="profile_visibility_disabled">Profile hidden from emergency responders</string>
     <string name="error_user_not_logged_in">Error: User not logged in</string>
+    <!-- Privacy Settings Strings -->
+    <string name="media_sharing">Media Sharing</string>
+    <string name="media_sharing_desc">Allow the app to access and share photos and videos during emergencies</string>
+    <string name="media_sharing_enabled">Media sharing is now enabled</string>
+    <string name="media_sharing_disabled">Media sharing is now disabled</string>
+    <string name="media_permission_title">Media Permission Required</string>
+    <string name="media_permission_message">We need camera and storage permissions to enable sharing photos and videos during emergencies. Without these permissions, the app cannot send visual information to emergency services.</string>
+    <string name="media_permission_granted">Camera and storage permissions granted</string>
+    <string name="media_permission_denied">Camera and storage permissions are needed for media sharing</string>
+
+    <string name="emergency_settings_header">Emergency Settings</string>
+    <string name="emergency_alerts">Emergency Alerts</string>
+    <string name="emergency_alerts_desc">Send alerts to your emergency contact during emergencies</string>
+    <string name="emergency_alerts_enabled">Emergency alerts are now enabled</string>
+    <string name="emergency_alerts_disabled">Emergency alerts are now disabled</string>
+    <string name="location_sharing_enabled">Location sharing is now enabled</string>
+    <string name="location_sharing_disabled">Location sharing is now disabled</string>
 
     <!-- Other Settings Strings -->
     <string name="appearance_settings_saved">Appearance settings saved</string>

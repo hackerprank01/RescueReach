@@ -455,6 +455,48 @@ public class UserSessionManager {
         return phone;
     }
 
+//All the setting code is here
+
+    //Privacy
+    public boolean getPrivacyPreference(String key, boolean defaultValue) {
+        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        return prefs.getBoolean(PREF_PRIVACY + key, defaultValue);
+    }
+
+    public void setPrivacyPreference(String key, boolean value) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
+        editor.putBoolean(PREF_PRIVACY + key, value);
+        editor.apply();
+    }
+
+
+    // Emergency preferences
+    public boolean getEmergencyPreference(String key, boolean defaultValue) {
+        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        return prefs.getBoolean(PREF_EMERGENCY + key, defaultValue);
+    }
+
+    public void setEmergencyPreference(String key, boolean value) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
+        editor.putBoolean(PREF_EMERGENCY + key, value);
+        editor.apply();
+    }
+
+    // String preference (used for emergency message template, etc.)
+    public String getStringPreference(String key, String defaultValue) {
+        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        return prefs.getString(key, defaultValue);
+    }
+
+    public void setStringPreference(String key, String value) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
+        editor.putString(key, value);
+        editor.apply();
+    }
+
+    private synchronized SharedPreferences getPreferences() {
+        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+    }
 
 
 }

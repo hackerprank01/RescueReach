@@ -20,24 +20,30 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.switchmaterial.SwitchMaterial;
-import com.google.firebase.analytics.FirebaseAnalytics;
 import com.rescuereach.R;
 import com.rescuereach.service.auth.UserSessionManager;
+import com.rescuereach.service.emergency.EmergencyAlertManager;
 import com.rescuereach.util.LocationManager;
+import com.rescuereach.util.MediaManager;
 
 public class PrivacySettingsActivity extends AppCompatActivity {
 
+    private static final String TAG = "PrivacySettingsActivity";
+    private static final int LOCATION_PERMISSION_CODE = 456;
+    private static final int CAMERA_PERMISSION_CODE = 457;
+    private static final int STORAGE_PERMISSION_CODE = 458;
+
     private UserSessionManager sessionManager;
-    private com.rescuereach.util.LocationManager locationManager;
-    private FirebaseAnalytics firebaseAnalytics;
+    private LocationManager locationManager;
+    private MediaManager mediaManager;
+    private EmergencyAlertManager emergencyAlertManager;
 
     private SwitchMaterial switchLocationSharing;
-    private SwitchMaterial switchAnonymousReporting;
-    private SwitchMaterial switchDataCollection;
     private SwitchMaterial switchProfileVisibility;
+    private SwitchMaterial switchMediaSharing;
+    private SwitchMaterial switchEmergencyAlerts;
 
-    private static final int LOCATION_PERMISSION_CODE = 456;
-
+    // Permission request launcher for location
     private final ActivityResultLauncher<String[]> requestLocationPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
                 boolean allGranted = true;
@@ -51,6 +57,8 @@ public class PrivacySettingsActivity extends AppCompatActivity {
                 if (allGranted) {
                     // All permissions granted
                     Toast.makeText(this, R.string.location_permission_granted, Toast.LENGTH_SHORT).show();
+                    sessionManager.setPrivacyPreference("location_sharing", true);
+                    switchLocationSharing.setChecked(true);
                 } else {
                     // Some permissions denied
                     showLocationPermissionDeniedMessage();
@@ -61,20 +69,50 @@ public class PrivacySettingsActivity extends AppCompatActivity {
                 }
             });
 
+    // Permission request launcher for media (camera and storage)
+    private final ActivityResultLauncher<String[]> requestMediaPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
+                boolean allGranted = true;
+                for (Boolean granted : result.values()) {
+                    if (!granted) {
+                        allGranted = false;
+                        break;
+                    }
+                }
+
+                if (allGranted) {
+                    // All permissions granted
+                    Toast.makeText(this, R.string.media_permission_granted, Toast.LENGTH_SHORT).show();
+                    sessionManager.setPrivacyPreference("media_sharing", true);
+                    switchMediaSharing.setChecked(true);
+                } else {
+                    // Some permissions denied
+                    showMediaPermissionDeniedMessage();
+
+                    // Update switch to reflect actual state
+                    switchMediaSharing.setChecked(false);
+                    sessionManager.setPrivacyPreference("media_sharing", false);
+                }
+            });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_privacy_settings);
 
+        // Initialize services and managers
         sessionManager = UserSessionManager.getInstance(this);
-        locationManager = new com.rescuereach.util.LocationManager(this);
-        firebaseAnalytics = FirebaseAnalytics.getInstance(this);
+        locationManager = new LocationManager(this);
+        mediaManager = new MediaManager(this);
+        emergencyAlertManager = new EmergencyAlertManager(this);
 
         // Set up toolbar
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        getSupportActionBar().setTitle(R.string.privacy);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setTitle(R.string.privacy);
+        }
 
         // Initialize UI elements
         initUI();
@@ -88,29 +126,27 @@ public class PrivacySettingsActivity extends AppCompatActivity {
 
     private void initUI() {
         switchLocationSharing = findViewById(R.id.switch_location_sharing);
-        switchAnonymousReporting = findViewById(R.id.switch_anonymous_reporting);
-        switchDataCollection = findViewById(R.id.switch_data_collection);
         switchProfileVisibility = findViewById(R.id.switch_profile_visibility);
+        switchMediaSharing = findViewById(R.id.switch_media_sharing);
+        switchEmergencyAlerts = findViewById(R.id.switch_emergency_alerts);
     }
 
     private void loadSavedPreferences() {
         // Load all privacy preferences from shared preferences
         switchLocationSharing.setChecked(sessionManager.getPrivacyPreference("location_sharing", true));
-        switchAnonymousReporting.setChecked(sessionManager.getPrivacyPreference("anonymous_reporting", false));
-        switchDataCollection.setChecked(sessionManager.getPrivacyPreference("data_collection", true));
         switchProfileVisibility.setChecked(sessionManager.getPrivacyPreference("profile_visibility", true));
-
-        // Apply data collection setting to Firebase Analytics
-        firebaseAnalytics.setAnalyticsCollectionEnabled(
-                sessionManager.getPrivacyPreference("data_collection", true));
+        switchMediaSharing.setChecked(sessionManager.getPrivacyPreference("media_sharing", true));
+        switchEmergencyAlerts.setChecked(sessionManager.getEmergencyPreference("emergency_alerts_enabled", true));
     }
 
     private void setupListeners() {
+        // Location sharing toggle
         switchLocationSharing.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (isChecked) {
                 // Check if location permission is granted
                 if (checkLocationPermission()) {
                     sessionManager.setPrivacyPreference("location_sharing", true);
+                    Toast.makeText(this, R.string.location_sharing_enabled, Toast.LENGTH_SHORT).show();
                 } else {
                     // Don't update preference until permission is granted
                     switchLocationSharing.setChecked(false);
@@ -118,35 +154,47 @@ public class PrivacySettingsActivity extends AppCompatActivity {
             } else {
                 // User is turning off location sharing
                 sessionManager.setPrivacyPreference("location_sharing", false);
+                Toast.makeText(this, R.string.location_sharing_disabled, Toast.LENGTH_SHORT).show();
 
                 // Stop any active location updates
                 locationManager.stopLocationUpdates();
             }
         });
 
-        switchAnonymousReporting.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            sessionManager.setPrivacyPreference("anonymous_reporting", isChecked);
-            Toast.makeText(this, isChecked ?
-                    R.string.anonymous_reporting_enabled :
-                    R.string.anonymous_reporting_disabled, Toast.LENGTH_SHORT).show();
-        });
-
-        switchDataCollection.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            sessionManager.setPrivacyPreference("data_collection", isChecked);
-
-            // Apply data collection setting to Firebase Analytics
-            firebaseAnalytics.setAnalyticsCollectionEnabled(isChecked);
-
-            Toast.makeText(this, isChecked ?
-                    R.string.data_collection_enabled :
-                    R.string.data_collection_disabled, Toast.LENGTH_SHORT).show();
-        });
-
+        // Profile visibility toggle
         switchProfileVisibility.setOnCheckedChangeListener((buttonView, isChecked) -> {
             sessionManager.setPrivacyPreference("profile_visibility", isChecked);
-
-            // Update profile visibility in Firestore
             updateProfileVisibility(isChecked);
+
+            Toast.makeText(this, isChecked ?
+                    R.string.profile_visibility_enabled :
+                    R.string.profile_visibility_disabled, Toast.LENGTH_SHORT).show();
+        });
+
+        // Media sharing toggle
+        switchMediaSharing.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                // Check if camera and storage permissions are granted
+                if (checkMediaPermissions()) {
+                    sessionManager.setPrivacyPreference("media_sharing", true);
+                    Toast.makeText(this, R.string.media_sharing_enabled, Toast.LENGTH_SHORT).show();
+                } else {
+                    // Don't update preference until permissions are granted
+                    switchMediaSharing.setChecked(false);
+                }
+            } else {
+                // User is turning off media sharing
+                sessionManager.setPrivacyPreference("media_sharing", false);
+                Toast.makeText(this, R.string.media_sharing_disabled, Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        // Emergency alerts toggle
+        switchEmergencyAlerts.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sessionManager.setEmergencyPreference("emergency_alerts_enabled", isChecked);
+            Toast.makeText(this, isChecked ?
+                    R.string.emergency_alerts_enabled :
+                    R.string.emergency_alerts_disabled, Toast.LENGTH_SHORT).show();
         });
     }
 
@@ -166,6 +214,30 @@ public class PrivacySettingsActivity extends AppCompatActivity {
                 requestLocationPermissionLauncher.launch(new String[] {
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.ACCESS_COARSE_LOCATION
+                });
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private boolean checkMediaPermissions() {
+        boolean cameraPermission = ContextCompat.checkSelfPermission(this,
+                Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
+        boolean storagePermission = ContextCompat.checkSelfPermission(this,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+
+        if (!cameraPermission || !storagePermission) {
+            // At least one permission not granted, request them
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA) ||
+                    ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                // Show an explanation
+                showMediaPermissionRationale();
+            } else {
+                // No explanation needed, request the permissions
+                requestMediaPermissionLauncher.launch(new String[] {
+                        Manifest.permission.CAMERA,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
                 });
             }
             return false;
@@ -193,9 +265,42 @@ public class PrivacySettingsActivity extends AppCompatActivity {
                 .show();
     }
 
+    private void showMediaPermissionRationale() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.media_permission_title)
+                .setMessage(R.string.media_permission_message)
+                .setPositiveButton(R.string.grant_permission, (dialog, which) -> {
+                    requestMediaPermissionLauncher.launch(new String[] {
+                            Manifest.permission.CAMERA,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE
+                    });
+                })
+                .setNegativeButton(R.string.cancel, (dialog, which) -> {
+                    dialog.dismiss();
+                    showMediaPermissionDeniedMessage();
+
+                    // Update switch to reflect actual state
+                    switchMediaSharing.setChecked(false);
+                })
+                .show();
+    }
+
     private void showLocationPermissionDeniedMessage() {
         Snackbar.make(findViewById(android.R.id.content),
                         R.string.location_permission_denied, Snackbar.LENGTH_LONG)
+                .setAction(R.string.settings, view -> {
+                    // Open app settings
+                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    Uri uri = Uri.fromParts("package", getPackageName(), null);
+                    intent.setData(uri);
+                    startActivity(intent);
+                })
+                .show();
+    }
+
+    private void showMediaPermissionDeniedMessage() {
+        Snackbar.make(findViewById(android.R.id.content),
+                        R.string.media_permission_denied, Snackbar.LENGTH_LONG)
                 .setAction(R.string.settings, view -> {
                     // Open app settings
                     Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
