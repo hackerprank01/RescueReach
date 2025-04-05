@@ -91,19 +91,18 @@ public class DataClearManager {
      * Clear data from Realtime Database
      */
     private void clearRealtimeDatabase(String phoneKey, String userId, OnCompleteListener listener) {
+        HashMap<String, Object> updates = new HashMap<>();
+        updates.put("fullName", "");
+        updates.put("firstName", "");
+        updates.put("lastName", "");
+        updates.put("state", "");
+        updates.put("emergencyContact", "");
+        updates.put("isVolunteer", false);
+        // Keep userId intact
+        updates.put("userId", userId);
+
         rtDatabase.child("users").child(phoneKey)
-                .updateChildren(
-                        new HashMap<String, Object>() {{
-                            put("fullName", "");
-                            put("firstName", "");
-                            put("lastName", "");
-                            put("state", "");
-                            put("emergencyContact", "");
-                            put("isVolunteer", false);
-                            // Keep userId intact
-                            put("userId", userId);
-                        }}
-                )
+                .updateChildren(updates)
                 .addOnSuccessListener(aVoid -> {
                     // Step 3: Clear SharedPreferences but keep phone number
                     clearSharedPreferences(listener);

@@ -3,6 +3,7 @@ package com.rescuereach.citizen.settings;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -17,8 +18,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.rescuereach.R;
-import com.rescuereach.citizen.PhoneAuthActivity;
 import com.rescuereach.base.BaseActivity;
+import com.rescuereach.citizen.PhoneAuthActivity;
 import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.service.backup.LocalBackupManager;
@@ -29,7 +30,8 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-public class DataManagementActivity extends AppCompatActivity {
+public class DataManagementActivity extends BaseActivity {
+    private static final String TAG = "DataManagementActivity";
 
     private UserSessionManager sessionManager;
     private LocalBackupManager backupManager;
@@ -80,19 +82,24 @@ public class DataManagementActivity extends AppCompatActivity {
     }
 
     private void loadSavedPreferences() {
-        // Load auto backup preference
-        boolean autoBackupEnabled = sessionManager.getBackupPreference("auto_backup_enabled", false);
-        switchAutoBackup.setChecked(autoBackupEnabled);
+        try {
+            // Load auto backup preference
+            boolean autoBackupEnabled = sessionManager.getBackupPreference("auto_backup_enabled", false);
+            switchAutoBackup.setChecked(autoBackupEnabled);
 
-        // Load last backup date
-        long lastBackupTimestamp = sessionManager.getLongPreference("last_backup_timestamp", 0);
-        if (lastBackupTimestamp > 0) {
-            SimpleDateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault());
-            String formattedDate = dateFormat.format(new Date(lastBackupTimestamp));
-            lastBackupDate.setText(getString(R.string.last_backup, formattedDate));
-            lastBackupDate.setVisibility(View.VISIBLE);
-        } else {
-            lastBackupDate.setText(R.string.no_backup_yet);
+            // Load last backup date
+            long lastBackupTimestamp = sessionManager.getLongPreference("last_backup_timestamp", 0);
+            if (lastBackupTimestamp > 0) {
+                SimpleDateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault());
+                String formattedDate = dateFormat.format(new Date(lastBackupTimestamp));
+                lastBackupDate.setText(getString(R.string.last_backup, formattedDate));
+                lastBackupDate.setVisibility(View.VISIBLE);
+            } else {
+                lastBackupDate.setText(R.string.no_backup_yet);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error loading preferences", e);
+            Toast.makeText(this, "Error loading settings", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -154,6 +161,7 @@ public class DataManagementActivity extends AppCompatActivity {
             public void onError(Exception e) {
                 runOnUiThread(() -> {
                     showProgress(false);
+                    Log.e(TAG, "Backup failed", e);
                     Toast.makeText(DataManagementActivity.this,
                             getString(R.string.backup_failed, e.getMessage()),
                             Toast.LENGTH_LONG).show();
@@ -191,6 +199,7 @@ public class DataManagementActivity extends AppCompatActivity {
             public void onError(Exception e) {
                 runOnUiThread(() -> {
                     showProgress(false);
+                    Log.e(TAG, "Data clear failed", e);
                     Toast.makeText(DataManagementActivity.this,
                             getString(R.string.data_clear_failed, e.getMessage()),
                             Toast.LENGTH_LONG).show();
@@ -240,6 +249,7 @@ public class DataManagementActivity extends AppCompatActivity {
             public void onError(Exception e) {
                 runOnUiThread(() -> {
                     showProgress(false);
+                    Log.e(TAG, "Account deletion failed", e);
                     Toast.makeText(DataManagementActivity.this,
                             getString(R.string.account_deletion_failed, e.getMessage()),
                             Toast.LENGTH_LONG).show();
@@ -257,6 +267,10 @@ public class DataManagementActivity extends AppCompatActivity {
 
     private void showProgress(boolean show) {
         progressIndicator.setVisibility(show ? View.VISIBLE : View.GONE);
+        // Disable interaction during progress
+        switchAutoBackup.setEnabled(!show);
+        layoutClearData.setEnabled(!show);
+        layoutDeleteAccount.setEnabled(!show);
     }
 
     @Override

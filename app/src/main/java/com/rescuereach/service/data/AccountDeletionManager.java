@@ -35,26 +35,35 @@ public class AccountDeletionManager {
     /**
      * Delete user account and all associated data
      */
-    public void deleteUserAccount(OnCompleteListener listener) {
+    public void deleteUserAccount(final OnCompleteListener listener) {
+        // Get current user
+        FirebaseUser user = auth.getCurrentUser();
+
+        // Get user ID and phone number
         String userId = sessionManager.getUserId();
         String phoneNumber = sessionManager.getSavedPhoneNumber();
 
-        if (userId == null || phoneNumber == null) {
-            listener.onError(new Exception("User not logged in"));
+        if (user == null) {
+            listener.onError(new Exception("User not authenticated"));
             return;
         }
 
-        // Get current Firebase User
-        FirebaseUser user = auth.getCurrentUser();
-        if (user == null) {
-            listener.onError(new Exception("User not authenticated"));
+        if (userId == null || phoneNumber == null) {
+            listener.onError(new Exception("User ID or phone number is missing"));
             return;
         }
 
         // Format phone number for use as a key (remove special characters)
         String phoneKey = phoneNumber.replaceAll("[^\\d]", "");
 
-        // Step 1: Delete Firestore data
+        // First delete Firestore data
+        deleteFirestoreData(user, phoneNumber, phoneKey, listener);
+    }
+
+    /**
+     * Step 1: Delete data from Firestore
+     */
+    private void deleteFirestoreData(FirebaseUser user, String phoneNumber, String phoneKey, OnCompleteListener listener) {
         db.collection("users")
                 .whereEqualTo("phoneNumber", phoneNumber)
                 .limit(1)
@@ -68,71 +77,81 @@ public class AccountDeletionManager {
                                 .document(documentId)
                                 .delete()
                                 .addOnSuccessListener(aVoid -> {
-                                    // Step 2: Delete Realtime Database data
-                                    deleteRealtimeData(phoneKey, user, listener);
+                                    // Next delete realtime database data
+                                    deleteRealtimeDatabase(user, phoneKey, listener);
                                 })
                                 .addOnFailureListener(e -> {
                                     Log.e(TAG, "Error deleting Firestore data", e);
-                                    listener.onError(e);
+                                    // Continue with deletion anyway
+                                    deleteRealtimeDatabase(user, phoneKey, listener);
                                 });
                     } else {
-                        // User not found in Firestore, still try to delete Realtime Database data
-                        deleteRealtimeData(phoneKey, user, listener);
+                        // User not found in Firestore, still continue with other deletions
+                        deleteRealtimeDatabase(user, phoneKey, listener);
                     }
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Error finding user in Firestore", e);
-                    listener.onError(e);
+                    // Continue with deletion anyway
+                    deleteRealtimeDatabase(user, phoneKey, listener);
                 });
     }
 
     /**
-     * Delete data from Realtime Database
+     * Step 2: Delete data from Realtime Database
      */
-    private void deleteRealtimeData(String phoneKey, FirebaseUser user, OnCompleteListener listener) {
+    private void deleteRealtimeDatabase(FirebaseUser user, String phoneKey, OnCompleteListener listener) {
         rtDatabase.child("users").child(phoneKey)
                 .removeValue()
                 .addOnSuccessListener(aVoid -> {
-                    // Step 3: Delete Firebase Authentication account
+                    // Next delete Firebase Auth account
                     deleteAuthAccount(user, listener);
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Error deleting Realtime Database data", e);
-                    listener.onError(e);
+                    // Continue with deletion anyway
+                    deleteAuthAccount(user, listener);
                 });
     }
 
     /**
-     * Delete Firebase Authentication account
+     * Step 3: Delete Firebase Authentication account
      */
     private void deleteAuthAccount(FirebaseUser user, OnCompleteListener listener) {
-
-        if (user.getMetadata() != null &&
-                System.currentTimeMillis() - user.getMetadata().getLastSignInTimestamp() > 5 * 60 * 1000) {
-            // More than 5 minutes since last sign-in, require re-authentication
-            listener.onError(new Exception("Please sign in again before deleting your account"));
-            return;
-        }
-
         user.delete()
                 .addOnSuccessListener(aVoid -> {
-                    // Step 4: Clear all local data
-                    sessionManager.clearAllPreferences();
-
-                    // Step 5: Sign out
-                    FirebaseAuth.getInstance().signOut();
-
-                    // Success
-                    listener.onSuccess();
+                    // Success - clear all local data and sign out
+                    signOutAndClearData(listener);
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Error deleting Authentication account", e);
 
-                    // If authentication deletion fails, still try to sign out
-                    FirebaseAuth.getInstance().signOut();
-                    sessionManager.clearAllPreferences();
-
-                    listener.onError(e);
+                    // If this is a recent authentication error, notify the user
+                    if (e.getMessage() != null && e.getMessage().contains("requires recent authentication")) {
+                        listener.onError(new Exception("Please sign in again before deleting your account"));
+                    } else {
+                        // For other errors, still try to sign out
+                        signOutAndClearData(listener);
+                    }
                 });
+    }
+
+    /**
+     * Final step: Sign out and clear all local data
+     */
+    private void signOutAndClearData(OnCompleteListener listener) {
+        try {
+            // Clear all local data
+            sessionManager.clearAllPreferences();
+
+            // Sign out
+            FirebaseAuth.getInstance().signOut();
+
+            // Success
+            listener.onSuccess();
+        } catch (Exception e) {
+            Log.e(TAG, "Error in signout/cleanup", e);
+            listener.onError(e);
+        }
     }
 }

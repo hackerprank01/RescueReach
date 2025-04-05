@@ -1,25 +1,20 @@
 package com.rescuereach.service.backup;
 
-import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.Environment;
 import android.util.Log;
-import android.widget.Toast;
 
-import androidx.core.content.ContextCompat;
+import androidx.work.Constraints;
 import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.NetworkType;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.rescuereach.R;
 import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.service.auth.UserSessionManager;
-import com.rescuereach.service.background.BackupWorker;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -28,7 +23,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -105,17 +99,11 @@ public class LocalBackupManager {
                         JSONObject preferences = new JSONObject();
                         SharedPreferences prefs = context.getSharedPreferences(
                                 "RescueReachUserSession", Context.MODE_PRIVATE);
-                        for (Map.Entry<String, ?> entry : prefs.getAll().entrySet()) {
-                            if (entry.getValue() instanceof String) {
-                                preferences.put(entry.getKey(), (String) entry.getValue());
-                            } else if (entry.getValue() instanceof Boolean) {
-                                preferences.put(entry.getKey(), (Boolean) entry.getValue());
-                            } else if (entry.getValue() instanceof Integer) {
-                                preferences.put(entry.getKey(), (Integer) entry.getValue());
-                            } else if (entry.getValue() instanceof Long) {
-                                preferences.put(entry.getKey(), (Long) entry.getValue());
-                            } else if (entry.getValue() instanceof Float) {
-                                preferences.put(entry.getKey(), (Float) entry.getValue());
+
+                        Map<String, ?> allPrefs = prefs.getAll();
+                        for (Map.Entry<String, ?> entry : allPrefs.entrySet()) {
+                            if (entry.getValue() != null) {
+                                preferences.put(entry.getKey(), entry.getValue().toString());
                             }
                         }
 
@@ -158,88 +146,78 @@ public class LocalBackupManager {
                 });
     }
 
-    private boolean checkStoragePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // For Android 10+ we use scoped storage
-            return true;
-        } else {
-            return ContextCompat.checkSelfPermission(context,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
-        }
-    }
     /**
-     * Restore from backup file
-     */
-    public void restoreFromBackup(File backupFile, OnCompleteListener listener) {
-        try {
-            // Read backup file
-            FileInputStream fis = new FileInputStream(backupFile);
-            StringBuilder stringBuilder = new StringBuilder();
-            int content;
-            while ((content = fis.read()) != -1) {
-                stringBuilder.append((char) content);
-            }
-            fis.close();
-
-            // Parse JSON
-            JSONObject jsonData = new JSONObject(stringBuilder.toString());
-
-            // Restore preferences
-            JSONObject preferences = jsonData.getJSONObject("preferences");
-            SharedPreferences.Editor editor = context.getSharedPreferences(
-                    "RescueReachUserSession", Context.MODE_PRIVATE).edit();
-
-            // Clear existing preferences first
-            editor.clear();
-
-            // Only restore non-critical preferences (do not restore auth tokens)
-            for (int i = 0; i < preferences.names().length(); i++) {
-                String key = preferences.names().getString(i);
-                if (!key.contains("token") && !key.contains("auth")) {
-                    Object value = preferences.get(key);
-                    if (value instanceof String) {
-                        editor.putString(key, (String) value);
-                    } else if (value instanceof Boolean) {
-                        editor.putBoolean(key, (Boolean) value);
-                    } else if (value instanceof Integer) {
-                        editor.putInt(key, (Integer) value);
-                    } else if (value instanceof Long) {
-                        editor.putLong(key, (Long) value);
-                    } else if (value instanceof Float) {
-                        editor.putFloat(key, (Float) value);
-                    }
-                }
-            }
-            editor.apply();
-
-            // Success
-            listener.onSuccess();
-
-        } catch (IOException | JSONException e) {
-            Log.e(TAG, "Error restoring backup", e);
-            listener.onError(e);
-        }
-    }
-
-    /**
-     * Schedule automatic backups
+     * Schedule automatic backups using WorkManager (preferred over ScheduledExecutorService)
      */
     public void scheduleAutoBackup() {
-        PeriodicWorkRequest backupWork =
-                new PeriodicWorkRequest.Builder(BackupWorker.class, 24, TimeUnit.HOURS)
-                        .build();
+        // Cancel any existing scheduled backups first
+        cancelAutoBackup();
 
-        WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(
-                        "autoBackup",
-                        ExistingPeriodicWorkPolicy.REPLACE,
-                        backupWork);
+        try {
+            // Set up constraints - only when on unmetered network and not low battery
+            Constraints constraints = new Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.UNMETERED)
+                    .setRequiresBatteryNotLow(true)
+                    .build();
+
+            // Schedule backup to run once per day
+            PeriodicWorkRequest backupWorkRequest =
+                    new PeriodicWorkRequest.Builder(BackupWorkerCompat.class, 24, TimeUnit.HOURS)
+                            .setConstraints(constraints)
+                            .setInitialDelay(1, TimeUnit.HOURS) // Start after a delay
+                            .build();
+
+            // Enqueue the work request
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                    "auto_backup",
+                    ExistingPeriodicWorkPolicy.REPLACE,
+                    backupWorkRequest);
+
+            Log.d(TAG, "Auto backup scheduled successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Error scheduling auto backup", e);
+
+            // Fallback to using ScheduledExecutorService
+            fallbackScheduleAutoBackup();
+        }
+    }
+
+    /**
+     * Fallback scheduler using ScheduledExecutorService (if WorkManager fails)
+     */
+    private void fallbackScheduleAutoBackup() {
+        if (scheduler != null && !scheduler.isShutdown()) {
+            scheduler.shutdownNow();
+        }
+
+        scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleAtFixedRate(() -> {
+            createBackup(new OnCompleteListener() {
+                @Override
+                public void onSuccess() {
+                    Log.d(TAG, "Auto backup successful (fallback method)");
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    Log.e(TAG, "Auto backup failed (fallback method)", e);
+                }
+            });
+        }, 1, 24, TimeUnit.HOURS); // Start after 1 hour, repeat every 24 hours
     }
 
     /**
      * Cancel scheduled automatic backups
      */
     public void cancelAutoBackup() {
+        // Cancel WorkManager tasks
+        try {
+            WorkManager.getInstance(context).cancelUniqueWork("auto_backup");
+        } catch (Exception e) {
+            Log.e(TAG, "Error canceling WorkManager backup", e);
+        }
+
+        // Also cancel the fallback scheduler if running
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdownNow();
             scheduler = null;
@@ -284,5 +262,45 @@ public class LocalBackupManager {
         }
 
         return mostRecent;
+    }
+
+    /**
+     * Compatible BackupWorker implementation
+     */
+    public static class BackupWorkerCompat extends androidx.work.Worker {
+        private final Context context;
+
+        public BackupWorkerCompat(Context context, androidx.work.WorkerParameters params) {
+            super(context, params);
+            this.context = context;
+        }
+
+        @Override
+        public Result doWork() {
+            LocalBackupManager backupManager = new LocalBackupManager(context);
+
+            final boolean[] success = {false};
+            final Exception[] error = {null};
+
+            // Create synchronous version to work with WorkManager
+            backupManager.createBackup(new OnCompleteListener() {
+                @Override
+                public void onSuccess() {
+                    success[0] = true;
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    success[0] = false;
+                    error[0] = e;
+                }
+            });
+
+            if (success[0]) {
+                return Result.success();
+            } else {
+                return Result.failure();
+            }
+        }
     }
 }

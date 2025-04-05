@@ -122,7 +122,7 @@
                     <ImageView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:src="@drawable/ic_backup"
+                        android:src="@android:drawable/ic_menu_save"
                         app:tint="?attr/colorPrimary"
                         android:contentDescription="@string/backup_now" />
                 </LinearLayout>
@@ -178,9 +178,9 @@
                     <ImageView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:src="@drawable/ic_delete"
-                        app:tint="@color/warning_color"
-                        android:contentDescription="@string/clear_saved_data" />
+                        android:src="@android:drawable/ic_menu_delete"
+                        android:contentDescription="@string/clear_saved_data"
+                        app:tint="#FFA000" />
                 </LinearLayout>
 
                 <View
@@ -212,7 +212,7 @@
                             android:text="@string/delete_account"
                             android:textSize="16sp"
                             android:textAppearance="@style/TextAppearance.AppCompat.Body1"
-                            android:textColor="@color/danger_color" />
+                            android:textColor="#D32F2F" />
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -225,9 +225,9 @@
                     <ImageView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:src="@drawable/ic_delete_forever"
-                        app:tint="@color/danger_color"
-                        android:contentDescription="@string/delete_account" />
+                        android:src="@android:drawable/ic_delete"
+                        android:contentDescription="@string/delete_account"
+                        app:tint="#D32F2F" />
                 </LinearLayout>
 
             </LinearLayout>

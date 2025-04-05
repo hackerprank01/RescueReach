@@ -260,15 +260,27 @@ public class ProfileFragment extends Fragment {
         });
 
         // Settings click listeners
+        View view = getView();
+        if (view != null) {
+            // Use the view variable instead of requireView() which can crash
+            View privacySettings = view.findViewById(R.id.layout_privacy_settings);
+            if (privacySettings != null) {
+                privacySettings.setOnClickListener(v ->
+                        startActivity(new Intent(requireContext(), PrivacySettingsActivity.class)));
+            }
 
-        requireView().findViewById(R.id.layout_privacy_settings).setOnClickListener(v ->
-                startActivity(new Intent(requireContext(), PrivacySettingsActivity.class)));
+            View appearanceSettings = view.findViewById(R.id.layout_appearance_settings);
+            if (appearanceSettings != null) {
+                appearanceSettings.setOnClickListener(v ->
+                        startActivity(new Intent(requireContext(), AppearanceSettingsActivity.class)));
+            }
 
-        requireView().findViewById(R.id.layout_appearance_settings).setOnClickListener(v ->
-                startActivity(new Intent(requireContext(), AppearanceSettingsActivity.class)));
-
-        requireView().findViewById(R.id.layout_data_management).setOnClickListener(v ->
-                startActivity(new Intent(requireContext(), DataManagementActivity.class)));
+            View dataManagement = view.findViewById(R.id.layout_data_management);
+            if (dataManagement != null) {
+                dataManagement.setOnClickListener(v ->
+                        startActivity(new Intent(requireContext(), DataManagementActivity.class)));
+            }
+        }
     }
 
     private void loadUserDataFromFirebase() {
