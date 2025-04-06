@@ -3,6 +3,7 @@ package com.rescuereach;
 import android.annotation.SuppressLint;
 import android.app.Application;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.util.Log;
 
@@ -18,6 +19,7 @@ import com.google.firebase.FirebaseApp;
 import com.rescuereach.service.appearance.AppearanceManager;
 import com.rescuereach.service.auth.UserSessionManager;
 
+import java.io.File;
 import java.util.concurrent.TimeUnit;
 
 public class RescueReachApplication extends Application {
@@ -26,11 +28,17 @@ public class RescueReachApplication extends Application {
 
     @Override
     public void onCreate() {
+        // Set up error handling before initializing anything else
+        setupCrashRecovery();
+
+        // Fix Google Play Services
+        fixPlayServices();
+
         super.onCreate();
 
         try {
-            // Initialize Firebase
-            FirebaseApp.initializeApp(this);
+            // Initialize Firebase with error handling
+            initializeFirebaseSafely();
 
             // Initialize appearance settings
             AppearanceManager.getInstance(this).applyCurrentTheme();
@@ -42,6 +50,96 @@ public class RescueReachApplication extends Application {
         } catch (Exception e) {
             // Catch any initialization errors to prevent app crash
             Log.e(TAG, "Error during application initialization", e);
+        }
+    }
+
+    private void setupCrashRecovery() {
+        // Set up a handler for uncaught exceptions to recover from Firestore crashes
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            try {
+                Log.e(TAG, "Uncaught exception:", throwable);
+
+                // Check if this is a Firestore panic
+                if (throwable instanceof RuntimeException &&
+                        throwable.getMessage() != null &&
+                        throwable.getMessage().contains("Internal error in Cloud Firestore")) {
+
+                    // Clear Firestore state to recover
+                    try {
+                        SharedPreferences prefs = getSharedPreferences("auth_state", MODE_PRIVATE);
+                        prefs.edit().putBoolean("firestore_error_recovery", true).apply();
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error saving recovery state", e);
+                    }
+                }
+
+                // Pass to the default handler
+                if (Thread.getDefaultUncaughtExceptionHandler() != null) {
+                    Thread.getDefaultUncaughtExceptionHandler().uncaughtException(thread, throwable);
+                }
+            } catch (Exception e) {
+                // Last resort if our error handler itself crashes
+                Log.e(TAG, "Error in crash handler", e);
+            }
+        });
+    }
+
+    private void initializeFirebaseSafely() {
+        try {
+            // Check if we've had a previous Firestore crash
+            SharedPreferences prefs = getSharedPreferences("auth_state", MODE_PRIVATE);
+            boolean needsRecovery = prefs.getBoolean("firestore_error_recovery", false);
+
+            if (needsRecovery) {
+                // Clear the flag
+                prefs.edit().putBoolean("firestore_error_recovery", false).apply();
+
+                // Clear Firebase caches to ensure fresh state
+                try {
+                    // Delete the Firebase persistence directory
+                    File cacheDir = new File(getCacheDir(), "firebase-firestore");
+                    if (cacheDir.exists()) {
+                        deleteDirectory(cacheDir);
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error clearing Firebase cache", e);
+                }
+
+                // Wait a moment for cleanup
+                Thread.sleep(300);
+            }
+
+            // Now initialize Firebase
+            FirebaseApp.initializeApp(this);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Error initializing Firebase", e);
+
+            // Try again with fallback approach
+            try {
+                FirebaseApp.initializeApp(this);
+            } catch (Exception ex) {
+                Log.e(TAG, "Firebase initialization failed again", ex);
+            }
+        }
+    }
+
+    private boolean deleteDirectory(File dir) {
+        if (dir != null && dir.isDirectory()) {
+            String[] children = dir.list();
+            if (children != null) {
+                for (String child : children) {
+                    boolean success = deleteDirectory(new File(dir, child));
+                    if (!success) {
+                        return false;
+                    }
+                }
+            }
+            return dir.delete();
+        } else if (dir != null && dir.isFile()) {
+            return dir.delete();
+        } else {
+            return false;
         }
     }
 

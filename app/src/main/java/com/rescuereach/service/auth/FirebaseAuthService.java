@@ -61,62 +61,76 @@ public class FirebaseAuthService implements AuthService {
 
 // Replace the signOut method in FirebaseAuthService.java
 
-    @Override
     public void signOut(AuthCallback callback) {
         try {
-            // First sign out from Firebase Auth
-            firebaseAuth.signOut();
+            // *** IMPORTANT: DO NOT terminate Firestore - this is causing crashes ***
+            // Instead, sign out more carefully, preserving Firestore integrity
 
-            // Use a background thread to avoid blocking the UI
+            // Get the FirebaseAuth instance
+            final FirebaseAuth auth = FirebaseAuth.getInstance();
+
+            // Disable the auth state listener temporarily to prevent race conditions
+            if (firebaseAuthStateListener != null) {
+                try {
+                    auth.removeAuthStateListener(firebaseAuthStateListener);
+                } catch (Exception e) {
+                    Log.e("FirebaseAuthService", "Error removing auth listener", e);
+                }
+            }
+
+            // Use a background thread for cleanup operations
             new Thread(() -> {
                 try {
-                    // Clear any locally cached Firestore data
+                    // Clear cached data without terminating connections
                     try {
-                        FirebaseFirestore.getInstance().terminate();
-                    } catch (Exception e) {
-                        Log.e("FirebaseAuthService", "Error terminating Firestore", e);
-                    }
+                        // For Firestore, just clear cache, don't terminate
+                        FirebaseFirestore.getInstance().clearPersistence()
+                                .addOnSuccessListener(aVoid -> Log.d("FirebaseAuthService", "Firestore persistence cleared"))
+                                .addOnFailureListener(e -> Log.e("FirebaseAuthService", "Error clearing Firestore persistence", e));
 
-                    // Clear Firebase Database cache
-                    try {
+                        // For Realtime Database, purge writes without closing
                         FirebaseDatabase.getInstance().purgeOutstandingWrites();
                     } catch (Exception e) {
-                        Log.e("FirebaseAuthService", "Error purging database writes", e);
+                        Log.e("FirebaseAuthService", "Error clearing Firebase cache", e);
                     }
 
-                    // Small delay to ensure operations complete
-                    Thread.sleep(500);
+                    // Wait a moment for operations to complete
+                    Thread.sleep(300);
 
-                    // Notify on main thread
+                    // Finally sign out on the main thread to ensure proper UI updates
                     new Handler(Looper.getMainLooper()).post(() -> {
                         try {
+                            // Actually sign out from Firebase Auth
+                            auth.signOut();
+
+                            // Restore the auth state listener
+                            if (firebaseAuthStateListener != null) {
+                                auth.addAuthStateListener(firebaseAuthStateListener);
+                            }
+
+                            // Notify successful signout
                             callback.onSuccess();
                         } catch (Exception e) {
-                            Log.e("FirebaseAuthService", "Error in callback", e);
+                            Log.e("FirebaseAuthService", "Error in final signout step", e);
+                            callback.onError(e);
                         }
                     });
                 } catch (Exception e) {
                     Log.e("FirebaseAuthService", "Error during sign out cleanup", e);
 
-                    // Notify on main thread even if there was an error
+                    // Ensure callback is always called, even on error
                     new Handler(Looper.getMainLooper()).post(() -> {
                         try {
-                            callback.onSuccess();
+                            callback.onError(e);
                         } catch (Exception ex) {
-                            Log.e("FirebaseAuthService", "Error in callback", ex);
+                            Log.e("FirebaseAuthService", "Error in error callback", ex);
                         }
                     });
                 }
             }).start();
         } catch (Exception e) {
-            Log.e("FirebaseAuthService", "Error during sign out", e);
-
-            // Always call callback
-            try {
-                callback.onSuccess();
-            } catch (Exception ex) {
-                Log.e("FirebaseAuthService", "Error in callback", ex);
-            }
+            Log.e("FirebaseAuthService", "Error initiating sign out", e);
+            callback.onError(e);
         }
     }
 

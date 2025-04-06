@@ -350,7 +350,7 @@
         <string name="export_failed">Export failed: %1$s</string>
         <string name="clear_data_failed">Failed to clear data: %1$s</string>
         <string name="final_confirmation">Final Confirmation</string>
-        <string name="app_version_confirmation">App Version: %  s</string>
+        <string name="app_version_confirmation">App Version: %s</string>
         <string name="delete_confirmation_prompt">To confirm deletion, please type \"DELETE\" in all caps:</string>
         <string name="type_delete">Type DELETE to confirm</string>
         <string name="confirm_delete">Confirm Delete</string>

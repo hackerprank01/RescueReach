@@ -94,6 +94,9 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private static final int SMS_PERMISSION_REQUEST_CODE = 123;
     private BroadcastReceiver smsBroadcastReceiver;
 
+    private Handler timeoutHandler;
+    private boolean loadingActive = false;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -675,6 +678,109 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
                 Toast.makeText(PhoneAuthActivity.this, errorMessage, Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    private void verifyPhoneNumberWithCode(String verificationId, String code) {
+        // Enable loading state
+        showLoading(true);
+
+        // Disable the button to prevent multiple clicks
+        verifyCodeButton.setEnabled(false);
+
+        // Clear any previous timeout handler
+        if (timeoutHandler != null) {
+            timeoutHandler.removeCallbacksAndMessages(null);
+        }
+
+        // Create a timeout handler to prevent app freeze if verification takes too long
+        timeoutHandler = new Handler();
+        timeoutHandler.postDelayed(() -> {
+            // If verification takes too long, show an error and re-enable the button
+            if (loadingActive) {
+                showLoading(false);
+                verifyCodeButton.setEnabled(true);
+                Toast.makeText(PhoneAuthActivity.this,
+                        "Verification timed out. Please try again.", Toast.LENGTH_LONG).show();
+            }
+        }, 30000); // 30 second timeout
+
+        try {
+            // Mark potentially failing operation
+            getSharedPreferences("auth_state", MODE_PRIVATE)
+                    .edit().putBoolean("verification_in_progress", true).apply();
+
+            // Verify the code with Firebase
+            authService.verifyPhoneWithCode(verificationId, code, new AuthService.AuthCallback() {
+                @Override
+                public void onSuccess() {
+                    // Clear the timeout handler
+                    if (timeoutHandler != null) {
+                        timeoutHandler.removeCallbacksAndMessages(null);
+                    }
+
+                    // Mark verification as complete
+                    getSharedPreferences("auth_state", MODE_PRIVATE)
+                            .edit().putBoolean("verification_in_progress", false).apply();
+
+                    // Handle successful verification
+                    String phoneNumber = phoneEditText.getText().toString();
+                    sessionManager.saveUserPhoneNumber(phoneNumber);
+
+                    // Disable loading state
+                    showLoading(false);
+
+                    // Navigate with a slight delay to ensure UI thread is not overloaded
+                    new Handler().postDelayed(() -> {
+                        if (isDestroyed() || isFinishing()) return;
+
+                        // Navigate to appropriate screen
+                        if (sessionManager.isProfileComplete()) {
+                            startActivity(new Intent(PhoneAuthActivity.this, CitizenMainActivity.class));
+                        } else {
+                            startActivity(new Intent(PhoneAuthActivity.this, ProfileCompletionActivity.class));
+                        }
+                        finish();
+                    }, 300);
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    // Clear the timeout handler
+                    if (timeoutHandler != null) {
+                        timeoutHandler.removeCallbacksAndMessages(null);
+                    }
+
+                    // Mark verification as complete even on error
+                    getSharedPreferences("auth_state", MODE_PRIVATE)
+                            .edit().putBoolean("verification_in_progress", false).apply();
+
+                    // Handle verification error
+                    showLoading(false);
+                    verifyCodeButton.setEnabled(true);
+
+                    // Show specific error message based on exception type
+                    if (e instanceof FirebaseAuthInvalidCredentialsException) {
+                        Toast.makeText(PhoneAuthActivity.this,
+                                "Invalid verification code. Please try again.", Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(PhoneAuthActivity.this,
+                                "Verification failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
+        } catch (Exception e) {
+            // Handle any unexpected exceptions during verification
+            if (timeoutHandler != null) {
+                timeoutHandler.removeCallbacksAndMessages(null);
+            }
+
+            getSharedPreferences("auth_state", MODE_PRIVATE)
+                    .edit().putBoolean("verification_in_progress", false).apply();
+
+            showLoading(false);
+            verifyCodeButton.setEnabled(true);
+            Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void startNetworkTimeout(Runnable timeoutAction) {

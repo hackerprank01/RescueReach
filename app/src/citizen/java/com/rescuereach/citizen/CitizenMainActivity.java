@@ -54,6 +54,8 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.rescuereach.R;
 import com.rescuereach.citizen.fragments.PlaceholderFragment;
 import com.rescuereach.citizen.fragments.ProfileFragment;
+import com.rescuereach.service.auth.AuthService;
+import com.rescuereach.service.auth.AuthServiceProvider;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.util.LocationManager;
 
@@ -861,57 +863,70 @@ public class CitizenMainActivity extends AppCompatActivity
         progressDialog.setCancelable(false);
         progressDialog.show();
 
-        // Create a task to perform logout operations
-        new Thread(() -> {
-            try {
-                // Sign out from Firebase Auth
-                FirebaseAuth.getInstance().signOut();
+        // Get auth service for safer logout
+        AuthService authService = AuthServiceProvider.getInstance().getAuthService();
 
-                // Enhanced session clearing
-                UserSessionManager userSession = UserSessionManager.getInstance(this);
+        // Get user session manager instance
+        UserSessionManager userSession = UserSessionManager.getInstance(this);
 
-                // Clear all session preferences before clearing session
-                userSession.clearAllPreferences(); // Add this method to UserSessionManager
+        // First prepare intent for next activity BEFORE signout
+        final Intent authIntent = new Intent(this, PhoneAuthActivity.class);
+        authIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
 
-                // Clear user session data
-                userSession.clearSession();
+        // Sign out from Firebase Auth with our safer method
+        authService.signOut(new AuthService.AuthCallback() {
+            @Override
+            public void onSuccess() {
+                // Now clear session AFTER Firebase signout succeeds
+                try {
+                    // Clear session data
+                    userSession.clearSession();
 
-                // Clear application cache and WebView data if any
-                clearApplicationData();
-
-                // Wait briefly to ensure operations complete
-                Thread.sleep(500);
-
-                // Update UI on main thread
-                runOnUiThread(() -> {
                     // Dismiss progress dialog
                     if (progressDialog.isShowing()) {
                         progressDialog.dismiss();
                     }
 
                     // Show success message
-                    Toast.makeText(this, R.string.logout_success, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(CitizenMainActivity.this,
+                            R.string.logout_success, Toast.LENGTH_SHORT).show();
 
-                    // Navigate to authentication screen
-                    navigateToAuthScreen();
-                });
-            } catch (Exception e) {
-                Log.e(TAG, "Error during logout: " + e.getMessage());
+                    // Wait a moment before navigating to ensure UI is ready
+                    new Handler().postDelayed(() -> {
+                        // Start PhoneAuthActivity
+                        startActivity(authIntent);
 
-                // Update UI on main thread
-                runOnUiThread(() -> {
-                    // Dismiss progress dialog
-                    if (progressDialog.isShowing()) {
-                        progressDialog.dismiss();
-                    }
+                        // Apply transition animation
+                        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
 
-                    // Show error message
-                    Toast.makeText(this,
-                            getString(R.string.logout_error, e.getMessage()),
-                            Toast.LENGTH_LONG).show();
-                });
+                        // Finish the current activity
+                        finish();
+                    }, 200);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error during logout cleanup", e);
+                    handleLogoutError(progressDialog, e);
+                }
             }
-        }).start();
+
+            @Override
+            public void onError(Exception e) {
+                handleLogoutError(progressDialog, e);
+            }
+        });
+    }
+
+    private void handleLogoutError(ProgressDialog progressDialog, Exception e) {
+        Log.e(TAG, "Error during logout: " + e.getMessage(), e);
+
+        // Dismiss progress dialog
+        if (progressDialog.isShowing()) {
+            progressDialog.dismiss();
+        }
+
+        // Show error message
+        Toast.makeText(CitizenMainActivity.this,
+                getString(R.string.logout_error, e.getMessage()),
+                Toast.LENGTH_LONG).show();
     }
 
     // Add this method to clear application cache
