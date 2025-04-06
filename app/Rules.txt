@@ -1,0 +1,100 @@
+Existing Firestore Security Rules: 
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{phoneNumber} {
+      allow read, write: if request.auth != null && 
+                          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+
+      allow read, update, delete: if request.auth != null && 
+                                   request.auth.uid == resource.data.userId;
+
+      allow create: if request.auth != null;
+    }
+
+    match /incidents/{incidentId} {
+      allow read, write, delete: if request.auth != null &&
+                                  get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+
+      allow update: if request.auth != null && 
+                     (resource.data.assignedTo == request.auth.uid || 
+                      get(/databases/$(database)/documents/responders/$(request.auth.uid)).data != null);
+
+      allow read: if request.auth != null;
+    }
+
+    match /responders/{responderId} {
+      allow read, write, delete: if request.auth != null &&
+                                  get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+
+      allow read, write: if request.auth != null && request.auth.uid == responderId;
+
+      allow read: if request.auth != null;
+    }
+
+    match /volunteers/{volunteerId} {
+      allow read, write, delete: if request.auth != null &&
+                                  get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+
+      allow read, write: if request.auth != null && request.auth.uid == volunteerId;
+
+      allow read: if request.auth != null;
+    }
+  }
+}
+--------------------------------------------------------
+Existing Realtime Database Security Rules:
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+
+    "users": {
+      "$phoneKey": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.uid == $phoneKey || data.child('isAdmin').val() == true)",
+
+        "status": {
+          ".write": "auth != null && (auth.uid == $phoneKey || data.child('isAdmin').val() == true)"
+        }
+      }
+    },
+
+    "incidents": {
+      ".read": "auth != null",
+      ".write": "auth != null && (data.child('reportedBy').val() == auth.uid || root.child('users').child(auth.uid).child('isAdmin').val() == true)",
+
+      "$incidentId": {
+        "status": {
+          ".write": "auth != null && (data.child('reportedBy').val() == auth.uid || root.child('users').child(auth.uid).child('isAdmin').val() == true)"
+        }
+      }
+    },
+
+    "responders": {
+      ".read": "auth != null",
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('isAdmin').val() == true)",
+
+        "status": {
+          ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('isAdmin').val() == true)"
+        }
+      }
+    },
+
+    "volunteers": {
+      ".read": "auth != null",
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('isAdmin').val() == true)",
+
+        "status": {
+          ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('isAdmin').val() == true)"
+        }
+      }
+    }
+  }
+}
