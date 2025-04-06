@@ -52,6 +52,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.rescuereach.R;
+import com.rescuereach.citizen.fragments.HomeFragment;
 import com.rescuereach.citizen.fragments.PlaceholderFragment;
 import com.rescuereach.citizen.fragments.ProfileFragment;
 import com.rescuereach.service.auth.AuthService;
@@ -762,10 +763,7 @@ public class CitizenMainActivity extends AppCompatActivity
 
         if (fragmentId == R.id.nav_home) {
             title = getString(R.string.menu_home);
-            fragment = PlaceholderFragment.newInstance(
-                    title,
-                    getString(R.string.placeholder_home_description),
-                    R.drawable.ic_home);
+            fragment = new HomeFragment();
         } else if (fragmentId == R.id.nav_my_reports) {
             // Check if user is volunteer before allowing navigation
             if (!sessionManager.isVolunteer()) {

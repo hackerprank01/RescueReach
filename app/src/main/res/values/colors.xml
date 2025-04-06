@@ -6,6 +6,23 @@
     <color name="high_contrast_text">#FFFFFF</color>
     <color name="high_contrast_background">#000000</color>
 
+
+    <color name="police_blue">#2979FF</color>
+    <color name="fire_orange">#FF9800</color>
+    <color name="medical_red">#F44336</color>
+
+    <!-- Status Colors -->
+    <color name="green_success">#4CAF50</color>
+    <color name="amber_warning">#FFC107</color>
+    <color name="red_error">#F44336</color>
+
+    <!-- Alert Colors -->
+    <color name="alert_amber">#FF9800</color>
+    <color name="alert_red">#F44336</color>
+
+    <!-- UI Elements -->
+    <color name="stroke_color">#E0E0E0</color>
+
     <!-- Data Management Colors -->
     <color name="warning_color">#FFA000</color>
     <color name="danger_color">#D32F2F</color>

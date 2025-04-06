@@ -367,6 +367,24 @@
     <string name="grant_permission">Grant Permission</string>
     <string name="notification_permission_denied">Notifications disabled. You won\'t receive emergency alerts.</string>
 
+    <!-- SOS Confirmation Dialog -->
+    <string name="confirm_police_emergency">Police Emergency</string>
+    <string name="confirm_fire_emergency">Fire Emergency</string>
+    <string name="confirm_medical_emergency">Medical Emergency</string>
+    <string name="sos_confirmation_message">Sending an emergency alert will notify nearby responders and your emergency contact.</string>
+    <string name="police_sos_description">Law enforcement will be notified of your location and situation.</string>
+    <string name="fire_sos_description">Fire department will be notified of your location and situation.</string>
+    <string name="medical_sos_description">Medical services will be notified of your location and situation.</string>
+    <string name="send_now">Send Now</string>
+
+    <!-- SOS Status Messages -->
+    <string name="sending_emergency_alert">Sending Emergency Alert</string>
+    <string name="please_wait">Please wait while we process your emergency alert…</string>
+    <string name="emergency_alert_sent">Emergency Alert Sent</string>
+    <string name="emergency_alert_success_message">Your emergency has been reported. Help is on the way. Stay safe and keep your phone accessible.</string>
+    <string name="emergency_alert_failed">Emergency Alert Failed</string>
+    <string name="emergency_alert_error_message">Unable to send emergency alert: %1$s. Please try again or call emergency services directly.</string>
+
 
 
 </resources>

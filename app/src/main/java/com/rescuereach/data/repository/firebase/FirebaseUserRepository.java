@@ -381,7 +381,7 @@ public class FirebaseUserRepository implements UserRepository {
 
         // Add new fields
         if (user.getDateOfBirth() != null) {
-            userBasicInfo.put("dateOfBirth", user.getDateOfBirth());
+            userBasicInfo.put("dateOfBirth", dateFormatter.format(user.getDateOfBirth()));
         }
         if (user.getGender() != null) {
             userBasicInfo.put("gender", user.getGender());
