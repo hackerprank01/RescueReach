@@ -402,7 +402,6 @@
     <string name="emergency_sms_failed">Failed to send emergency SMS</string>
     <string name="emergency_sms_failed_with_reason">SMS failed: %1$s</string>
     <string name="sending_emergency_sms">Sending emergency SMS…</string>
-    <string name="waiting_for_location">Waiting for location…</string>
 
     <!-- SOS Confirmation Dialog -->
     <string name="confirm_police_emergency">Police Emergency</string>

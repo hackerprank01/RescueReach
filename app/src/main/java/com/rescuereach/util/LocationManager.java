@@ -3,6 +3,8 @@ package com.rescuereach.util;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
@@ -23,7 +25,10 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import com.rescuereach.service.auth.UserSessionManager;
 
+import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -70,6 +75,28 @@ public class LocationManager {
     private boolean isBackgroundMode = false;
     private boolean isEmergencyMode = false;
     private boolean isLowBatteryMode = false;
+
+    public String getAddressFromLocation(Location location) throws IOException {
+        Geocoder geocoder = new Geocoder(context, Locale.getDefault());
+        List<Address> addresses = geocoder.getFromLocation(location.getLatitude(), location.getLongitude(), 1);
+        if (addresses != null && !addresses.isEmpty()) {
+            Address address = addresses.get(0);
+            StringBuilder addressString = new StringBuilder();
+            addressString.append(address.getAddressLine(0)); // Full address
+            if (address.getLocality() != null) {
+                addressString.append(", ").append(address.getLocality()); // City
+            }
+            if (address.getAdminArea() != null) {
+                addressString.append(", ").append(address.getAdminArea()); // State
+            }
+            if (address.getPostalCode() != null) {
+                addressString.append(", ").append(address.getPostalCode()); // Postal code
+            }
+            return addressString.toString();
+        } else {
+            return "Unknown address";
+        }
+    }
 
     // Interface for location updates
     public interface LocationUpdateListener {
