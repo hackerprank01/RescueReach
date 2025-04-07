@@ -20,6 +20,8 @@ import android.os.CountDownTimer;
 import android.view.LayoutInflater;
 import android.widget.Button;
 import android.widget.TextView;
+
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.rescuereach.data.model.SOSReport;
 import com.rescuereach.service.emergency.SOSManager;
 import androidx.core.content.ContextCompat;
@@ -38,6 +40,7 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.rescuereach.R;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.util.LocationManager;
+import com.rescuereach.util.NetworkMonitor;
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
@@ -69,12 +72,15 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private ImageView btnAlertsZoomIn;
     private ImageView btnAlertsZoomOut;
     private String currentSosId;
+    private NetworkMonitor networkMonitor;
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // Initialize services
         sessionManager = UserSessionManager.getInstance(requireContext());
         locationManager = new LocationManager(requireContext());
+        // Initialize network monitor
+        networkMonitor = NetworkMonitor.getInstance(requireContext());
     }
 
     @Override
@@ -97,11 +103,63 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         // Set up click listeners
         setupClickListeners();
 
+        // Setup network monitoring
+        setupNetworkMonitoring();
+        
         // Update UI with status information
         updateStatusInfo();
 
         // Load alerts (none for now, just UI setup)
         setupAlertsSection();
+    }
+
+    private void setupNetworkMonitoring() {
+        // Set initial status
+        updateNetworkStatusUI(networkMonitor.isConnected());
+
+        // Observe network state changes
+        networkMonitor.getConnectionStatus().observe(getViewLifecycleOwner(), isConnected -> {
+            updateNetworkStatusUI(isConnected);
+        });
+
+        // Observe connection type changes
+        networkMonitor.getConnectionType().observe(getViewLifecycleOwner(), connectionType -> {
+            updateConnectionTypeUI(connectionType);
+        });
+    }
+
+    private void updateConnectionTypeUI(NetworkMonitor.ConnectionType connectionType) {
+        String statusText;
+
+        switch (connectionType) {
+            case WIFI:
+                statusText = getString(R.string.status_wifi);
+                break;
+            case CELLULAR:
+                statusText = getString(R.string.status_cellular);
+                break;
+            case NONE:
+                statusText = getString(R.string.status_offline);
+                break;
+            default:
+                statusText = getString(R.string.status_online);
+                break;
+        }
+
+        // Only update text if we're online
+        if (connectionType != NetworkMonitor.ConnectionType.NONE) {
+            networkStatus.setText(statusText);
+        }
+    }
+
+    private void updateNetworkStatusUI(boolean isConnected) {
+        if (isConnected) {
+            networkStatus.setText(R.string.status_online);
+            networkStatus.setBackgroundResource(R.drawable.badge_green);
+        } else {
+            networkStatus.setText(R.string.status_offline);
+            networkStatus.setBackgroundResource(R.drawable.badge_red);
+        }
     }
 
     private void initUI(View view) {
@@ -296,10 +354,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
 
             @Override
-            public void onSOSSuccess(String sosId) {
-                // Store SOS ID for status updates
-                currentSosId = sosId;
-
+            public void onSOSSuccess() {
                 // Dismiss loading dialog
                 if (loadingDialog.isShowing()) {
                     loadingDialog.dismiss();
@@ -311,7 +366,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
             @Override
             public void onSOSFailure(String errorMessage) {
-                // Dismiss loading dialog
+                // Handle SOS failure
                 if (loadingDialog.isShowing()) {
                     loadingDialog.dismiss();
                 }

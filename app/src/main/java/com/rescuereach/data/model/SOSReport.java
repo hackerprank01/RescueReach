@@ -1,70 +1,68 @@
 package com.rescuereach.data.model;
 
-import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.GeoPoint;
-
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
+/**
+ * Data model representing an emergency SOS report
+ */
 public class SOSReport {
+    // Category constants
     public static final String CATEGORY_POLICE = "police";
     public static final String CATEGORY_FIRE = "fire";
     public static final String CATEGORY_MEDICAL = "medical";
 
+    // Status constants
+    public static final String STATUS_PENDING = "pending";
+    public static final String STATUS_RECEIVED = "received";
+    public static final String STATUS_RESPONDING = "responding";
+    public static final String STATUS_RESOLVED = "resolved";
+
+    // SMS Status constants
+    public static final String SMS_STATUS_PENDING = "pending";
+    public static final String SMS_STATUS_SENT = "sent";
+    public static final String SMS_STATUS_DELIVERED = "delivered";
+    public static final String SMS_STATUS_FAILED = "failed";
+
     private String id;
-    private String userId;
-    private String phoneNumber;
-    private String emergencyContact;
+    private String userId;  // Phone number
+    private String userName;
     private String category;
     private GeoPoint location;
-    private double latitude;
-    private double longitude;
-    private Timestamp timestamp;
-    private String status;
-    private String deviceInfo;
-    private boolean isOffline;
     private String address;
+    private Map<String, Object> deviceInfo;
+    private int batteryLevel;
+    private String status;
+    private String smsStatus;
+    private Date createdAt;
+    private Date updatedAt;
 
-    // Default constructor required for Firestore
     public SOSReport() {
+        // Required empty constructor for Firestore
+        this.id = UUID.randomUUID().toString();
+        this.createdAt = new Date();
+        this.updatedAt = new Date();
+        this.status = STATUS_PENDING;
+        this.smsStatus = SMS_STATUS_PENDING;
+        this.deviceInfo = new HashMap<>();
     }
 
-    public SOSReport(String userId, String phoneNumber, String emergencyContact,
-                     String category, double latitude, double longitude,
-                     Timestamp timestamp, String deviceInfo, boolean isOffline, String address) {
+    public SOSReport(String userId, String userName, String category, GeoPoint location,
+                     String address, Map<String, Object> deviceInfo, int batteryLevel) {
+        this();
         this.userId = userId;
-        this.phoneNumber = phoneNumber;
-        this.emergencyContact = emergencyContact;
+        this.userName = userName;
         this.category = category;
-        this.latitude = latitude;
-        this.longitude = longitude;
-        this.location = new GeoPoint(latitude, longitude);
-        this.timestamp = timestamp;
-        this.status = "pending";
-        this.deviceInfo = deviceInfo;
-        this.isOffline = isOffline;
+        this.location = location;
         this.address = address;
+        this.deviceInfo = deviceInfo;
+        this.batteryLevel = batteryLevel;
     }
 
-    // Convert to Map for Firestore
-    public Map<String, Object> toMap() {
-        Map<String, Object> map = new HashMap<>();
-        map.put("userId", userId);
-        map.put("phoneNumber", phoneNumber);
-        map.put("emergencyContact", emergencyContact);
-        map.put("category", category);
-        map.put("location", new GeoPoint(latitude, longitude));
-        map.put("latitude", latitude);
-        map.put("longitude", longitude);
-        map.put("timestamp", timestamp);
-        map.put("status", status);
-        map.put("deviceInfo", deviceInfo);
-        map.put("isOffline", isOffline);
-        map.put("address", address);
-        return map;
-    }
-
-    // Getters and Setters
+    // Getters and setters
     public String getId() {
         return id;
     }
@@ -81,20 +79,12 @@ public class SOSReport {
         this.userId = userId;
     }
 
-    public String getPhoneNumber() {
-        return phoneNumber;
+    public String getUserName() {
+        return userName;
     }
 
-    public void setPhoneNumber(String phoneNumber) {
-        this.phoneNumber = phoneNumber;
-    }
-
-    public String getEmergencyContact() {
-        return emergencyContact;
-    }
-
-    public void setEmergencyContact(String emergencyContact) {
-        this.emergencyContact = emergencyContact;
+    public void setUserName(String userName) {
+        this.userName = userName;
     }
 
     public String getCategory() {
@@ -111,64 +101,6 @@ public class SOSReport {
 
     public void setLocation(GeoPoint location) {
         this.location = location;
-        if (location != null) {
-            this.latitude = location.getLatitude();
-            this.longitude = location.getLongitude();
-        }
-    }
-
-    public double getLatitude() {
-        return latitude;
-    }
-
-    public void setLatitude(double latitude) {
-        this.latitude = latitude;
-        updateGeoPoint();
-    }
-
-    public double getLongitude() {
-        return longitude;
-    }
-
-    public void setLongitude(double longitude) {
-        this.longitude = longitude;
-        updateGeoPoint();
-    }
-
-    private void updateGeoPoint() {
-        this.location = new GeoPoint(latitude, longitude);
-    }
-
-    public Timestamp getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(Timestamp timestamp) {
-        this.timestamp = timestamp;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public String getDeviceInfo() {
-        return deviceInfo;
-    }
-
-    public void setDeviceInfo(String deviceInfo) {
-        this.deviceInfo = deviceInfo;
-    }
-
-    public boolean isOffline() {
-        return isOffline;
-    }
-
-    public void setOffline(boolean offline) {
-        isOffline = offline;
     }
 
     public String getAddress() {
@@ -177,5 +109,75 @@ public class SOSReport {
 
     public void setAddress(String address) {
         this.address = address;
+    }
+
+    public Map<String, Object> getDeviceInfo() {
+        return deviceInfo;
+    }
+
+    public void setDeviceInfo(Map<String, Object> deviceInfo) {
+        this.deviceInfo = deviceInfo;
+    }
+
+    public int getBatteryLevel() {
+        return batteryLevel;
+    }
+
+    public void setBatteryLevel(int batteryLevel) {
+        this.batteryLevel = batteryLevel;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+        this.updatedAt = new Date();
+    }
+
+    public String getSmsStatus() {
+        return smsStatus;
+    }
+
+    public void setSmsStatus(String smsStatus) {
+        this.smsStatus = smsStatus;
+        this.updatedAt = new Date();
+    }
+
+    public Date getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Date createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Date getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(Date updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    /**
+     * Convert SOSReport to a Map for Firestore storage
+     */
+    public Map<String, Object> toMap() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", id);
+        map.put("userId", userId);
+        map.put("userName", userName);
+        map.put("category", category);
+        map.put("location", location);
+        map.put("address", address);
+        map.put("deviceInfo", deviceInfo);
+        map.put("batteryLevel", batteryLevel);
+        map.put("status", status);
+        map.put("smsStatus", smsStatus);
+        map.put("createdAt", createdAt);
+        map.put("updatedAt", updatedAt);
+        return map;
     }
 }

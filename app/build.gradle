@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId "com.rescuereach"
-        minSdk 23
+        minSdk 25
         targetSdk 35
         versionCode 1
         versionName "1.0"
@@ -88,6 +88,8 @@ dependencies {
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
 
+    implementation 'com.google.firebase:firebase-functions:20.1.0'
+
     // Other dependencies we'll need
     implementation 'com.github.bumptech.glide:glide:4.15.1'
     implementation 'com.google.android.gms:play-services-location:21.0.1'
@@ -115,4 +117,6 @@ dependencies {
     implementation 'com.google.android.libraries.places:places:3.1.0'
 
     implementation 'androidx.work:work-runtime:2.8.1'
+
+    
 }

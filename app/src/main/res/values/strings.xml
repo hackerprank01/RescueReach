@@ -368,31 +368,49 @@
     <string name="notification_permission_denied">Notifications disabled. You won\'t receive emergency alerts.</string>
 
     <!-- SOS Confirmation Dialog -->
-    <string name="confirm_police_emergency">Police Emergency</string>
-    <string name="confirm_fire_emergency">Fire Emergency</string>
-    <string name="confirm_medical_emergency">Medical Emergency</string>
+
     <string name="sos_confirmation_message">Sending an emergency alert will notify nearby responders and your emergency contact.</string>
-    <string name="police_sos_description">Law enforcement will be notified of your location and situation.</string>
-    <string name="fire_sos_description">Fire department will be notified of your location and situation.</string>
-    <string name="medical_sos_description">Medical services will be notified of your location and situation.</string>
+
     <string name="send_now">Send Now</string>
 
     <!-- SOS Status Messages -->
-    <string name="sending_emergency_alert">Sending Emergency Alert</string>
-    <string name="please_wait">Please wait while we process your emergency alert…</string>
     <string name="emergency_alert_sent">Emergency Alert Sent</string>
     <string name="emergency_alert_success_message">Your emergency has been reported. Help is on the way. Stay safe and keep your phone accessible.</string>
-    <string name="emergency_alert_failed">Emergency Alert Failed</string>
-    <string name="emergency_alert_error_message">Unable to send emergency alert: %1$s. Please try again or call emergency services directly.</string>
 
     <!-- SMS Status Strings -->
     <string name="emergency_contact_notification">Emergency Contact Notification</string>
     <string name="sms_status">SMS Status</string>
-    <string name="sending_emergency_sms">Sending SMS to emergency contact…</string>
-    <string name="emergency_sms_sent">SMS notification sent to emergency contact</string>
-    <string name="emergency_sms_delivered">SMS notification delivered to emergency contact</string>
-    <string name="emergency_sms_failed">Failed to send SMS notification</string>
-    <string name="emergency_sms_failed_with_reason">Failed to send SMS: %1$s</string>
+
+    <!-- Network status strings -->
+    <string name="status_online">Online</string>
+    <string name="status_offline">Offline</string>
+    <string name="status_wifi">WiFi</string>
+    <string name="status_cellular">Cellular</string>
+    <string name="status_ethernet">Ethernet</string>
+    <string name="status_connected">Connected</string>
+
+    <!-- SOS SMS Template -->
+    <string name="sos_sms_template">EMERGENCY ALERT: %1$s needs immediate help! %2$s emergency at %3$s. GPS: %4$.6f, %5$.6f</string>
+
+    <!-- SOS Status Messages -->
+    <string name="sending_emergency_alert">Sending Emergency Alert</string>
+    <string name="please_wait">Please wait…</string>
+    <string name="emergency_alert_failed">Emergency Alert Failed</string>
+    <string name="emergency_alert_error_message">Error: %1$s</string>
+    <string name="emergency_sms_sent">Emergency SMS sent to contact</string>
+    <string name="emergency_sms_delivered">Emergency SMS delivered</string>
+    <string name="emergency_sms_failed">Failed to send emergency SMS</string>
+    <string name="emergency_sms_failed_with_reason">SMS failed: %1$s</string>
+    <string name="sending_emergency_sms">Sending emergency SMS…</string>
+    <string name="waiting_for_location">Waiting for location…</string>
+
+    <!-- SOS Confirmation Dialog -->
+    <string name="confirm_police_emergency">Police Emergency</string>
+    <string name="confirm_fire_emergency">Fire Emergency</string>
+    <string name="confirm_medical_emergency">Medical Emergency</string>
+    <string name="police_sos_description">Alert police to your location for immediate assistance. Countdown will start automatically.</string>
+    <string name="fire_sos_description">Alert fire services to your location for immediate assistance. Countdown will start automatically.</string>
+    <string name="medical_sos_description">Alert medical services to your location for immediate assistance. Countdown will start automatically.</string>
 
 </resources>
 
