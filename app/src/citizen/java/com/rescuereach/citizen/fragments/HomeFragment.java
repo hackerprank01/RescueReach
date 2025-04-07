@@ -68,6 +68,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private Location currentLocation;
     private ImageView btnAlertsZoomIn;
     private ImageView btnAlertsZoomOut;
+    private String currentSosId;
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -295,18 +296,17 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
 
             @Override
-            public void onSOSSuccess() {
+            public void onSOSSuccess(String sosId) {
+                // Store SOS ID for status updates
+                currentSosId = sosId;
+
                 // Dismiss loading dialog
                 if (loadingDialog.isShowing()) {
                     loadingDialog.dismiss();
                 }
 
-                // Show success message
-                new AlertDialog.Builder(requireContext())
-                        .setTitle(R.string.emergency_alert_sent)
-                        .setMessage(R.string.emergency_alert_success_message)
-                        .setPositiveButton(android.R.string.ok, null)
-                        .show();
+                // Show detailed status dialog with SMS status tracking
+                showSOSStatusDialog(category);
             }
 
             @Override
@@ -324,6 +324,99 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                         .show();
             }
         });
+    }
+
+    // Add this method to show status dialog with SMS tracking
+    private void showSOSStatusDialog(String category) {
+        // Inflate custom dialog layout
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_sos_status, null);
+
+        // Get dialog views
+        TextView titleText = dialogView.findViewById(R.id.text_sos_success_title);
+        TextView messageText = dialogView.findViewById(R.id.text_sos_success_message);
+        View smsStatusLayout = dialogView.findViewById(R.id.layout_sms_status);
+        ImageView smsStatusIcon = dialogView.findViewById(R.id.img_sms_status);
+        TextView smsStatusText = dialogView.findViewById(R.id.text_sms_status);
+        Button okButton = dialogView.findViewById(R.id.btn_sos_status_ok);
+
+        // Customize dialog based on emergency category
+        switch (category) {
+            case SOSReport.CATEGORY_POLICE:
+                titleText.setTextColor(requireContext().getColor(R.color.police_blue));
+                break;
+            case SOSReport.CATEGORY_FIRE:
+                titleText.setTextColor(requireContext().getColor(R.color.fire_orange));
+                break;
+            case SOSReport.CATEGORY_MEDICAL:
+                titleText.setTextColor(requireContext().getColor(R.color.medical_red));
+                break;
+        }
+
+        // Create and show dialog
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .setCancelable(false)
+                .create();
+
+        // Set OK button click listener
+        okButton.setOnClickListener(v -> dialog.dismiss());
+
+        // Show dialog
+        dialog.show();
+
+        // Start listening for SMS status updates if we have valid SOS ID
+        if (currentSosId != null && !currentSosId.isEmpty()) {
+            listenForSMSStatusUpdates(currentSosId, smsStatusIcon, smsStatusText);
+        } else {
+            // No SOS ID means no SMS tracking possible
+            smsStatusLayout.setVisibility(View.GONE);
+        }
+    }
+
+    // Add this method to listen for SMS status updates
+    private void listenForSMSStatusUpdates(String sosId, ImageView statusIcon, TextView statusText) {
+        // Get Firestore instance
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+
+        // Listen for document updates
+        db.collection("incidents").document(sosId)
+                .addSnapshotListener((snapshot, e) -> {
+                    if (e != null) {
+                        Log.e(TAG, "Listen failed for SMS status updates", e);
+                        return;
+                    }
+
+                    if (snapshot != null && snapshot.exists()) {
+                        // Get SMS status
+                        String smsStatus = snapshot.getString("smsStatus");
+
+                        if (smsStatus != null) {
+                            // Update UI based on status
+                            switch (smsStatus) {
+                                case "sent":
+                                    statusIcon.setImageResource(R.drawable.ic_sms_sent);
+                                    statusText.setText(R.string.emergency_sms_sent);
+                                    break;
+                                case "delivered":
+                                    statusIcon.setImageResource(R.drawable.ic_sms_sent);
+                                    statusText.setText(R.string.emergency_sms_delivered);
+                                    break;
+                                case "failed":
+                                    statusIcon.setImageResource(R.drawable.ic_sms_failed);
+                                    String error = snapshot.getString("smsError");
+                                    if (error != null && !error.isEmpty()) {
+                                        statusText.setText(getString(R.string.emergency_sms_failed_with_reason, error));
+                                    } else {
+                                        statusText.setText(R.string.emergency_sms_failed);
+                                    }
+                                    break;
+                                default:
+                                    statusIcon.setImageResource(R.drawable.ic_sms_sending);
+                                    statusText.setText(R.string.sending_emergency_sms);
+                            }
+                        }
+                    }
+                });
     }
 
     private void updateStatusInfo() {

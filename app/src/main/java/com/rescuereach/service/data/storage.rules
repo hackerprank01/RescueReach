@@ -1,0 +1,100 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return request.auth != null && 
+             firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data != null;
+    }
+    
+    function isResponder() {
+      return request.auth != null && 
+             firestore.get(/databases/(default)/documents/responders/$(request.auth.uid)).data != null;
+    }
+    
+    function getResponderRole() {
+      return firestore.get(/databases/(default)/documents/responders/$(request.auth.uid)).data.role;
+    }
+    
+    function getUserPhone() {
+      let userDocs = firestore.query('users').where('userId', '==', request.auth.uid).limit(1);
+      return userDocs.size() > 0 ? userDocs[0].id : null;
+    }
+    
+    function isVolunteer() {
+      let phone = getUserPhone();
+      return phone != null && 
+             firestore.get(/databases/(default)/documents/users/$(phone)).data.isVolunteer == true;
+    }
+    
+    function getUserCity() {
+      let phone = getUserPhone();
+      return phone != null ? 
+             firestore.get(/databases/(default)/documents/users/$(phone)).data.state : null;
+    }
+    
+    // Public resources
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Incident media files
+    match /incidents/{incidentId}/{allPaths=**} {
+      // Admin has full access
+      allow read, write: if isAdmin();
+      
+      // Creator can upload and view their own media
+      allow read, write: if isSignedIn() && 
+                          firestore.get(/databases/(default)/documents/incidents/$(incidentId)).data.phoneNumber == getUserPhone();
+      
+      // Responders can view media for incidents in their role and state
+      allow read: if isResponder() && 
+                  firestore.get(/databases/(default)/documents/incidents/$(incidentId)).data.category == getResponderRole() &&
+                  firestore.get(/databases/(default)/documents/incidents/$(incidentId)).data.state == 
+                  firestore.get(/databases/(default)/documents/responders/$(request.auth.uid)).data.state;
+      
+      // Volunteers can view media for incidents in their city
+      allow read: if isSignedIn() && 
+                  isVolunteer() && 
+                  firestore.get(/databases/(default)/documents/incidents/$(incidentId)).data.state == getUserCity();
+    }
+    
+    // Profile pictures
+    match /profiles/{phoneNumber} {
+      // Users can view profile pictures
+      allow read: if isSignedIn();
+      
+      // Users can only upload their own profile picture
+      allow write: if isSignedIn() && 
+                   firestore.get(/databases/(default)/documents/users/$(phoneNumber)).data.userId == request.auth.uid;
+    }
+    
+    // Volunteer verification documents
+    match /volunteers/{phoneNumber}/{allPaths=**} {
+      // Admins can view volunteer documents
+      allow read: if isAdmin();
+      
+      // Volunteers can upload their own documents
+      allow write: if isSignedIn() && 
+                   firestore.get(/databases/(default)/documents/users/$(phoneNumber)).data.userId == request.auth.uid;
+    }
+    
+    // Voice recordings
+    match /voice/{incidentId}/{fileId} {
+      // Creator can upload their recordings
+      allow write: if isSignedIn() && 
+                   firestore.get(/databases/(default)/documents/incidents/$(incidentId)).data.phoneNumber == getUserPhone();
+      
+      // Responders and volunteers can listen to recordings for relevant incidents
+      allow read: if isSignedIn() && 
+                 (isResponder() || 
+                  (isVolunteer() && 
+                   firestore.get(/databases/(default)/documents/incidents/$(incidentId)).data.state == getUserCity()));
+    }
+  }
+}

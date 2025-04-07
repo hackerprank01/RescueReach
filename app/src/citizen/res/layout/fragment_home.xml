@@ -420,7 +420,7 @@
                         <!-- Alert legend -->
                         <LinearLayout
                             android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
+                            android:layout_height="31dp"
                             android:layout_gravity="start|top"
                             android:layout_margin="6dp"
                             android:background="@drawable/legend_background"

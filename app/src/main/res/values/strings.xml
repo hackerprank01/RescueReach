@@ -385,7 +385,14 @@
     <string name="emergency_alert_failed">Emergency Alert Failed</string>
     <string name="emergency_alert_error_message">Unable to send emergency alert: %1$s. Please try again or call emergency services directly.</string>
 
-
+    <!-- SMS Status Strings -->
+    <string name="emergency_contact_notification">Emergency Contact Notification</string>
+    <string name="sms_status">SMS Status</string>
+    <string name="sending_emergency_sms">Sending SMS to emergency contact…</string>
+    <string name="emergency_sms_sent">SMS notification sent to emergency contact</string>
+    <string name="emergency_sms_delivered">SMS notification delivered to emergency contact</string>
+    <string name="emergency_sms_failed">Failed to send SMS notification</string>
+    <string name="emergency_sms_failed_with_reason">Failed to send SMS: %1$s</string>
 
 </resources>
 

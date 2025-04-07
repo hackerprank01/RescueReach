@@ -696,7 +696,7 @@ public class ProfileFragment extends Fragment {
         updates.put("firstName", firstName);
         updates.put("lastName", lastName);
         updates.put("userId", userId);
-        updates.put("state", dropdownGender.getText().toString());
+        updates.put("state", dropdownState.getText().toString());
         updates.put("gender", dropdownGender.getText().toString());
         updates.put("emergencyContact", emergencyContactPhone);
         updates.put("isVolunteer", isVolunteer);
@@ -794,7 +794,7 @@ public class ProfileFragment extends Fragment {
         updates.put("firstName", firstName);
         updates.put("lastName", lastName);
         updates.put("gender", dropdownGender.getText().toString()); // Add gender explicitly
-        updates.put("state",  dropdownGender.getText().toString());
+        updates.put("state",  dropdownState.getText().toString());
         updates.put("emergencyContact", emergencyContactPhone);
         updates.put("isVolunteer", isVolunteer);
         updates.put("userId", userId);  // Keep userId as a field for reference

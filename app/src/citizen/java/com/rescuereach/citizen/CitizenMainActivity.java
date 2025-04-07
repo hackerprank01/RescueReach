@@ -184,21 +184,28 @@ public class CitizenMainActivity extends AppCompatActivity
 
             Menu navMenu = navigationView.getMenu();
 
-            // Update volunteer-specific menu items
+            // Find the volunteer section header (it's the 2nd item in the root menu)
+            MenuItem volunteerSectionHeader = null;
+            if (navMenu.size() >= 2) {
+                volunteerSectionHeader = navMenu.getItem(1); // Index 1 is the volunteer section header
+            }
+
+            // Update volunteer alerts item visibility
             MenuItem volunteerAlertsItem = navMenu.findItem(R.id.nav_volunteer_alerts);
             if (volunteerAlertsItem != null) {
                 volunteerAlertsItem.setVisible(isVolunteer);
+                Log.d(TAG, "Set volunteer alerts item visibility to " + isVolunteer);
             }
 
-            // Handle other volunteer-specific items if any
-            // Add additional items here as needed
-
-            // Handle section headers - find the volunteer section header if it exists
-            MenuItem volunteerSectionHeader = navMenu.findItem(R.id.nav_volunteer_alerts);
+            // Also update the section header visibility
             if (volunteerSectionHeader != null) {
-                // Hide section header if no volunteer items are visible
-                boolean hasVisibleItems = hasVisibleItems(navMenu, R.id.nav_volunteer_alerts);
-                volunteerSectionHeader.setVisible(hasVisibleItems);
+                volunteerSectionHeader.setVisible(isVolunteer);
+                Log.d(TAG, "Set volunteer section header visibility to " + isVolunteer);
+            }
+
+            // If in volunteer section and no longer a volunteer, switch to home
+            if (!isVolunteer && currentFragmentId == R.id.nav_volunteer_alerts) {
+                navigateToFragment(R.id.nav_home);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error updating navigation based on volunteer status", e);
@@ -765,6 +772,12 @@ public class CitizenMainActivity extends AppCompatActivity
             title = getString(R.string.menu_home);
             fragment = new HomeFragment();
         } else if (fragmentId == R.id.nav_my_reports) {
+            title = getString(R.string.menu_my_reports);
+            fragment = PlaceholderFragment.newInstance(
+                    title,
+                    getString(R.string.placeholder_my_reports_description),
+                    R.drawable.ic_reports);
+        } else if (fragmentId == R.id.nav_volunteer_alerts) {
             // Check if user is volunteer before allowing navigation
             if (!sessionManager.isVolunteer()) {
                 // If not a volunteer, redirect to home
@@ -773,13 +786,6 @@ public class CitizenMainActivity extends AppCompatActivity
                 navigateToFragment(R.id.nav_home);
                 return;
             }
-
-            title = getString(R.string.menu_volunteer_alerts);
-            fragment = PlaceholderFragment.newInstance(
-                    title,
-                    getString(R.string.placeholder_volunteer_description),
-                    R.drawable.ic_alerts);
-        } else if (fragmentId == R.id.nav_volunteer_alerts) {
             title = getString(R.string.menu_volunteer_alerts);
             fragment = PlaceholderFragment.newInstance(
                     title,
@@ -1006,34 +1012,19 @@ public class CitizenMainActivity extends AppCompatActivity
         try {
             // Get reference to navigation view
             NavigationView navigationView = findViewById(R.id.nav_view);
+            if (navigationView == null) return;
 
             // Get current volunteer status directly from session
-            UserSessionManager sessionManager = UserSessionManager.getInstance(this);
             boolean isVolunteer = sessionManager.isVolunteer();
+            Log.d(TAG, "Refreshing navigation drawer - volunteer status: " + isVolunteer);
 
-            Log.d(TAG, "Refreshing drawer with volunteer status: " + isVolunteer);
+            // Update the navigation menu based on volunteer status
+            updateNavigationMenuBasedOnVolunteerStatus(navigationView);
 
-            // Completely recreate the menu to fix visibility issues
-            Menu navMenu = navigationView.getMenu();
-            navMenu.clear();
-            navigationView.inflateMenu(R.menu.drawer_menu);
-
-            // Now set the visibility of volunteer items
-            MenuItem volunteerAlertsItem = navMenu.findItem(R.id.nav_volunteer_alerts);
-            if (volunteerAlertsItem != null) {
-                volunteerAlertsItem.setVisible(isVolunteer);
-                Log.d(TAG, "Set volunteer alerts item visibility to " + isVolunteer);
-            }
-
-            // If in volunteer section and no longer a volunteer, switch to home
-            if (!isVolunteer && currentFragmentId == R.id.nav_volunteer_alerts) {
-                navigateToFragment(R.id.nav_home);
-            }
-
-            // Update header info
+            // Update header info if needed
             updateNavigationHeader();
 
-            // Mark the current item as selected
+            // Make sure the correct item is selected
             navigationView.setCheckedItem(currentFragmentId);
         } catch (Exception e) {
             Log.e(TAG, "Error refreshing navigation drawer", e);
