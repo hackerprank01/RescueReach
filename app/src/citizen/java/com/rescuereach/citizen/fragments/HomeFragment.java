@@ -354,7 +354,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
 
             @Override
-            public void onSOSSuccess() {
+            public void onSOSSuccess(String sosId) {
                 // Dismiss loading dialog
                 if (loadingDialog.isShowing()) {
                     loadingDialog.dismiss();

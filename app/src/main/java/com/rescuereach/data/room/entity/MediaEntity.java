@@ -19,7 +19,6 @@ public class MediaEntity {
     private String type; // photo, video, audio
     private boolean uploaded;
 
-    // Getters and setters will be implemented later
     @NonNull
     public String getId() {
         return id;
@@ -29,5 +28,43 @@ public class MediaEntity {
         this.id = id;
     }
 
-    // Placeholder for now - will be fully implemented when needed
+    public String getIncidentId() {
+        return incidentId;
+    }
+
+    public void setIncidentId(String incidentId) {
+        this.incidentId = incidentId;
+    }
+
+    public String getLocalPath() {
+        return localPath;
+    }
+
+    public void setLocalPath(String localPath) {
+        this.localPath = localPath;
+    }
+
+    public String getRemoteUrl() {
+        return remoteUrl;
+    }
+
+    public void setRemoteUrl(String remoteUrl) {
+        this.remoteUrl = remoteUrl;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public boolean isUploaded() {
+        return uploaded;
+    }
+
+    public void setUploaded(boolean uploaded) {
+        this.uploaded = uploaded;
+    }
 }

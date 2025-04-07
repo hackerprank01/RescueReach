@@ -145,7 +145,6 @@
     <string name="places_error">Error loading some services</string>
 
     <!-- Map-related strings -->
-    <string name="current_location">Current Location</string>
     <string name="waiting_for_location">Waiting for location...</string>
     <string name="center_on_location">Center on current location</string>
 
@@ -374,7 +373,7 @@
     <string name="send_now">Send Now</string>
 
     <!-- SOS Status Messages -->
-    <string name="emergency_alert_sent">Emergency Alert Sent</string>
+
     <string name="emergency_alert_success_message">Your emergency has been reported. Help is on the way. Stay safe and keep your phone accessible.</string>
 
     <!-- SMS Status Strings -->
@@ -402,6 +401,16 @@
     <string name="emergency_sms_failed">Failed to send emergency SMS</string>
     <string name="emergency_sms_failed_with_reason">SMS failed: %1$s</string>
     <string name="sending_emergency_sms">Sending emergency SMS…</string>
+
+    <!-- SOS Status Dialog -->
+    <string name="emergency_alert_sent">Emergency Alert Sent</string>
+    <string name="emergency_alert_details">Your emergency alert has been sent to responders. Stay calm and await assistance. Your location is being shared with emergency services.</string>
+    <string name="current_location">Current Location</string>
+
+    <!-- SMS Status Icons -->
+    <item name="ic_sms_sending" type="drawable">@android:drawable/ic_dialog_email</item>
+    <item name="ic_sms_sent" type="drawable">@android:drawable/ic_dialog_email</item>
+    <item name="ic_sms_failed" type="drawable">@android:drawable/ic_dialog_alert</item>
 
     <!-- SOS Confirmation Dialog -->
     <string name="confirm_police_emergency">Police Emergency</string>
