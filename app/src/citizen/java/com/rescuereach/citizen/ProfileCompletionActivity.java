@@ -22,6 +22,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -29,11 +30,9 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.rescuereach.R;
-import com.rescuereach.data.model.User;
 import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.service.auth.UserSessionManager;
 
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -72,6 +71,15 @@ public class ProfileCompletionActivity extends AppCompatActivity {
 
         // Initialize services
         sessionManager = UserSessionManager.getInstance(this);
+
+        // Check if user is authenticated
+        if (sessionManager.getSavedPhoneNumber() == null) {
+            // User not authenticated, redirect to authentication activity
+            Toast.makeText(this, "Please authenticate first", Toast.LENGTH_SHORT).show();
+            startActivity(new Intent(this, PhoneAuthActivity.class));
+            finish();
+            return;
+        }
 
         // Initialize views
         initializeViews();
@@ -121,6 +129,9 @@ public class ProfileCompletionActivity extends AppCompatActivity {
 
     private void setupDatePicker() {
         dobEditText.setOnClickListener(v -> showDatePickerDialog());
+        // Prevent manual editing of the date field
+        dobEditText.setFocusable(false);
+        dobEditText.setClickable(true);
     }
 
     private void showDatePickerDialog() {
@@ -139,14 +150,13 @@ public class ProfileCompletionActivity extends AppCompatActivity {
         }
 
         DatePickerDialog datePickerDialog = new DatePickerDialog(this,
-                new DatePickerDialog.OnDateSetListener() {
-                    @Override
-                    public void onDateSet(DatePicker view, int year, int monthOfYear, int dayOfMonth) {
-                        Calendar selectedCalendar = Calendar.getInstance();
-                        selectedCalendar.set(year, monthOfYear, dayOfMonth);
-                        selectedDob = selectedCalendar.getTime();
-                        dobEditText.setText(dateFormat.format(selectedDob));
-                    }
+                (view, year1, monthOfYear, dayOfMonth) -> {
+                    Calendar selectedCalendar = Calendar.getInstance();
+                    selectedCalendar.set(year1, monthOfYear, dayOfMonth);
+                    selectedDob = selectedCalendar.getTime();
+                    dobEditText.setText(dateFormat.format(selectedDob));
+                    // Clear any previous error
+                    dobEditText.setError(null);
                 }, year, month, day);
 
         // Set maximum date to today - 10 years (minimum age)
@@ -210,6 +220,8 @@ public class ProfileCompletionActivity extends AppCompatActivity {
                             // Format and clean the phone number
                             number = cleanPhoneNumber(number);
                             emergencyContactEditText.setText(number);
+                            // Clear any previous error
+                            emergencyContactEditText.setError(null);
                         }
                     } catch (Exception e) {
                         Log.e(TAG, "Error fetching contact", e);
@@ -252,6 +264,11 @@ public class ProfileCompletionActivity extends AppCompatActivity {
             fullNameEditText.setError("Full name must be at least 3 characters");
             fullNameEditText.requestFocus();
             isValid = false;
+        } else if (!Pattern.matches("^[\\p{L} .'-]+$", fullName)) {
+            // Allow letters, spaces, periods, apostrophes, and hyphens
+            fullNameEditText.setError("Name contains invalid characters");
+            fullNameEditText.requestFocus();
+            isValid = false;
         }
 
         // Validate date of birth
@@ -288,6 +305,18 @@ public class ProfileCompletionActivity extends AppCompatActivity {
             emergencyContactEditText.setError("Please enter a valid 10-digit phone number");
             if (isValid) emergencyContactEditText.requestFocus();
             isValid = false;
+        } else {
+            // Check if emergency contact is the same as user's phone number
+            String userPhone = sessionManager.getSavedPhoneNumber();
+            if (userPhone != null) {
+                // Clean both numbers for comparison
+                String cleanedUserPhone = cleanPhoneNumber(userPhone);
+                if (cleanedUserPhone.equals(emergencyContact)) {
+                    emergencyContactEditText.setError("Emergency contact cannot be your own number");
+                    if (isValid) emergencyContactEditText.requestFocus();
+                    isValid = false;
+                }
+            }
         }
 
         return isValid;
@@ -320,26 +349,57 @@ public class ProfileCompletionActivity extends AppCompatActivity {
 
         showLoading(true);
 
-        // Save profile with the new fields
-        sessionManager.updateUserProfile(fullName, emergencyContact, selectedDob, gender, state, isVolunteer, new OnCompleteListener() {
-            @Override
-            public void onSuccess() {
-                showLoading(false);
-                Toast.makeText(ProfileCompletionActivity.this,
-                        "Profile saved successfully",
-                        Toast.LENGTH_SHORT).show();
-                navigateToMain();
-            }
+        // Format emergency contact to include country code if not present
+        if (!emergencyContact.startsWith("+")) {
+            emergencyContact = "+91" + emergencyContact;
+        }
 
-            @Override
-            public void onError(Exception e) {
-                showLoading(false);
-                Log.e(TAG, "Failed to save profile", e);
-                Toast.makeText(ProfileCompletionActivity.this,
-                        "Failed to save profile: " + e.getMessage(),
-                        Toast.LENGTH_LONG).show();
-            }
-        });
+        // Save profile with the correct parameter order
+        // Per UserSessionManager implementation: fullName, emergencyContact, dateOfBirth, gender, state, isVolunteer
+        sessionManager.updateUserProfile(
+                fullName,
+                emergencyContact,
+                selectedDob,
+                gender,
+                state,
+                isVolunteer,
+                new OnCompleteListener() {
+                    @Override
+                    public void onSuccess() {
+                        showLoading(false);
+                        Toast.makeText(ProfileCompletionActivity.this,
+                                "Profile saved successfully",
+                                Toast.LENGTH_SHORT).show();
+                        navigateToMain();
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        showLoading(false);
+                        Log.e(TAG, "Failed to save profile", e);
+
+                        // Show a detailed error dialog with retry option
+                        showErrorDialog("Profile Update Failed",
+                                "We couldn't save your profile. " +
+                                        (e.getMessage() != null ? e.getMessage() : "Please try again."));
+                    }
+                }
+        );
+    }
+
+    private void showErrorDialog(String title, String message) {
+        if (isFinishing() || isDestroyed()) return;
+
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("Retry", (dialog, which) -> {
+                    dialog.dismiss();
+                    saveProfile();
+                })
+                .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
+                .setCancelable(false)
+                .show();
     }
 
     private void showLoading(boolean isLoading) {

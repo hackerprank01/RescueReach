@@ -132,7 +132,6 @@ public class FirebaseUserRepository implements UserRepository {
 
         // Add formatted timestamp to the user object
         Map<String, Object> userMap = userToMap(user);
-//        userMap.put(FIELD_CREATED_AT_FORMATTED, dateFormatter.format(user.getCreatedAt()));
 
         // Document ID is now the formatted phone number
         DocumentReference userDoc = usersCollection.document(formattedPhone);
@@ -376,7 +375,6 @@ public class FirebaseUserRepository implements UserRepository {
         userBasicInfo.put("firstName", user.getFirstName() != null ? user.getFirstName() : "");
         userBasicInfo.put("lastName", user.getLastName() != null ? user.getLastName() : "");
         userBasicInfo.put("emergencyContact", user.getEmergencyContact() != null ? user.getEmergencyContact() : "");
-//        userBasicInfo.put("createdAt", user.getCreatedAt());
         userBasicInfo.put("status", "online");
 
         // Add new fields
@@ -439,4 +437,5 @@ public class FirebaseUserRepository implements UserRepository {
 
         return cleaned;
     }
+
 }

@@ -1,6 +1,7 @@
 package com.rescuereach.citizen.fragments;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -38,9 +39,9 @@ import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.rescuereach.R;
 import com.rescuereach.citizen.CitizenMainActivity;
-import com.rescuereach.citizen.settings.PrivacySettingsActivity;
-import com.rescuereach.citizen.settings.AppearanceSettingsActivity;
-import com.rescuereach.citizen.settings.DataManagementActivity;
+//import com.rescuereach.citizen.settings.PrivacySettingsActivity;
+//import com.rescuereach.citizen.settings.AppearanceSettingsActivity;
+//import com.rescuereach.citizen.settings.DataManagementActivity;
 import com.rescuereach.service.auth.UserSessionManager;
 
 import java.text.SimpleDateFormat;
@@ -51,6 +52,12 @@ import java.util.Locale;
 import java.util.Map;
 
 public class ProfileFragment extends Fragment {
+
+    private static final String TAG = "ProfileFragment";
+
+    private static final int CONTACTS_PERMISSION_CODE = 103;
+    private static final int CONTACT_PICK_CODE = 104;
+
 
     // UI components
     private TextInputEditText inputFullName, inputPhone, inputDob;
@@ -70,13 +77,11 @@ public class ProfileFragment extends Fragment {
     private final Calendar calendar = Calendar.getInstance();
     private boolean isVolunteer = false;
     private boolean isEditMode = false;
+    private boolean initialVolunteerStatus = false;
 
     // Firebase
     private FirebaseFirestore db;
-
-    private static final int CONTACTS_PERMISSION_CODE = 100;
     private DatabaseReference rtDatabase;
-    private boolean initialVolunteerStatus = false;
 
     // Contact picker
     private final ActivityResultLauncher<Intent> contactPickerLauncher =
@@ -111,6 +116,10 @@ public class ProfileFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        // Find views
+        inputLayoutContactPhone = view.findViewById(R.id.input_layout_contact_phone);
+        inputContactPhone = view.findViewById(R.id.input_contact_phone);
+
         // Initialize UI components
         initUI(view);
 
@@ -122,6 +131,23 @@ public class ProfileFragment extends Fragment {
 
         // Set up listeners
         setupListeners();
+
+        inputLayoutContactPhone.setEndIconMode(TextInputLayout.END_ICON_CUSTOM);
+        inputLayoutContactPhone.setEndIconDrawable(R.drawable.ic_contacts);
+        inputLayoutContactPhone.setEndIconOnClickListener(v -> {
+            if (inputContactPhone.isEnabled()) { // Only when in edit mode
+                requestContactPermission();
+            }
+        });
+    }
+
+    private void requestContactPermission() {
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.READ_CONTACTS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, CONTACTS_PERMISSION_CODE);
+        } else {
+            openContactPicker();
+        }
     }
 
     private void initUI(View view) {
@@ -157,63 +183,6 @@ public class ProfileFragment extends Fragment {
         setupDropdowns();
     }
 
-    private String formatPhoneWithPrefix(String phone) {
-        if (phone == null || phone.isEmpty()) {
-            return "";
-        }
-
-        try {
-            // Clean the phone number to digits only
-            String digitsOnly = phone.replaceAll("[^0-9]", "");
-
-            // Log the extracted digits for debugging
-            Log.d("ProfileFragment", "Formatting phone number - digits only: " + digitsOnly);
-
-            // If already has country code (more than 10 digits), format properly
-            if (digitsOnly.length() > 10) {
-                // Extract the last 10 digits
-                String last10Digits = digitsOnly.substring(digitsOnly.length() - 10);
-                Log.d("ProfileFragment", "Formatting with existing prefix: +91" + last10Digits);
-                return "+91" + last10Digits;
-            }
-
-            // Get last 10 digits or all if less than 10
-            String formattedNumber = "+91" + digitsOnly;
-            Log.d("ProfileFragment", "Formatted phone number: " + formattedNumber);
-            return formattedNumber;
-        } catch (Exception e) {
-            Log.e("ProfileFragment", "Error formatting phone number", e);
-            // Return original with prefix as fallback
-            return "+91" + phone;
-        }
-    }
-
-    private String extractTenDigits(String phone) {
-        if (phone == null || phone.isEmpty()) {
-            return "";
-        }
-
-        try {
-            // Extract only digits
-            String digitsOnly = phone.replaceAll("[^0-9]", "");
-
-            // Handle different formats
-            if (digitsOnly.startsWith("91") && digitsOnly.length() > 10) {
-                // Remove country code if present
-                digitsOnly = digitsOnly.substring(2);
-            }
-
-            // Get last 10 digits (or all if less than 10)
-            if (digitsOnly.length() > 10) {
-                return digitsOnly.substring(digitsOnly.length() - 10);
-            } else {
-                return digitsOnly;
-            }
-        } catch (Exception e) {
-            Log.e("ProfileFragment", "Error extracting phone digits", e);
-            return phone; // Return original as fallback
-        }
-    }
     private void setupDropdowns() {
         // Gender dropdown
         String[] genders = new String[] {"Male", "Female", "Other", "Prefer not to say"};
@@ -222,20 +191,11 @@ public class ProfileFragment extends Fragment {
         dropdownGender.setAdapter(genderAdapter);
 
         // State dropdown
-        String[] states = new String[] {
-                "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
-                "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh",
-                "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra",
-                "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha",
-                "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana",
-                "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
-        };
+        String[] states = getResources().getStringArray(R.array.indian_states);
         ArrayAdapter<String> stateAdapter = new ArrayAdapter<>(
                 requireContext(), R.layout.dropdown_item, states);
         dropdownState.setAdapter(stateAdapter);
     }
-
-// Fix the setupListeners method to use requireView() instead of view:
 
     private void setupListeners() {
         // Edit profile button
@@ -276,10 +236,9 @@ public class ProfileFragment extends Fragment {
             }
         });
 
-        // Settings click listeners
+//        // Settings click listeners
 //        View view = getView();
 //        if (view != null) {
-//            // Use the view variable instead of requireView() which can crash
 //            View privacySettings = view.findViewById(R.id.layout_privacy_settings);
 //            if (privacySettings != null) {
 //                privacySettings.setOnClickListener(v ->
@@ -332,17 +291,10 @@ public class ProfileFragment extends Fragment {
                 });
     }
 
-// Update the updateUIWithFirebaseData method for correct field mapping
-
     private void updateUIWithFirebaseData(DocumentSnapshot document) {
         try {
             // Clear all fields first to prevent data mixing
-            inputFullName.setText("");
-            inputPhone.setText("");
-            inputDob.setText("");
-            dropdownGender.setText("", false);
-            dropdownState.setText("", false);
-            inputContactPhone.setText("");
+            clearAllFields();
 
             // Extract data with safe type handling
             String fullName = safeGetString(document, "fullName");
@@ -352,40 +304,13 @@ public class ProfileFragment extends Fragment {
             String emergencyContact = safeGetString(document, "emergencyContact");
 
             // Handle date of birth specially (could be Date, Timestamp or String)
-            String dob = "";
-            try {
-                if (document.contains("dateOfBirth")) {
-                    Object dateObj = document.get("dateOfBirth");
-                    if (dateObj instanceof String) {
-                        dob = (String) dateObj;
-                    } else if (dateObj instanceof com.google.firebase.Timestamp) {
-                        com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) dateObj;
-                        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
-                        dob = sdf.format(timestamp.toDate());
-                    } else if (dateObj instanceof Date) {
-                        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
-                        dob = sdf.format((Date) dateObj);
-                    } else if (dateObj != null) {
-                        // Last resort, convert to string
-                        dob = dateObj.toString();
-                    }
-                }
-            } catch (Exception e) {
-                Log.e("ProfileFragment", "Error parsing date of birth", e);
-            }
+            String dob = getFormattedDateFromDocument(document);
 
             // Handle volunteer status
-            Boolean volunteer = null;
-            try {
-                if (document.contains("isVolunteer")) {
-                    volunteer = document.getBoolean("isVolunteer");
-                }
-            } catch (Exception e) {
-                Log.e("ProfileFragment", "Error parsing volunteer status", e);
-            }
+            Boolean volunteer = getVolunteerStatusFromDocument(document);
 
             // Debug log
-            Log.d("ProfileFragment", "Parsed fields - " +
+            Log.d(TAG, "Parsed fields - " +
                     "fullName: " + fullName +
                     ", phone: " + phoneNum +
                     ", dob: " + dob +
@@ -416,10 +341,55 @@ public class ProfileFragment extends Fragment {
             updateSessionWithCurrentValues();
 
         } catch (Exception e) {
-            Log.e("ProfileFragment", "Error updating UI with Firebase data", e);
+            Log.e(TAG, "Error updating UI with Firebase data", e);
             showError("Error showing profile data. Loading from local storage.");
             loadUserDataFromLocalSession();
         }
+    }
+
+    private void clearAllFields() {
+        inputFullName.setText("");
+        inputPhone.setText("");
+        inputDob.setText("");
+        dropdownGender.setText("", false);
+        dropdownState.setText("", false);
+        inputContactPhone.setText("");
+    }
+
+    private String getFormattedDateFromDocument(DocumentSnapshot document) {
+        String dob = "";
+        try {
+            if (document.contains("dateOfBirth")) {
+                Object dateObj = document.get("dateOfBirth");
+                if (dateObj instanceof String) {
+                    dob = (String) dateObj;
+                } else if (dateObj instanceof com.google.firebase.Timestamp) {
+                    com.google.firebase.Timestamp timestamp = (com.google.firebase.Timestamp) dateObj;
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
+                    dob = sdf.format(timestamp.toDate());
+                } else if (dateObj instanceof Date) {
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
+                    dob = sdf.format((Date) dateObj);
+                } else if (dateObj != null) {
+                    // Last resort, convert to string
+                    dob = dateObj.toString();
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error parsing date of birth", e);
+        }
+        return dob;
+    }
+
+    private Boolean getVolunteerStatusFromDocument(DocumentSnapshot document) {
+        try {
+            if (document.contains("isVolunteer")) {
+                return document.getBoolean("isVolunteer");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error parsing volunteer status", e);
+        }
+        return false;
     }
 
     // Helper method to safely get strings
@@ -432,85 +402,51 @@ public class ProfileFragment extends Fragment {
                 }
             }
         } catch (Exception e) {
-            Log.e("ProfileFragment", "Error getting field: " + fieldName, e);
+            Log.e(TAG, "Error getting field: " + fieldName, e);
         }
         return "";
     }
 
-    private boolean isValidGender(String gender) {
-        String[] validGenders = {"Male", "Female", "Other", "Prefer not to say"};
-        for (String validGender : validGenders) {
-            if (validGender.equalsIgnoreCase(gender)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean isValidState(String state) {
-        String[] states = {
-                "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
-                "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh",
-                "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra",
-                "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha",
-                "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana",
-                "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
-        };
-
-        for (String validState : states) {
-            if (validState.equalsIgnoreCase(state)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Improve loadUserDataFromLocalSession to prevent wrong field mapping
     private void loadUserDataFromLocalSession() {
         try {
             // Clear all fields first to avoid data bleed-through
-            inputFullName.setText("");
-            inputPhone.setText("");
-            inputDob.setText("");
-            dropdownGender.setText("", false);
-            dropdownState.setText("", false);
-            inputContactPhone.setText("");
+            clearAllFields();
 
             // Load user data with explicit logging
             String fullName = sessionManager.getFullName();
-            Log.d("ProfileFragment", "Session full name: " + fullName);
+            Log.d(TAG, "Session full name: " + fullName);
             if (fullName != null && !fullName.isEmpty()) {
                 inputFullName.setText(fullName);
             }
 
             String phone = sessionManager.getSavedPhoneNumber();
-            Log.d("ProfileFragment", "Session phone: " + phone);
+            Log.d(TAG, "Session phone: " + phone);
             if (phone != null && !phone.isEmpty()) {
                 inputPhone.setText(phone);
             }
 
             // Load other saved data
             String dob = sessionManager.getDateOfBirthString();
-            Log.d("ProfileFragment", "Session DOB: " + dob);
+            Log.d(TAG, "Session DOB: " + dob);
             if (dob != null && !dob.isEmpty()) {
                 inputDob.setText(dob);
             }
 
             String gender = sessionManager.getGender();
-            Log.d("ProfileFragment", "Session gender: " + gender);
+            Log.d(TAG, "Session gender: " + gender);
             if (gender != null && !gender.isEmpty()) {
                 dropdownGender.setText(gender, false);
             }
 
             String state = sessionManager.getState();
-            Log.d("ProfileFragment", "Session state: " + state);
+            Log.d(TAG, "Session state: " + state);
             if (state != null && !state.isEmpty()) {
                 dropdownState.setText(state, false);
             }
 
             // Emergency contact phone - extract 10 digits for display
             String contactPhone = sessionManager.getEmergencyContactPhone();
-            Log.d("ProfileFragment", "Session emergency contact: " + contactPhone);
+            Log.d(TAG, "Session emergency contact: " + contactPhone);
             if (contactPhone != null && !contactPhone.isEmpty()) {
                 String digits = extractTenDigits(contactPhone);
                 inputContactPhone.setText(digits);
@@ -518,11 +454,11 @@ public class ProfileFragment extends Fragment {
 
             // Volunteer status
             isVolunteer = sessionManager.isVolunteer();
-            Log.d("ProfileFragment", "Session volunteer status: " + isVolunteer);
+            Log.d(TAG, "Session volunteer status: " + isVolunteer);
             initialVolunteerStatus = isVolunteer; // Store initial value
             switchVolunteer.setChecked(isVolunteer);
         } catch (Exception e) {
-            Log.e("ProfileFragment", "Error loading data from session", e);
+            Log.e(TAG, "Error loading data from session", e);
             showError("Error loading profile data from local storage");
         }
     }
@@ -554,11 +490,8 @@ public class ProfileFragment extends Fragment {
     }
 
     private void openContactPicker() {
-        if (!isEditMode) return;
-
-        Intent contactPickerIntent = new Intent(Intent.ACTION_PICK,
-                ContactsContract.CommonDataKinds.Phone.CONTENT_URI);
-        contactPickerLauncher.launch(contactPickerIntent);
+        Intent intent = new Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI);
+        startActivityForResult(intent, CONTACT_PICK_CODE);
     }
 
     private void retrieveContactDetails(Uri contactUri) {
@@ -566,18 +499,19 @@ public class ProfileFragment extends Fragment {
                 ContactsContract.CommonDataKinds.Phone.NUMBER
         };
 
-        Cursor cursor = requireContext().getContentResolver().query(
-                contactUri, projection, null, null, null);
+        try (Cursor cursor = requireContext().getContentResolver().query(
+                contactUri, projection, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int numberIndex = cursor.getColumnIndex(
+                        ContactsContract.CommonDataKinds.Phone.NUMBER);
 
-        if (cursor != null && cursor.moveToFirst()) {
-            int numberIndex = cursor.getColumnIndex(
-                    ContactsContract.CommonDataKinds.Phone.NUMBER);
-
-            String phoneNumber = cursor.getString(numberIndex);
-            // Extract 10 digits and display in the input field
-            inputContactPhone.setText(extractTenDigits(phoneNumber));
-
-            cursor.close();
+                String phoneNumber = cursor.getString(numberIndex);
+                // Extract 10 digits and display in the input field
+                inputContactPhone.setText(extractTenDigits(phoneNumber));
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error retrieving contact", e);
+            showError("Failed to retrieve contact information");
         }
     }
 
@@ -587,6 +521,9 @@ public class ProfileFragment extends Fragment {
         // Validate full name
         if (TextUtils.isEmpty(inputFullName.getText())) {
             inputLayoutFullName.setError(getString(R.string.error_required_field));
+            isValid = false;
+        } else if (inputFullName.getText().toString().trim().length() < 3) {
+            inputLayoutFullName.setError(getString(R.string.error_name_too_short));
             isValid = false;
         } else {
             inputLayoutFullName.setError(null);
@@ -601,6 +538,9 @@ public class ProfileFragment extends Fragment {
         } else if (!isValidPhoneNumber(phone)) {
             inputLayoutContactPhone.setError(getString(R.string.error_invalid_phone));
             isValid = false;
+        } else if (isSameAsUserPhone(phone)) {
+            inputLayoutContactPhone.setError(getString(R.string.error_emergency_same_as_user));
+            isValid = false;
         } else {
             inputLayoutContactPhone.setError(null);
         }
@@ -608,6 +548,9 @@ public class ProfileFragment extends Fragment {
         // State is required
         if (TextUtils.isEmpty(dropdownState.getText())) {
             inputLayoutState.setError(getString(R.string.error_required_field));
+            isValid = false;
+        } else if (!isValidState(dropdownState.getText().toString())) {
+            inputLayoutState.setError(getString(R.string.error_invalid_state));
             isValid = false;
         } else {
             inputLayoutState.setError(null);
@@ -617,38 +560,58 @@ public class ProfileFragment extends Fragment {
     }
 
     private boolean isValidPhoneNumber(String phone) {
-        // Basic validation - more complex validation would be needed in a real app
-        return phone.length() >= 10;
+        // Basic validation for 10-digit Indian mobile number
+        return phone.length() == 10 && phone.matches("[6-9]\\d{9}");
     }
 
-// Update the saveProfile method in ProfileFragment.java to properly handle navigation refresh
+    private boolean isSameAsUserPhone(String emergencyPhone) {
+        String userPhone = sessionManager.getSavedPhoneNumber();
+        if (userPhone == null) return false;
 
+        String userDigits = extractTenDigits(userPhone);
+        return userDigits.equals(emergencyPhone);
+    }
+
+    private boolean isValidState(String state) {
+        if (state == null || state.isEmpty()) return false;
+
+        String[] states = getResources().getStringArray(R.array.indian_states);
+        for (String validState : states) {
+            if (validState.equalsIgnoreCase(state)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Save profile data following the exact flowchart sequence
+     */
     private void saveProfile() {
+        // 1. Validate inputs
         if (!validateInputs()) {
             return;
         }
 
+        // 2. Show loading and collect data
         showLoading(true);
 
-        // Track if volunteer status changed
+        // 3. Collect data from UI fields
+        String fullName = inputFullName.getText().toString().trim();
+        String state = dropdownState.getText().toString().trim();
+        String gender = dropdownGender.getText().toString().trim();
+        String emergencyContactRaw = inputContactPhone.getText().toString().trim();
+
+        // 4. Format emergency contact with +91 prefix
+        String emergencyContact = formatPhoneWithPrefix(emergencyContactRaw);
+
+        // 5. Track volunteer status change
         boolean volunteerStatusChanged = (initialVolunteerStatus != isVolunteer);
-        if (volunteerStatusChanged) {
-            Log.d("ProfileFragment", "Volunteer status changed from " +
-                    initialVolunteerStatus + " to " + isVolunteer);
-        }
 
-        // Format the emergency contact with +91 prefix before saving
-        String emergencyContactPhone = formatPhoneWithPrefix(inputContactPhone.getText().toString().trim());
+        // 6. Update session first
+        updateSessionWithCurrentValues();
 
-        // *** Important: Update session BEFORE Firebase to ensure local state is consistent ***
-        sessionManager.setFullName(inputFullName.getText().toString().trim());
-        sessionManager.setState(dropdownState.getText().toString().trim());
-        sessionManager.setGender(dropdownGender.getText().toString().trim());
-        sessionManager.setDateOfBirth(inputDob.getText().toString().trim());
-        sessionManager.setEmergencyContactPhone(emergencyContactPhone);
-        sessionManager.setVolunteer(isVolunteer);
-
-        // Get the current user's phone number and user ID
+        // 7. Get phone number and user ID
         String phoneNumber = sessionManager.getSavedPhoneNumber();
         String userId = sessionManager.getUserId();
 
@@ -658,23 +621,21 @@ public class ProfileFragment extends Fragment {
             return;
         }
 
-        // Prepare data to update
-        String fullName = inputFullName.getText().toString().trim();
-        String state = dropdownState.getText().toString().trim();
-        String gender = dropdownGender.getText().toString().trim();
-
-        // First update navigation drawer based on session changes
+        // 8. If volunteer status changed, update navigation drawer
         if (volunteerStatusChanged && getActivity() instanceof CitizenMainActivity) {
             // Initial refresh based on session changes
-            Log.d("ProfileFragment", "Refreshing navigation drawer - initial");
+            Log.d(TAG, "Refreshing navigation drawer - initial");
             ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
         }
 
-        // Now update Firebase data
-        updateFirestoreProfile(userId, phoneNumber, fullName, gender, state, emergencyContactPhone, volunteerStatusChanged);
+        // 9. Update Firestore
+        updateFirestoreProfile(userId, phoneNumber, fullName, gender, state, emergencyContact, volunteerStatusChanged);
     }
 
-    private void updateFirestoreProfile(String userId, String phoneNumber, String fullName, String state, String gender, String emergencyContactPhone, boolean volunteerStatusChanged) {
+    private void updateFirestoreProfile(String userId, String phoneNumber, String fullName,
+                                        String gender, String state, String emergencyContact,
+                                        boolean volunteerStatusChanged) {
+
         // Extract first and last name from full name
         String firstName = "";
         String lastName = "";
@@ -696,9 +657,9 @@ public class ProfileFragment extends Fragment {
         updates.put("firstName", firstName);
         updates.put("lastName", lastName);
         updates.put("userId", userId);
-        updates.put("state", dropdownState.getText().toString());
-        updates.put("gender", dropdownGender.getText().toString());
-        updates.put("emergencyContact", emergencyContactPhone);
+        updates.put("state", state);
+        updates.put("gender", gender);
+        updates.put("emergencyContact", emergencyContact);
         updates.put("isVolunteer", isVolunteer);
 
         // Create separate document ID lookup and update operations
@@ -718,14 +679,14 @@ public class ProfileFragment extends Fragment {
                                 return null;
                             }).addOnSuccessListener(aVoid -> {
                                 // Update realtime database after Firestore success
-                                updateRealtimeDatabase(userId, fullName, state, emergencyContactPhone, volunteerStatusChanged);
+                                updateRealtimeDatabase(userId, fullName, gender, state, emergencyContact, volunteerStatusChanged);
                             }).addOnFailureListener(e -> {
                                 // If transaction fails, try normal update
                                 db.collection("users")
                                         .document(documentId)
                                         .update(updates)
                                         .addOnSuccessListener(aVoid -> {
-                                            updateRealtimeDatabase(userId, fullName, state, emergencyContactPhone, volunteerStatusChanged);
+                                            updateRealtimeDatabase(userId, fullName, gender, state, emergencyContact, volunteerStatusChanged);
                                         })
                                         .addOnFailureListener(e2 -> {
                                             showError("Failed to save profile: " + e2.getMessage());
@@ -745,7 +706,7 @@ public class ProfileFragment extends Fragment {
 
                             db.collection("users").document().set(updates)
                                     .addOnSuccessListener(aVoid -> {
-                                        updateRealtimeDatabase(userId, fullName, state, emergencyContactPhone, volunteerStatusChanged);
+                                        updateRealtimeDatabase(userId, fullName, gender, state, emergencyContact, volunteerStatusChanged);
                                     })
                                     .addOnFailureListener(e -> {
                                         showError("Error creating user profile: " + e.getMessage());
@@ -763,7 +724,9 @@ public class ProfileFragment extends Fragment {
                 });
     }
 
-    private void updateRealtimeDatabase(String userId, String fullName, String state, String emergencyContactPhone, boolean volunteerStatusChanged) {
+    private void updateRealtimeDatabase(String userId, String fullName, String gender,
+                                        String state, String emergencyContact,
+                                        boolean volunteerStatusChanged) {
         // Extract first and last name from full name
         String firstName = "";
         String lastName = "";
@@ -793,9 +756,9 @@ public class ProfileFragment extends Fragment {
         updates.put("fullName", fullName);
         updates.put("firstName", firstName);
         updates.put("lastName", lastName);
-        updates.put("gender", dropdownGender.getText().toString()); // Add gender explicitly
-        updates.put("state",  dropdownState.getText().toString());
-        updates.put("emergencyContact", emergencyContactPhone);
+        updates.put("gender", gender);
+        updates.put("state", state);
+        updates.put("emergencyContact", emergencyContact);
         updates.put("isVolunteer", isVolunteer);
         updates.put("userId", userId);  // Keep userId as a field for reference
 
@@ -803,7 +766,9 @@ public class ProfileFragment extends Fragment {
         rtDatabase.child("users").child(phoneKey).updateChildren(updates)
                 .addOnSuccessListener(aVoid -> {
                     // Show success message
-                    Toast.makeText(requireContext(), R.string.profile_saved, Toast.LENGTH_SHORT).show();
+                    if (isAdded()) {
+                        Toast.makeText(requireContext(), R.string.profile_saved, Toast.LENGTH_SHORT).show();
+                    }
 
                     // Force the navigation drawer to refresh
                     forceNavigationDrawerRefresh();
@@ -822,25 +787,17 @@ public class ProfileFragment extends Fragment {
                 });
     }
 
-
-    // Add a new method to force navigation drawer refresh with a slight delay
     private void forceNavigationDrawerRefresh() {
         if (getActivity() instanceof CitizenMainActivity) {
-            // First refresh
+            // Immediate refresh
             ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
 
-            // Second refresh with delay to ensure updates are applied
+            // Delayed refresh to ensure updates are applied
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isAdded() && getActivity() instanceof CitizenMainActivity) {
                     ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
                 }
             }, 500); // 500ms delay
-        }
-    }
-    private void refreshNavigationDrawer() {
-        // Request the main activity to refresh its navigation drawer
-        if (getActivity() instanceof CitizenMainActivity) {
-            ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
         }
     }
 
@@ -851,8 +808,9 @@ public class ProfileFragment extends Fragment {
         sessionManager.setGender(dropdownGender.getText().toString().trim());
         sessionManager.setDateOfBirth(inputDob.getText().toString().trim());
 
-        // Emergency contact phone only
-        sessionManager.setEmergencyContactPhone(inputContactPhone.getText().toString().trim());
+        // Format and save emergency contact
+        String formattedContact = formatPhoneWithPrefix(inputContactPhone.getText().toString().trim());
+        sessionManager.setEmergencyContactPhone(formattedContact);
 
         // Volunteer status
         sessionManager.setVolunteer(isVolunteer);
@@ -867,36 +825,27 @@ public class ProfileFragment extends Fragment {
         btnCancelEdit.setVisibility(editMode ? View.VISIBLE : View.GONE);
 
         // Toggle editability of fields
-        // Only allow editing of full name, state, emergency contact, and volunteer status
         inputFullName.setEnabled(editMode);
         inputPhone.setEnabled(false); // Never editable
-        inputDob.setEnabled(false);   // Never editable
-        dropdownGender.setEnabled(false); // Never editable
+        inputDob.setEnabled(false);   // Only editable via date picker
+        dropdownGender.setEnabled(false); // Not editable in this version
         dropdownState.setEnabled(editMode);
-
-        // Emergency contact phone
         inputContactPhone.setEnabled(editMode);
-
-        // Volunteer status
         switchVolunteer.setEnabled(editMode);
 
         // Update input layouts
         updateInputLayoutsForEditMode(editMode);
+
+        inputLayoutContactPhone.setEndIconMode(TextInputLayout.END_ICON_CUSTOM);
     }
 
     private void updateInputLayoutsForEditMode(boolean editMode) {
         // Change end icons based on edit mode
         inputLayoutFullName.setEndIconMode(editMode ? TextInputLayout.END_ICON_CLEAR_TEXT : TextInputLayout.END_ICON_NONE);
-        inputLayoutDob.setEndIconMode(TextInputLayout.END_ICON_NONE); // DOB not editable
+        inputLayoutDob.setEndIconMode(editMode ? TextInputLayout.END_ICON_CUSTOM : TextInputLayout.END_ICON_NONE);
 
-        // Set contact picker icon when in edit mode
-        if (editMode) {
-            inputLayoutContactPhone.setEndIconMode(TextInputLayout.END_ICON_CUSTOM);
-            inputLayoutContactPhone.setEndIconDrawable(R.drawable.ic_contacts);
-            inputLayoutContactPhone.setEndIconOnClickListener(v -> checkContactPermissionAndOpen());
-        } else {
-            inputLayoutContactPhone.setEndIconMode(TextInputLayout.END_ICON_NONE);
-        }
+        inputLayoutContactPhone.setEndIconMode(TextInputLayout.END_ICON_CUSTOM);
+        inputLayoutContactPhone.setEndIconDrawable(R.drawable.ic_contacts);
 
         // Update dropdown layouts
         inputLayoutGender.setEnabled(false); // Never editable
@@ -907,7 +856,7 @@ public class ProfileFragment extends Fragment {
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.READ_CONTACTS)
                 != PackageManager.PERMISSION_GRANTED) {
             // Permission not granted, request it
-            ActivityCompat.requestPermissions(requireActivity(),
+            requestPermissions(
                     new String[]{Manifest.permission.READ_CONTACTS},
                     CONTACTS_PERMISSION_CODE);
         } else {
@@ -917,29 +866,55 @@ public class ProfileFragment extends Fragment {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         if (requestCode == CONTACTS_PERMISSION_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permission granted, open contact picker
                 openContactPicker();
             } else {
-                // Permission denied
-                Toast.makeText(requireContext(),
-                        "Contacts permission is needed to select contacts",
-                        Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), "Contact permission denied", Toast.LENGTH_SHORT).show();
             }
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        if (requestCode == CONTACT_PICK_CODE && resultCode == Activity.RESULT_OK) {
+            if (data != null) {
+                Uri contactUri = data.getData();
+                String[] projection = {ContactsContract.CommonDataKinds.Phone.NUMBER};
+
+                try (Cursor cursor = requireActivity().getContentResolver().query(contactUri, projection, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+                        String phoneNumber = cursor.getString(numberIndex);
+
+                        // Remove the +91 prefix as the layout already adds it
+                        if (phoneNumber.startsWith("+91")) {
+                            phoneNumber = phoneNumber.substring(3);
+                        }
+
+                        inputContactPhone.setText(phoneNumber);
+                    }
+                } catch (Exception e) {
+                    Log.e("ProfileFragment", "Error reading contact", e);
+                }
+            }
+        } else {
+            super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
 
     private void showLoading(boolean isLoading) {
-        progressIndicator.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+        if (progressIndicator != null) {
+            progressIndicator.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+        }
 
         // Disable interaction while loading
-        btnEditProfile.setEnabled(!isLoading);
-        btnSaveProfile.setEnabled(!isLoading);
-        btnCancelEdit.setEnabled(!isLoading);
+        if (btnEditProfile != null) btnEditProfile.setEnabled(!isLoading);
+        if (btnSaveProfile != null) btnSaveProfile.setEnabled(!isLoading);
+        if (btnCancelEdit != null) btnCancelEdit.setEnabled(!isLoading);
     }
 
     private void showError(String message) {
@@ -948,9 +923,63 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    private void showNotImplementedToast(String feature) {
-        Toast.makeText(requireContext(),
-                getString(R.string.feature_not_implemented, feature),
-                Toast.LENGTH_SHORT).show();
+    /**
+     * Utility method to format phone number with +91 prefix
+     */
+    private String formatPhoneWithPrefix(String phone) {
+        if (phone == null || phone.isEmpty()) {
+            return "";
+        }
+
+        try {
+            // Clean the phone number to digits only
+            String digitsOnly = phone.replaceAll("[^0-9]", "");
+
+            // Get last 10 digits or all if less than 10
+            String last10Digits;
+            if (digitsOnly.length() > 10) {
+                last10Digits = digitsOnly.substring(digitsOnly.length() - 10);
+            } else {
+                last10Digits = digitsOnly;
+            }
+
+            return "+91" + last10Digits;
+        } catch (Exception e) {
+            Log.e(TAG, "Error formatting phone number", e);
+            // Return original with prefix as fallback
+            return "+91" + phone;
+        }
+    }
+
+    /**
+     * Utility method to extract 10 digits from phone number
+     */
+    private String extractTenDigits(String phone) {
+        if (phone == null || phone.isEmpty()) {
+            return "";
+        }
+
+        try {
+            String noSpaces = phone.replace(" ", "");
+
+            // Extract only digits
+            String digitsOnly = noSpaces.replaceAll("[^0-9]", "");
+
+            // Handle different formats
+            if (digitsOnly.startsWith("91") && digitsOnly.length() > 10) {
+                // Remove country code if present
+                digitsOnly = digitsOnly.substring(2);
+            }
+
+            // Get last 10 digits (or all if less than 10)
+            if (digitsOnly.length() > 10) {
+                return digitsOnly.substring(digitsOnly.length() - 10);
+            } else {
+                return digitsOnly;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error extracting phone digits", e);
+            return phone; // Return original as fallback
+        }
     }
 }

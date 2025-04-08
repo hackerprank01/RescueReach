@@ -2,8 +2,14 @@ package com.rescuereach.service.auth;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.text.TextUtils;
 import android.util.Log;
 
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.rescuereach.data.model.User;
 import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.data.repository.RepositoryProvider;
@@ -12,52 +18,87 @@ import com.rescuereach.data.repository.UserRepository;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
 
+/**
+ * Manages user session data using SharedPreferences and synchronizes with Firebase.
+ * Handles login state, user profile information, and preferences.
+ */
 public class UserSessionManager {
     private static final String TAG = "UserSessionManager";
-    private static final String PREF_NAME = "RescueReachUserSession";
-    private static final String KEY_USER_PHONE = "user_phone";
-    private static final String KEY_USER_FULL_NAME = "user_full_name";
-    private static final String KEY_USER_EMERGENCY_CONTACT = "user_emergency_contact";
-    private static final String KEY_IS_PROFILE_COMPLETE = "is_profile_complete";
 
-    // New preference keys
-    private static final String KEY_USER_DOB = "user_dob";
-    private static final String KEY_USER_GENDER = "user_gender";
-    private static final String KEY_USER_STATE = "user_state";
-    private static final String KEY_USER_IS_VOLUNTEER = "user_is_volunteer";
+    private boolean volunteerStatusLoading = false;
+    private long lastVolunteerCheckTime = 0;
+    private static final long VOLUNTEER_CHECK_INTERVAL = 60000;
 
+    // SharedPreferences keys
+    private static final String PREF_NAME = "RescueReachSession";
+    private static final String KEY_PHONE_NUMBER = "phone_number";
+    private static final String KEY_USER_ID = "user_id";
+    private static final String KEY_FULL_NAME = "full_name";
+    private static final String KEY_FIRST_NAME = "first_name";
+    private static final String KEY_LAST_NAME = "last_name";
+    private static final String KEY_GENDER = "gender";
+    private static final String KEY_DATE_OF_BIRTH = "date_of_birth";
+    private static final String KEY_STATE = "state";
+    private static final String KEY_IS_VOLUNTEER = "is_volunteer";
+    private static final String KEY_EMERGENCY_CONTACT = "emergency_contact";
+    private static final String KEY_LAST_LOGIN = "last_login";
+    private static final String KEY_PROFILE_COMPLETED = "profile_completed";
 
-    private static final String KEY_EMERGENCY_CONTACT_PHONE = "emergency_contact_phone";
+    // Preference categories
+    private static final String PRIVACY_PREFS = "privacy_settings";
+    private static final String EMERGENCY_PREFS = "emergency_settings";
+    private static final String NOTIFICATION_PREFS = "notification_settings";
 
-
-    private static final String PREF_PRIVACY = "privacy_";
-
-    private static final String PREF_EMERGENCY = "emergency_";
-    private static final String PREF_DATA = "data_";
-
-    // For backward compatibility
-    private static final String KEY_USER_FIRST_NAME = "user_first_name";
-    private static final String KEY_USER_LAST_NAME = "user_last_name";
-    private final AuthService authService;
-    private final UserRepository userRepository;
-    private final SimpleDateFormat dateFormat;
     private static UserSessionManager instance;
     private final SharedPreferences sharedPreferences;
+    private final SharedPreferences privacyPreferences;
+    private final SharedPreferences emergencyPreferences;
+    private final SharedPreferences notificationPreferences;
     private final Context context;
 
+    // Date formatters for storing and retrieving dates
+    private final SimpleDateFormat storageFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+    private final SimpleDateFormat displayFormat = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
+    private final SimpleDateFormat isoFormat;
 
-    private User currentUser;
+    // Firebase references
+    private final FirebaseAuth firebaseAuth;
+    private final FirebaseFirestore firestore;
+    private final DatabaseReference realtimeDb;
+    private UserRepository userRepository;
 
     private UserSessionManager(Context context) {
         this.context = context.getApplicationContext();
-        this.sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        this.authService = AuthServiceProvider.getInstance().getAuthService();
-        this.userRepository = RepositoryProvider.getInstance().getUserRepository();
-        this.dateFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+
+        // Initialize SharedPreferences
+        sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        privacyPreferences = context.getSharedPreferences(PRIVACY_PREFS, Context.MODE_PRIVATE);
+        emergencyPreferences = context.getSharedPreferences(EMERGENCY_PREFS, Context.MODE_PRIVATE);
+        notificationPreferences = context.getSharedPreferences(NOTIFICATION_PREFS, Context.MODE_PRIVATE);
+
+        // Initialize date formatters
+        isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+        isoFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+        // Initialize Firebase
+        firebaseAuth = FirebaseAuth.getInstance();
+        firestore = FirebaseFirestore.getInstance();
+        realtimeDb = FirebaseDatabase.getInstance().getReference();
+
+        // Get user repository
+        userRepository = RepositoryProvider.getInstance().getUserRepository();
     }
 
+    /**
+     * Get the singleton instance of UserSessionManager
+     * @param context Application context
+     * @return UserSessionManager instance
+     */
     public static synchronized UserSessionManager getInstance(Context context) {
         if (instance == null) {
             instance = new UserSessionManager(context);
@@ -65,265 +106,670 @@ public class UserSessionManager {
         return instance;
     }
 
+    /**
+     * Save the user's phone number after successful authentication
+     * @param phoneNumber The user's phone number
+     */
     public void saveUserPhoneNumber(String phoneNumber) {
+        // Format the phone number
+        String formattedPhone = formatPhoneNumber(phoneNumber);
+
         SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putString(KEY_USER_PHONE, formatPhoneNumber(phoneNumber));
-        editor.apply();
-    }
+        editor.putString(KEY_PHONE_NUMBER, formattedPhone);
+        editor.putLong(KEY_LAST_LOGIN, System.currentTimeMillis());
 
-    public String getSavedPhoneNumber() {
-        return sharedPreferences.getString(KEY_USER_PHONE, null);
-    }
-
-    // Update to save full profile data with new fields
-    public void saveUserProfileData(String fullName, String emergencyContact,
-                                    Date dateOfBirth, String gender, String state, boolean isVolunteer) {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-
-        // Save new format data
-        editor.putString(KEY_USER_FULL_NAME, fullName);
-        editor.putString(KEY_USER_EMERGENCY_CONTACT, formatPhoneNumber(emergencyContact));
-
-        // Save new fields
-        if (dateOfBirth != null) {
-            editor.putString(KEY_USER_DOB, dateFormat.format(dateOfBirth));
+        // Set user ID from Firebase Auth
+        FirebaseUser user = firebaseAuth.getCurrentUser();
+        if (user != null) {
+            editor.putString(KEY_USER_ID, user.getUid());
         }
-        editor.putString(KEY_USER_GENDER, gender);
-        editor.putString(KEY_USER_STATE, state);
-        editor.putBoolean(KEY_USER_IS_VOLUNTEER, isVolunteer);
 
-        // For backward compatibility - extract first and last name from full name
-        String firstName = "";
-        String lastName = "";
-        if (fullName != null && !fullName.isEmpty()) {
+        editor.apply();
+
+        // Update user's online status in Realtime Database
+        updateOnlineStatus();
+
+        // This will ensure we have the correct volunteer status
+        loadUserProfileFromFirebase(formattedPhone);
+    }
+
+
+    private void loadUserProfileFromFirebase(String phoneNumber) {
+        if (userRepository == null) {
+            Log.e(TAG, "UserRepository is null");
+            return;
+        }
+
+        Log.d(TAG, "Loading user profile from Firebase for: " + phoneNumber);
+
+        // First check if the user exists, and if so, load their profile
+        userRepository.getUserByPhoneNumber(phoneNumber, new UserRepository.OnUserFetchedListener() {
+            @Override
+            public void onSuccess(User user) {
+                if (user != null) {
+                    Log.d(TAG, "User found in Firebase, updating local data");
+                    // Update SharedPreferences with user data from Firebase
+                    SharedPreferences.Editor editor = sharedPreferences.edit();
+
+                    if (user.getFullName() != null) {
+                        editor.putString(KEY_FULL_NAME, user.getFullName());
+                        editor.putString(KEY_FIRST_NAME, user.getFirstName());
+                        editor.putString(KEY_LAST_NAME, user.getLastName());
+                    }
+
+                    if (user.getGender() != null) {
+                        editor.putString(KEY_GENDER, user.getGender());
+                    }
+
+                    if (user.getState() != null) {
+                        editor.putString(KEY_STATE, user.getState());
+                    }
+
+                    if (user.getEmergencyContact() != null) {
+                        editor.putString(KEY_EMERGENCY_CONTACT, user.getEmergencyContact());
+                    }
+
+                    // CRITICAL: This is the key fix - always update volunteer status from Firebase
+                    editor.putBoolean(KEY_IS_VOLUNTEER, user.isVolunteer());
+                    Log.d(TAG, "Setting volunteer status from Firebase: " + user.isVolunteer());
+
+                    if (user.getDateOfBirth() != null) {
+                        editor.putString(KEY_DATE_OF_BIRTH, storageFormat.format(user.getDateOfBirth()));
+                    }
+
+                    // Set profile completion status based on required fields
+                    boolean isComplete = !TextUtils.isEmpty(user.getFullName()) &&
+                            !TextUtils.isEmpty(user.getEmergencyContact());
+                    editor.putBoolean(KEY_PROFILE_COMPLETED, isComplete);
+
+                    editor.apply();
+
+                    // Now we can update online status
+                    updateOnlineStatus();
+                } else {
+                    Log.d(TAG, "User not found in Firebase, creating new profile");
+                    // User doesn't exist yet, create them
+                    //createNewUser(phoneNumber, null);
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Log.e(TAG, "Error loading user profile from Firebase", e);
+                // Still update online status on error
+                updateOnlineStatus();
+            }
+        });
+    }
+
+
+
+
+    /**
+     * Create a new user in Firebase after phone authentication
+     * @param phoneNumber User's phone number
+     * @param listener Callback for operation result
+     */
+    public void createNewUser(String phoneNumber, OnCompleteListener listener) {
+        try {
+            // Save phone number to session (formats the number)
+            saveUserPhoneNumber(phoneNumber);
+
+            // Create user object
+            User user = new User();
+            user.setPhoneNumber(formatPhoneNumber(phoneNumber));
+            user.setCreatedAt(new Date());
+
+            // Get Firebase Auth user ID
+            FirebaseUser firebaseUser = firebaseAuth.getCurrentUser();
+            if (firebaseUser != null) {
+                user.setUserId(firebaseUser.getUid());
+            }
+
+            user.setVolunteer(false);
+
+            // Save to Firebase
+            userRepository.saveUser(user, new OnCompleteListener() {
+                @Override
+                public void onSuccess() {
+                    if (listener != null) {
+                        listener.onSuccess();
+                    }
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    Log.e(TAG, "Error creating new user", e);
+                    if (listener != null) {
+                        listener.onError(e);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Error in createNewUser", e);
+            if (listener != null) {
+                listener.onError(e);
+            }
+        }
+    }
+
+    public void checkVolunteerStatus(VolunteerStatusCallback callback) {
+        // Get phone number
+        String phoneNumber = getSavedPhoneNumber();
+        if (phoneNumber == null || phoneNumber.isEmpty()) {
+            if (callback != null) {
+                callback.onResult(false);
+            }
+            return;
+        }
+
+        // Check if we already have a recent check
+        long now = System.currentTimeMillis();
+        boolean cachedStatus = sharedPreferences.getBoolean(KEY_IS_VOLUNTEER, false);
+
+        if (now - lastVolunteerCheckTime < VOLUNTEER_CHECK_INTERVAL) {
+            // Use cached value if recent enough
+            Log.d(TAG, "Using cached volunteer status: " + cachedStatus);
+            if (callback != null) {
+                callback.onResult(cachedStatus);
+            }
+            return;
+        }
+
+        // Don't do multiple simultaneous checks
+        if (volunteerStatusLoading) {
+            Log.d(TAG, "Volunteer status check already in progress, using cached: " + cachedStatus);
+            if (callback != null) {
+                callback.onResult(cachedStatus);
+            }
+            return;
+        }
+
+        volunteerStatusLoading = true;
+
+        // Always do a direct Firebase check for critical status
+        userRepository.getUserByPhoneNumber(phoneNumber, new UserRepository.OnUserFetchedListener() {
+            @Override
+            public void onSuccess(User user) {
+                volunteerStatusLoading = false;
+                lastVolunteerCheckTime = System.currentTimeMillis();
+
+                boolean isVolunteer = false;
+                if (user != null) {
+                    isVolunteer = user.isVolunteer();
+                    Log.d(TAG, "Firebase volunteer status check: " + isVolunteer);
+
+                    // Update SharedPreferences
+                    SharedPreferences.Editor editor = sharedPreferences.edit();
+                    editor.putBoolean(KEY_IS_VOLUNTEER, isVolunteer);
+                    editor.apply();
+                }
+
+                if (callback != null) {
+                    callback.onResult(isVolunteer);
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                volunteerStatusLoading = false;
+                Log.e(TAG, "Error checking volunteer status", e);
+
+                // Fall back to cached value on error
+                boolean cachedValue = sharedPreferences.getBoolean(KEY_IS_VOLUNTEER, false);
+                if (callback != null) {
+                    callback.onResult(cachedValue);
+                }
+            }
+        });
+    }
+
+    public interface VolunteerStatusCallback {
+        void onResult(boolean isVolunteer);
+    }
+
+    /**
+     * Update user profile with all fields and save to both SharedPreferences and Firebase
+     */
+    public void updateUserProfile(String fullName, String emergencyContact, Date dateOfBirth,
+                                  String gender, String state, boolean isVolunteer,
+                                  OnCompleteListener listener) {
+        try {
+            // Format the phone number and emergency contact
+            String phoneNumber = formatPhoneNumber(getSavedPhoneNumber());
+            emergencyContact = formatPhoneNumber(emergencyContact);
+
+            // Save to SharedPreferences
+            SharedPreferences.Editor editor = sharedPreferences.edit();
+
+            // Parse full name
+            String firstName = fullName;
+            String lastName = "";
             int spaceIndex = fullName.indexOf(' ');
             if (spaceIndex > 0) {
                 firstName = fullName.substring(0, spaceIndex);
                 lastName = fullName.substring(spaceIndex + 1);
-            } else {
-                firstName = fullName;
+            }
+
+            // Save all fields
+            editor.putString(KEY_FULL_NAME, fullName);
+            editor.putString(KEY_FIRST_NAME, firstName);
+            editor.putString(KEY_LAST_NAME, lastName);
+            editor.putString(KEY_GENDER, gender);
+            editor.putString(KEY_STATE, state);
+            editor.putString(KEY_EMERGENCY_CONTACT, emergencyContact);
+            editor.putBoolean(KEY_IS_VOLUNTEER, isVolunteer);
+            editor.putBoolean(KEY_PROFILE_COMPLETED, true);
+
+            // Save date of birth if provided
+            if (dateOfBirth != null) {
+                editor.putString(KEY_DATE_OF_BIRTH, storageFormat.format(dateOfBirth));
+            }
+
+            editor.apply();
+
+            // Create User object for Firebase update
+            User user = new User();
+            user.setUserId(getUserId());
+            user.setPhoneNumber(phoneNumber);
+            user.setFullName(fullName);
+            user.setFirstName(firstName);
+            user.setLastName(lastName);
+            user.setGender(gender);
+            user.setState(state);
+            user.setEmergencyContact(emergencyContact);
+            user.setVolunteer(isVolunteer);
+            user.setDateOfBirth(dateOfBirth);
+
+            // Update Firebase
+            userRepository.updateUserProfile(user, new OnCompleteListener() {
+                @Override
+                public void onSuccess() {
+                    if (listener != null) {
+                        listener.onSuccess();
+                    }
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    Log.e(TAG, "Error updating user profile in Firebase", e);
+                    if (listener != null) {
+                        listener.onError(e);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Error in updateUserProfile", e);
+            if (listener != null) {
+                listener.onError(e);
             }
         }
-        editor.putString(KEY_USER_FIRST_NAME, firstName);
-        editor.putString(KEY_USER_LAST_NAME, lastName);
-
-        editor.putBoolean(KEY_IS_PROFILE_COMPLETE, true);
-        editor.apply();
     }
 
-    // For backward compatibility
-    public void saveUserProfileData(String firstName, String lastName, String emergencyContact) {
-        String fullName;
-        if (firstName != null && lastName != null && !firstName.isEmpty() && !lastName.isEmpty()) {
-            fullName = firstName + " " + lastName;
-        } else if (firstName != null && !firstName.isEmpty()) {
-            fullName = firstName;
-        } else if (lastName != null && !lastName.isEmpty()) {
-            fullName = lastName;
-        } else {
-            fullName = "";
-        }
+    /**
+     * Update the user's online status in Realtime Database
+     */
+    private void updateOnlineStatus() {
+        FirebaseUser user = firebaseAuth.getCurrentUser();
+        String phoneNumber = getSavedPhoneNumber();
 
-        // Use default values for new fields
-        saveUserProfileData(fullName, emergencyContact, null, "", "", false);
-    }
+        if (user != null && phoneNumber != null) {
+            // Format phone number for database key
+            String phoneKey = phoneNumber.replaceAll("[^\\d]", "");
 
-    public boolean isProfileComplete() {
-        return sharedPreferences.getBoolean(KEY_IS_PROFILE_COMPLETE, false);
-    }
+            // Update online status
+            Map<String, Object> updates = new HashMap<>();
+            updates.put("status", "online");
+            updates.put("lastSeen", System.currentTimeMillis());
 
-    // Get user full name
-    public String getFullName() {
-        String fullName = sharedPreferences.getString(KEY_USER_FULL_NAME, null);
-        if (fullName != null && !fullName.isEmpty()) {
-            return fullName;
-        }
-
-        // Fallback to first name + last name for backward compatibility
-        String firstName = sharedPreferences.getString(KEY_USER_FIRST_NAME, "");
-        String lastName = sharedPreferences.getString(KEY_USER_LAST_NAME, "");
-
-        if (!firstName.isEmpty() && !lastName.isEmpty()) {
-            return firstName + " " + lastName;
-        } else if (!firstName.isEmpty()) {
-            return firstName;
-        } else if (!lastName.isEmpty()) {
-            return lastName;
-        } else {
-            return "User";
+            // Try updating by phone key first
+            realtimeDb.child("users").child(phoneKey).updateChildren(updates)
+                    .addOnFailureListener(e -> {
+                        // If that fails, try with UID
+                        realtimeDb.child("users").child(user.getUid()).updateChildren(updates)
+                                .addOnFailureListener(e2 ->
+                                        Log.e(TAG, "Failed to update online status", e2));
+                    });
         }
     }
 
-    // For backward compatibility
-    public String getFirstName() {
-        String fullName = sharedPreferences.getString(KEY_USER_FULL_NAME, null);
-        if (fullName != null && !fullName.isEmpty()) {
-            int spaceIndex = fullName.indexOf(' ');
-            if (spaceIndex > 0) {
-                return fullName.substring(0, spaceIndex);
-            }
-            return fullName;
+    /**
+     * Update the user's offline status on logout
+     */
+    private void updateOfflineStatus() {
+        FirebaseUser user = firebaseAuth.getCurrentUser();
+        String phoneNumber = getSavedPhoneNumber();
+
+        if (user != null && phoneNumber != null) {
+            // Format phone number for database key
+            String phoneKey = phoneNumber.replaceAll("[^\\d]", "");
+
+            // Update offline status
+            Map<String, Object> updates = new HashMap<>();
+            updates.put("status", "offline");
+            updates.put("lastSeen", System.currentTimeMillis());
+
+            // Try updating by phone key first
+            realtimeDb.child("users").child(phoneKey).updateChildren(updates);
+            // Also try with UID to be sure
+            realtimeDb.child("users").child(user.getUid()).updateChildren(updates);
         }
-        return sharedPreferences.getString(KEY_USER_FIRST_NAME, "");
     }
 
-    // For backward compatibility
-    public String getLastName() {
-        String fullName = sharedPreferences.getString(KEY_USER_FULL_NAME, null);
-        if (fullName != null && !fullName.isEmpty()) {
-            int spaceIndex = fullName.indexOf(' ');
-            if (spaceIndex > 0 && spaceIndex < fullName.length() - 1) {
-                return fullName.substring(spaceIndex + 1);
-            }
-            return "";
-        }
-        return sharedPreferences.getString(KEY_USER_LAST_NAME, "");
+    /**
+     * Get the stored phone number
+     * @return The user's phone number or null if not set
+     */
+    public String getSavedPhoneNumber() {
+        return sharedPreferences.getString(KEY_PHONE_NUMBER, null);
     }
 
-    public String getEmergencyContact() {
-        return sharedPreferences.getString(KEY_USER_EMERGENCY_CONTACT, "");
-    }
+    /**
+     * Get the user ID (Firebase Auth UID)
+     * @return The user ID or null if not set
+     */
+    public String getUserId() {
+        // First try to get from SharedPreferences
+        String userId = sharedPreferences.getString(KEY_USER_ID, null);
 
-    // New getters for additional fields
-    public Date getDateOfBirth() {
-        String dobString = sharedPreferences.getString(KEY_USER_DOB, null);
-        if (dobString != null && !dobString.isEmpty()) {
-            try {
-                return dateFormat.parse(dobString);
-            } catch (ParseException e) {
-                Log.e(TAG, "Error parsing date of birth", e);
-            }
-        }
-        return null;
-    }
-
-    public String getGender() {
-        return sharedPreferences.getString(KEY_USER_GENDER, "");
-    }
-
-    public String getState() {
-        return sharedPreferences.getString(KEY_USER_STATE, "");
-    }
-
-    public boolean isVolunteer() {
-        return sharedPreferences.getBoolean(KEY_USER_IS_VOLUNTEER, false);
-    }
-
-    public void createNewUser(String phoneNumber, OnCompleteListener listener) {
-        String userId = authService.getCurrentUserId();
+        // If not available, try to get from Firebase Auth
         if (userId == null) {
-            listener.onError(new Exception("User ID is null"));
-            return;
+            FirebaseUser user = firebaseAuth.getCurrentUser();
+            if (user != null) {
+                userId = user.getUid();
+
+                // Save it for future use
+                sharedPreferences.edit().putString(KEY_USER_ID, userId).apply();
+            }
         }
 
-        User newUser = new User(userId, formatPhoneNumber(phoneNumber));
-        userRepository.saveUser(newUser, new OnCompleteListener() {
-            @Override
-            public void onSuccess() {
-                currentUser = newUser;
-                saveUserPhoneNumber(phoneNumber);
-                listener.onSuccess();
-            }
-
-            @Override
-            public void onError(Exception e) {
-                listener.onError(e);
-            }
-        });
+        return userId;
     }
 
-    // Update method for the new profile data model
-    public void updateUserProfile(String fullName, String emergencyContact,
-                                  Date dateOfBirth, String gender, String state, boolean isVolunteer,
-                                  OnCompleteListener listener) {
-        String userId = authService.getCurrentUserId();
-        String phoneNumber = getSavedPhoneNumber();
+    /**
+     * Check if the user is logged in
+     * @return true if logged in, false otherwise
+     */
+    public boolean isLoggedIn() {
+        // Check both local storage and Firebase Auth
+        boolean localLogin = getSavedPhoneNumber() != null;
+        boolean firebaseLogin = firebaseAuth.getCurrentUser() != null;
 
-        if (userId == null || phoneNumber == null) {
-            listener.onError(new Exception("User ID or phone number is missing"));
-            return;
+        return localLogin && firebaseLogin;
+    }
+
+    /**
+     * Check if the user's profile is complete with essential information
+     * @return true if profile is complete, false otherwise
+     */
+    public boolean isProfileComplete() {
+        // First check if we have explicitly marked the profile as complete
+        if (sharedPreferences.getBoolean(KEY_PROFILE_COMPLETED, false)) {
+            return true;
         }
 
-        User updatedUser = new User(
-                userId,
-                fullName,
-                phoneNumber,
-                formatPhoneNumber(emergencyContact),
-                dateOfBirth,
-                gender,
-                state,
-                isVolunteer
-        );
-
-        userRepository.updateUserProfile(updatedUser, new OnCompleteListener() {
-            @Override
-            public void onSuccess() {
-                currentUser = updatedUser;
-                saveUserProfileData(fullName, emergencyContact, dateOfBirth, gender, state, isVolunteer);
-                listener.onSuccess();
-            }
-
-            @Override
-            public void onError(Exception e) {
-                listener.onError(e);
-            }
-        });
+        // Otherwise check if we have all the essential fields
+        return !TextUtils.isEmpty(getFullName()) &&
+                !TextUtils.isEmpty(getEmergencyContactPhone()) &&
+                !TextUtils.isEmpty(getState());
     }
 
-    // For backward compatibility
-    public void updateUserProfile(String firstName, String lastName, String emergencyContact, OnCompleteListener listener) {
-        String fullName;
-        if (firstName != null && lastName != null && !firstName.isEmpty() && !lastName.isEmpty()) {
-            fullName = firstName + " " + lastName;
-        } else if (firstName != null && !firstName.isEmpty()) {
-            fullName = firstName;
-        } else if (lastName != null && !lastName.isEmpty()) {
-            fullName = lastName;
-        } else {
-            fullName = "";
+    /**
+     * Get the user's full name
+     * @return Full name or empty string if not set
+     */
+    public String getFullName() {
+        return sharedPreferences.getString(KEY_FULL_NAME, "");
+    }
+
+    /**
+     * Get the user's first name
+     * @return First name or empty string if not set
+     */
+    public String getFirstName() {
+        return sharedPreferences.getString(KEY_FIRST_NAME, "");
+    }
+
+    /**
+     * Get the user's last name
+     * @return Last name or empty string if not set
+     */
+    public String getLastName() {
+        return sharedPreferences.getString(KEY_LAST_NAME, "");
+    }
+
+    /**
+     * Get the user's date of birth as a Date object
+     * @return Date of birth or null if not set or invalid
+     */
+    public Date getDateOfBirth() {
+        String dobString = sharedPreferences.getString(KEY_DATE_OF_BIRTH, null);
+        if (dobString == null) return null;
+
+        try {
+            return storageFormat.parse(dobString);
+        } catch (ParseException e) {
+            Log.e(TAG, "Error parsing date of birth", e);
+            return null;
         }
-
-        // Use default values for new fields
-        updateUserProfile(fullName, emergencyContact, null, "", "", false, listener);
     }
 
-    public void markProfileComplete() {
+    /**
+     * Get the user's date of birth as a formatted string (DD-MM-YYYY)
+     * @return Formatted date of birth or empty string if not set
+     */
+    public String getDateOfBirthString() {
+        Date dob = getDateOfBirth();
+        if (dob == null) return "";
+        return displayFormat.format(dob);
+    }
+
+    /**
+     * Set the user's date of birth from a string (DD-MM-YYYY)
+     * @param dateString Date string in DD-MM-YYYY format
+     */
+    public void setDateOfBirth(String dateString) {
+        if (TextUtils.isEmpty(dateString)) return;
+
+        try {
+            // Parse the display format (DD-MM-YYYY)
+            Date date = displayFormat.parse(dateString);
+            if (date != null) {
+                // Store in YYYY-MM-DD format
+                SharedPreferences.Editor editor = sharedPreferences.edit();
+                editor.putString(KEY_DATE_OF_BIRTH, storageFormat.format(date));
+                editor.apply();
+            }
+        } catch (ParseException e) {
+            Log.e(TAG, "Error parsing date string: " + dateString, e);
+        }
+    }
+
+    /**
+     * Get the user's gender
+     * @return Gender or empty string if not set
+     */
+    public String getGender() {
+        return sharedPreferences.getString(KEY_GENDER, "");
+    }
+
+    /**
+     * Set the user's gender
+     * @param gender The gender to set
+     */
+    public void setGender(String gender) {
         SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putBoolean(KEY_IS_PROFILE_COMPLETE, true);
+        editor.putString(KEY_GENDER, gender);
         editor.apply();
     }
 
-    public void resetProfileCompletionStatus() {
+    /**
+     * Get the user's state
+     * @return State or empty string if not set
+     */
+    public String getState() {
+        return sharedPreferences.getString(KEY_STATE, "");
+    }
+
+    /**
+     * Set the user's state
+     * @param state The state to set
+     */
+    public void setState(String state) {
         SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putBoolean(KEY_IS_PROFILE_COMPLETE, false);
+        editor.putString(KEY_STATE, state);
         editor.apply();
     }
 
-    public void loadCurrentUser(final OnUserLoadedListener listener) {
-        String phoneNumber = getSavedPhoneNumber();
-        if (phoneNumber == null) {
-            listener.onError(new Exception("No saved phone number"));
-            return;
-        }
-
-        userRepository.getUserByPhoneNumber(phoneNumber, new UserRepository.OnUserFetchedListener() {
-            @Override
-            public void onSuccess(User user) {
-                currentUser = user;
-                listener.onUserLoaded(user);
-            }
-
-            @Override
-            public void onError(Exception e) {
-                listener.onError(e);
-            }
-        });
+    /**
+     * Check if the user is a volunteer
+     * @return true if volunteer, false otherwise
+     */
+    public boolean isVolunteer() {
+        return sharedPreferences.getBoolean(KEY_IS_VOLUNTEER, false);
     }
 
+    /**
+     * Set the user's volunteer status
+     * @param isVolunteer The volunteer status to set
+     */
+    public void setVolunteer(boolean isVolunteer) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putBoolean(KEY_IS_VOLUNTEER, isVolunteer);
+        editor.apply();
+    }
+
+    /**
+     * Get the user's emergency contact phone number
+     * @return Emergency contact or empty string if not set
+     */
+    public String getEmergencyContactPhone() {
+        return sharedPreferences.getString(KEY_EMERGENCY_CONTACT, "");
+    }
+
+    /**
+     * Set the user's emergency contact phone number
+     * @param phone The emergency contact phone to set
+     */
+    public void setEmergencyContactPhone(String phone) {
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_EMERGENCY_CONTACT, formatPhoneNumber(phone));
+        editor.apply();
+    }
+
+    /**
+     * Set the user's full name
+     * @param fullName The full name to set
+     */
+    public void setFullName(String fullName) {
+        if (TextUtils.isEmpty(fullName)) return;
+
+        // Parse full name into first and last name
+        String firstName = fullName;
+        String lastName = "";
+
+        int spaceIndex = fullName.indexOf(" ");
+        if (spaceIndex > 0) {
+            firstName = fullName.substring(0, spaceIndex);
+            lastName = fullName.substring(spaceIndex + 1);
+        }
+
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putString(KEY_FULL_NAME, fullName);
+        editor.putString(KEY_FIRST_NAME, firstName);
+        editor.putString(KEY_LAST_NAME, lastName);
+        editor.apply();
+    }
+
+    /**
+     * Get a privacy preference setting
+     * @param key Preference key
+     * @param defaultValue Default value
+     * @return Preference value or default if not set
+     */
+    public boolean getPrivacyPreference(String key, boolean defaultValue) {
+        return privacyPreferences.getBoolean(key, defaultValue);
+    }
+
+    /**
+     * Set a privacy preference setting
+     * @param key Preference key
+     * @param value Preference value
+     */
+    public void setPrivacyPreference(String key, boolean value) {
+        privacyPreferences.edit().putBoolean(key, value).apply();
+    }
+
+    /**
+     * Get an emergency preference setting
+     * @param key Preference key
+     * @param defaultValue Default value
+     * @return Preference value or default if not set
+     */
+    public boolean getEmergencyPreference(String key, boolean defaultValue) {
+        return emergencyPreferences.getBoolean(key, defaultValue);
+    }
+
+    /**
+     * Set an emergency preference setting
+     * @param key Preference key
+     * @param value Preference value
+     */
+    public void setEmergencyPreference(String key, boolean value) {
+        emergencyPreferences.edit().putBoolean(key, value).apply();
+    }
+
+    /**
+     * Get a notification preference setting
+     * @param key Preference key
+     * @param defaultValue Default value
+     * @return Preference value or default if not set
+     */
+    public boolean getNotificationPreference(String key, boolean defaultValue) {
+        return notificationPreferences.getBoolean(key, defaultValue);
+    }
+
+    /**
+     * Set a notification preference setting
+     * @param key Preference key
+     * @param value Preference value
+     */
+    public void setNotificationPreference(String key, boolean value) {
+        notificationPreferences.edit().putBoolean(key, value).apply();
+    }
+
+    /**
+     * Clear all session data (logout)
+     */
+    public void clearSession() {
+        try {
+            // Update offline status before clearing session
+            updateOfflineStatus();
+
+            // Sign out from Firebase
+            firebaseAuth.signOut();
+
+            // Clear all shared preferences
+            sharedPreferences.edit().clear().apply();
+
+            // Don't clear preferences as they should persist between logins
+            // but may be custom cleared on user request in a settings page
+
+            Log.d(TAG, "Session cleared successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Error clearing session", e);
+        }
+    }
+
+    /**
+     * Format phone number to ensure +91 prefix for India
+     */
     private String formatPhoneNumber(String phoneNumber) {
-        if (phoneNumber == null) return null;
+        if (phoneNumber == null || phoneNumber.isEmpty()) {
+            return phoneNumber;
+        }
 
-        // Remove any non-digit characters
+        // Remove any non-digit characters except the + symbol
         String cleaned = phoneNumber.replaceAll("[^\\d+]", "");
 
         // Ensure it starts with +91
@@ -335,272 +781,62 @@ public class UserSessionManager {
 
         return cleaned;
     }
-
-    public void clearSession() {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.clear();
-        editor.apply();
-        currentUser = null;
-    }
-
-    public void clearAllPreferences() {
+    public void saveUserProfileData(String firstName, String lastName, Date dateOfBirth,
+                                    String state, String emergencyContact, boolean isVolunteer) {
         try {
-            // Clear main preferences
-            SharedPreferences preferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            preferences.edit().clear().apply();
-
-            // List of all preference files to clear
-            String[] prefNames = {
-                    "app_prefs",
-                    "privacy_settings",
-                    "appearance_settings",
-                    "data_management_settings",
-                    "auth_prefs",
-                    "firebase_prefs",
-                    "app_version"
-            };
-
-            // Clear all preference files
-            for (String prefName : prefNames) {
-                try {
-                    context.getSharedPreferences(prefName, Context.MODE_PRIVATE)
-                            .edit().clear().apply();
-                } catch (Exception e) {
-                    Log.e(TAG, "Error clearing preferences: " + prefName, e);
-                }
+            // Construct full name
+            String fullName = firstName;
+            if (lastName != null && !lastName.isEmpty()) {
+                fullName += " " + lastName;
             }
 
-            // Hard reset for secure preferences if available
-            try {
-                Class<?> securePrefsClass = Class.forName("androidx.security.crypto.EncryptedSharedPreferences");
-                if (securePrefsClass != null) {
-                    // Try to clear encrypted preferences if they exist
-                    context.getSharedPreferences("secure_prefs", Context.MODE_PRIVATE)
-                            .edit().clear().apply();
-                }
-            } catch (Exception e) {
-                // Ignore - secure prefs might not be in use
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error during preference clearing", e);
-        }
-    }
+            // Save to SharedPreferences
+            SharedPreferences.Editor editor = sharedPreferences.edit();
+            editor.putString(KEY_FULL_NAME, fullName);
+            editor.putString(KEY_FIRST_NAME, firstName);
+            editor.putString(KEY_LAST_NAME, lastName != null ? lastName : "");
 
-    private void clearPreferencesByName(String prefName) {
-        try {
-            SharedPreferences preferences = context.getSharedPreferences(prefName, Context.MODE_PRIVATE);
-            SharedPreferences.Editor editor = preferences.edit();
-            editor.clear();
+            if (dateOfBirth != null) {
+                editor.putString(KEY_DATE_OF_BIRTH, storageFormat.format(dateOfBirth));
+            }
+
+            editor.putString(KEY_STATE, state);
+            editor.putString(KEY_EMERGENCY_CONTACT, formatPhoneNumber(emergencyContact));
+            editor.putBoolean(KEY_IS_VOLUNTEER, isVolunteer);
+            editor.putBoolean(KEY_PROFILE_COMPLETED, true);
             editor.apply();
-        } catch (Exception e) {
-            Log.e(TAG, "Error clearing preferences: " + prefName, e);
-        }
-    }
-    // Interface for user loading callback
-    public interface OnUserLoadedListener {
-        void onUserLoaded(User user);
-        void onError(Exception e);
-    }
 
-    //------------------------------------------------------------------------------
-    // New methods for the Profile UI implementation
-    //------------------------------------------------------------------------------
+            // Create or update User object in Firebase
+            String phoneNumber = getSavedPhoneNumber();
+            String userId = getUserId();
 
-    // Set the full name directly
-    public void setFullName(String fullName) {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putString(KEY_USER_FULL_NAME, fullName);
+            if (phoneNumber != null && userId != null) {
+                User user = new User();
+                user.setUserId(userId);
+                user.setPhoneNumber(phoneNumber);
+                user.setFullName(fullName);
+                user.setFirstName(firstName);
+                user.setLastName(lastName != null ? lastName : "");
+                user.setDateOfBirth(dateOfBirth);
+                user.setState(state);
+                user.setEmergencyContact(emergencyContact);
+                user.setVolunteer(isVolunteer);
 
-        // For backward compatibility - extract first and last name
-        String firstName = "";
-        String lastName = "";
-        if (fullName != null && !fullName.isEmpty()) {
-            int spaceIndex = fullName.indexOf(' ');
-            if (spaceIndex > 0) {
-                firstName = fullName.substring(0, spaceIndex);
-                lastName = fullName.substring(spaceIndex + 1);
-            } else {
-                firstName = fullName;
+                // Update in Firebase
+                userRepository.updateUserProfile(user, new OnCompleteListener() {
+                    @Override
+                    public void onSuccess() {
+                        Log.d(TAG, "User profile data saved successfully");
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        Log.e(TAG, "Error saving user profile data to Firebase", e);
+                    }
+                });
             }
+        } catch (Exception e) {
+            Log.e(TAG, "Error saving user profile data", e);
         }
-        editor.putString(KEY_USER_FIRST_NAME, firstName);
-        editor.putString(KEY_USER_LAST_NAME, lastName);
-        editor.apply();
     }
-
-    // Set and get date of birth as string (for UI)
-    public void setDateOfBirth(String dobString) {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putString(KEY_USER_DOB, dobString);
-        editor.apply();
-    }
-
-    public String getDateOfBirthString() {
-        return sharedPreferences.getString(KEY_USER_DOB, "");
-    }
-
-    // Set gender directly
-    public void setGender(String gender) {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putString(KEY_USER_GENDER, gender);
-        editor.apply();
-    }
-
-    // Set state directly
-    public void setState(String state) {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putString(KEY_USER_STATE, state);
-        editor.apply();
-    }
-
-    // Set volunteer status directly
-    public void setVolunteer(boolean isVolunteer) {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putBoolean(KEY_USER_IS_VOLUNTEER, isVolunteer);
-        editor.apply();
-    }
-
-    // Emergency contact methods
-
-
-
-
-    public void setEmergencyContactPhone(String phone) {
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putString(KEY_EMERGENCY_CONTACT_PHONE, formatPhoneNumber(phone));
-        // For backward compatibility
-        editor.putString(KEY_USER_EMERGENCY_CONTACT, formatPhoneNumber(phone));
-        editor.apply();
-    }
-
-    public String getUserId() {
-        return authService.getCurrentUserId();
-    }
-    public String getEmergencyContactPhone() {
-        String phone = sharedPreferences.getString(KEY_EMERGENCY_CONTACT_PHONE, "");
-        if (phone == null || phone.isEmpty()) {
-            // Fall back to the legacy key
-            return sharedPreferences.getString(KEY_USER_EMERGENCY_CONTACT, "");
-        }
-        return phone;
-    }
-
-//All the setting code is here
-
-    //Privacy
-    public boolean getPrivacyPreference(String key, boolean defaultValue) {
-        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return prefs.getBoolean(PREF_PRIVACY + key, defaultValue);
-    }
-
-    public void setPrivacyPreference(String key, boolean value) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.putBoolean(PREF_PRIVACY + key, value);
-        editor.apply();
-    }
-
-
-    // Emergency preferences
-    public boolean getEmergencyPreference(String key, boolean defaultValue) {
-        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return prefs.getBoolean(PREF_EMERGENCY + key, defaultValue);
-    }
-
-    public void setEmergencyPreference(String key, boolean value) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.putBoolean(PREF_EMERGENCY + key, value);
-        editor.apply();
-    }
-
-    // String preference (used for emergency message template, etc.)
-    public String getStringPreference(String key, String defaultValue) {
-        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return prefs.getString(key, defaultValue);
-    }
-
-    public void setStringPreference(String key, String value) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.putString(key, value);
-        editor.apply();
-    }
-
-    private synchronized SharedPreferences getPreferences() {
-        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-    }
-
-
-    // Appearance preferences
-    public String getAppearancePreference(String key, String defaultValue) {
-        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return prefs.getString("appearance_" + key, defaultValue);
-    }
-
-    public void setAppearancePreference(String key, String value) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.putString("appearance_" + key, value);
-        editor.apply();
-    }
-
-    // Int preferences
-    public int getIntPreference(String key, int defaultValue) {
-        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return prefs.getInt(key, defaultValue);
-    }
-
-    public void setIntPreference(String key, int value) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.putInt(key, value);
-        editor.apply();
-    }
-
-    // Float preferences
-    public float getFloatPreference(String key, float defaultValue) {
-        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return prefs.getFloat(key, defaultValue);
-    }
-
-    public void setFloatPreference(String key, float value) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.putFloat(key, value);
-        editor.apply();
-    }
-
-    // BackupManager-related preferences
-    public boolean getBackupPreference(String key, boolean defaultValue) {
-        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return prefs.getBoolean("backup_" + key, defaultValue);
-    }
-
-    public void setBackupPreference(String key, boolean value) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.putBoolean("backup_" + key, value);
-        editor.apply();
-    }
-
-    public long getLongPreference(String key, long defaultValue) {
-        SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        return prefs.getLong(key, defaultValue);
-    }
-
-    public void setLongPreference(String key, long value) {
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.putLong(key, value);
-        editor.apply();
-    }
-
-    // Method to clear all user data but keep essential info like userId
-    public void clearAllUserData() {
-        // Save essential data
-        String phoneNumber = getSavedPhoneNumber();
-
-        // Clear all preferences
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.clear();
-        editor.apply();
-
-        // Restore essential data
-        saveUserPhoneNumber(phoneNumber);
-    }
-
-
 }

@@ -12,7 +12,6 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.SubMenu;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -50,7 +49,6 @@ import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRe
 import com.google.android.libraries.places.api.net.PlacesClient;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
-import com.google.firebase.auth.FirebaseAuth;
 import com.rescuereach.R;
 import com.rescuereach.citizen.fragments.HomeFragment;
 import com.rescuereach.citizen.fragments.PlaceholderFragment;
@@ -60,7 +58,6 @@ import com.rescuereach.service.auth.AuthServiceProvider;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.util.LocationManager;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -76,40 +73,89 @@ public class CitizenMainActivity extends AppCompatActivity
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
     private static final String MAPVIEW_BUNDLE_KEY = "MapViewBundleKey";
 
-    private boolean emergencyServicesLoadedToastShown = false;
-
+    // UI components
     private DrawerLayout drawer;
-    private UserSessionManager sessionManager;
-    private int currentFragmentId = R.id.nav_home;
-
-    // Map and location related
     private MapView mapView;
     private GoogleMap googleMap;
-    private LocationManager locationManager;
-    private Location currentLocation;
     private ImageView centerLocationButton;
+    private TextView locationAddressText;
 
+    // Service components
+    private UserSessionManager sessionManager;
+    private LocationManager locationManager;
     private PlacesClient placesClient;
-    private final int SEARCH_RADIUS = 3000; // 3 km radius
-    private final int MAX_RESULTS = 5; // Max 5 results per type
 
+    // State management
+    private int currentFragmentId = R.id.nav_home;
+    private Location currentLocation;
+    private Toast currentToast = null;
+    private boolean isSearchingPlaces = false;
+    private boolean emergencyServicesLoadedToastShown = false;
+    private boolean placesLoadingToastShown = false;
+
+    private Handler drawerUpdateHandler;
+    private static final long DRAWER_UPDATE_DELAY = 500; // Half second delay
+
+    // Place search configuration
+    private static final int SEARCH_RADIUS = 3000; // 3 km radius
+    private static final int MAX_RESULTS = 5; // Max 5 results per type
     private final Map<String, List<String>> placeTypeKeywords = new HashMap<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-
-    // Counter to track Place API requests
-    private AtomicInteger placeRequestsCounter = new AtomicInteger(0);
-    private AtomicInteger placeRequestsCompleted = new AtomicInteger(0);
-
-    private boolean isSearchingPlaces = false;
-    private Toast currentToast = null;
-    private boolean placesLoadingToastShown = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_citizen_main);
 
-        // Initialize services
+        initializeServices();
+        setupUI();
+
+        sessionManager = UserSessionManager.getInstance(this);
+        drawerUpdateHandler = new Handler(Looper.getMainLooper());
+
+        // Initialize with Home fragment if this is a fresh start
+        if (savedInstanceState == null) {
+            navigateToFragment(R.id.nav_home);
+        }
+
+        // Initial drawer update with direct Firebase check
+        updateDrawerWithFirebaseCheck();
+        
+        // Request location permissions if not granted
+        requestLocationPermissions();
+    }
+
+    private void updateDrawerWithFirebaseCheck() {
+        // Show loading if needed
+        // progressBar.setVisibility(View.VISIBLE);
+
+        // Direct Firebase check
+        sessionManager.checkVolunteerStatus(isVolunteer -> {
+            Log.d("CitizenMainActivity", "Volunteer status from Firebase: " + isVolunteer);
+
+            // Update on main thread with slight delay to ensure drawer is ready
+            drawerUpdateHandler.postDelayed(() -> {
+                try {
+                    NavigationView navigationView = findViewById(R.id.nav_view);
+                    Menu menu = navigationView.getMenu();
+
+                    MenuItem volunteerSection = menu.findItem(R.id.nav_volunteer_alerts);
+                    if (volunteerSection != null) {
+                        volunteerSection.setVisible(isVolunteer);
+                        Log.d("CitizenMainActivity", "Updated drawer visibility: " + isVolunteer);
+                    }
+
+                    // Hide loading
+                    // progressBar.setVisibility(View.GONE);
+                } catch (Exception e) {
+                    Log.e("CitizenMainActivity", "Error updating drawer", e);
+                }
+            }, DRAWER_UPDATE_DELAY);
+        });
+    }
+
+    private void initializeServices() {
+        // Initialize user session and location services
         sessionManager = UserSessionManager.getInstance(this);
         locationManager = new LocationManager(this);
 
@@ -118,24 +164,18 @@ public class CitizenMainActivity extends AppCompatActivity
             Places.initialize(getApplicationContext(), getString(R.string.google_maps_key));
         }
         placesClient = Places.createClient(this);
+
+        // Setup place type keywords for emergency services search
         setupPlaceTypeKeywords();
-        
+    }
+
+    private void setupUI() {
         setupToolbar();
         setupNavigationDrawer();
         setupSosButton();
         updateNavigationHeader();
-        initMapView(savedInstanceState);
-
-        // Initialize with Home fragment if this is a fresh start
-        if (savedInstanceState == null) {
-            navigateToFragment(R.id.nav_home);
-        }
-
-        // Request location permissions if not granted
-        requestLocationPermissions();
+        initMapView(null); // Will be properly initialized in onSaveInstanceState
     }
-
-
 
     private void setupPlaceTypeKeywords() {
         // Setup keywords for each emergency service type
@@ -212,34 +252,6 @@ public class CitizenMainActivity extends AppCompatActivity
         }
     }
 
-    private boolean hasVisibleItems(Menu menu, int sectionId) {
-        // Get the position of the section header
-        int position = -1;
-        for (int i = 0; i < menu.size(); i++) {
-            if (menu.getItem(i).getItemId() == sectionId) {
-                position = i;
-                break;
-            }
-        }
-
-        if (position == -1) return false;
-
-        // Check all items after the section header until we hit another section header
-        for (int i = position + 1; i < menu.size(); i++) {
-            MenuItem item = menu.getItem(i);
-            // If we hit another section (items with no action), stop checking
-            if (item.hasSubMenu() || !item.isCheckable()) {
-                break;
-            }
-            // If any item is visible, return true
-            if (item.isVisible()) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private void setupSosButton() {
         FloatingActionButton fab = findViewById(R.id.fab_sos);
         fab.setOnClickListener(view -> {
@@ -252,7 +264,7 @@ public class CitizenMainActivity extends AppCompatActivity
     private void updateNavigationHeader() {
         NavigationView navigationView = findViewById(R.id.nav_view);
         View headerView = navigationView.getHeaderView(0);
-
+        // Additional header customization can be added here
     }
 
     private void initMapView(Bundle savedInstanceState) {
@@ -263,8 +275,7 @@ public class CitizenMainActivity extends AppCompatActivity
         centerLocationButton = headerView.findViewById(R.id.btn_center_location);
         ImageView zoomInButton = headerView.findViewById(R.id.btn_zoom_in);
         ImageView zoomOutButton = headerView.findViewById(R.id.btn_zoom_out);
-
-        TextView locationAddressText = headerView.findViewById(R.id.text_location_address);
+        locationAddressText = headerView.findViewById(R.id.text_location_address);
 
         // Create bundle for MapView
         Bundle mapViewBundle = null;
@@ -292,37 +303,41 @@ public class CitizenMainActivity extends AppCompatActivity
             }
         });
 
-        // Set up geocoding for address display
+        // Set up location listener for map updates
+        setupLocationListener();
+    }
+
+    private void setupLocationListener() {
         locationManager.setLocationUpdateListener(new LocationManager.LocationUpdateListener() {
             @Override
             public void onLocationUpdated(Location location) {
                 currentLocation = location;
                 updateMapWithLocation();
-
-                // Update address text using Geocoder
-                updateAddressFromLocation(location, locationAddressText);
+                updateAddressFromLocation(location);
             }
 
             @Override
             public void onLocationError(String message) {
-                Toast.makeText(CitizenMainActivity.this,
-                        "Location error: " + message, Toast.LENGTH_SHORT).show();
-                locationAddressText.setText(R.string.awaiting_location);
+                showToast("Location error: " + message, Toast.LENGTH_SHORT);
+                if (locationAddressText != null) {
+                    locationAddressText.setText(R.string.awaiting_location);
+                }
             }
         });
     }
 
-    private void updateAddressFromLocation(Location location, TextView addressTextView) {
+    private void updateAddressFromLocation(Location location) {
+        if (locationAddressText == null) return;
+
         // Use Geocoder to get address from location coordinates
-        android.location.Geocoder geocoder = new android.location.Geocoder(this,
-                java.util.Locale.getDefault());
+        android.location.Geocoder geocoder = new android.location.Geocoder(this, Locale.getDefault());
 
         try {
             List<Address> addresses = geocoder.getFromLocation(
                     location.getLatitude(), location.getLongitude(), 1);
 
             if (addresses != null && !addresses.isEmpty()) {
-                android.location.Address address = addresses.get(0);
+                Address address = addresses.get(0);
 
                 // Format the address for display
                 StringBuilder sb = new StringBuilder();
@@ -344,21 +359,19 @@ public class CitizenMainActivity extends AppCompatActivity
                 // Set the formatted address to the TextView
                 String addressText = sb.toString();
                 if (!addressText.isEmpty()) {
-                    addressTextView.setText(addressText);
+                    locationAddressText.setText(addressText);
                 } else {
-                    addressTextView.setText(R.string.awaiting_location);
+                    locationAddressText.setText(R.string.awaiting_location);
                 }
             } else {
-                addressTextView.setText(R.string.awaiting_location);
+                locationAddressText.setText(R.string.awaiting_location);
             }
         } catch (IOException e) {
             Log.e(TAG, "Error getting address from location", e);
-            addressTextView.setText(R.string.awaiting_location);
+            locationAddressText.setText(R.string.awaiting_location);
         }
     }
 
-
-    
     private void requestLocationPermissions() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -378,20 +391,6 @@ public class CitizenMainActivity extends AppCompatActivity
     }
 
     private void startLocationUpdates() {
-        locationManager.setLocationUpdateListener(new LocationManager.LocationUpdateListener() {
-            @Override
-            public void onLocationUpdated(Location location) {
-                currentLocation = location;
-                updateMapWithLocation();
-            }
-
-            @Override
-            public void onLocationError(String message) {
-                Toast.makeText(CitizenMainActivity.this,
-                        "Location error: " + message, Toast.LENGTH_SHORT).show();
-            }
-        });
-
         locationManager.startLocationUpdates();
     }
 
@@ -426,11 +425,10 @@ public class CitizenMainActivity extends AppCompatActivity
             }
 
             // Create and show new toast
-            currentToast = Toast.makeText(CitizenMainActivity.this, message, duration);
+            currentToast = Toast.makeText(this, message, duration);
             currentToast.show();
         });
     }
-
 
     private void searchNearbyEmergencyServices(LatLng location) {
         // Mark as searching
@@ -441,9 +439,6 @@ public class CitizenMainActivity extends AppCompatActivity
             showToast(getString(R.string.loading_places), Toast.LENGTH_SHORT);
             placesLoadingToastShown = true;
         }
-
-        // Reset the completion counter
-        placeRequestsCompleted.set(0);
 
         // Counter to track completion of all searches
         AtomicInteger searchCounter = new AtomicInteger(0);
@@ -531,15 +526,17 @@ public class CitizenMainActivity extends AppCompatActivity
 
                                         // Add marker to map
                                         runOnUiThread(() -> {
-                                            googleMap.addMarker(new MarkerOptions()
-                                                    .position(place.getLatLng())
-                                                    .title(place.getName())
-                                                    .snippet(String.format(Locale.getDefault(),
-                                                            getString(R.string.place_distance), distanceKm))
-                                                    .icon(BitmapDescriptorFactory.defaultMarker(markerColor)));
+                                            if (googleMap != null && !isFinishing()) {
+                                                googleMap.addMarker(new MarkerOptions()
+                                                        .position(place.getLatLng())
+                                                        .title(place.getName())
+                                                        .snippet(String.format(Locale.getDefault(),
+                                                                getString(R.string.place_distance), distanceKm))
+                                                        .icon(BitmapDescriptorFactory.defaultMarker(markerColor)));
 
-                                            // Increment counter only for unique places
-                                            foundPlacesCounter.incrementAndGet();
+                                                // Increment counter only for unique places
+                                                foundPlacesCounter.incrementAndGet();
+                                            }
                                         });
                                     })
                                     .addOnCompleteListener(task -> {
@@ -566,6 +563,7 @@ public class CitizenMainActivity extends AppCompatActivity
                     });
         }
     }
+
     private void checkSearchCompletion(AtomicInteger counter, int totalSearches) {
         if (counter.incrementAndGet() >= totalSearches) {
             // All searches completed
@@ -578,27 +576,12 @@ public class CitizenMainActivity extends AppCompatActivity
         }
     }
 
-    private void checkRequestCompletion() {
-        int completed = placeRequestsCompleted.incrementAndGet();
-        int total = placeRequestsCounter.get();
-
-        if (completed >= total) {
-            // All searches are complete, reset the toast flag
-            mainHandler.post(() -> {
-                placesLoadingToastShown = false;
-                Toast.makeText(CitizenMainActivity.this,
-                        getString(R.string.places_loaded), Toast.LENGTH_SHORT).show();
-            });
-        }
-    }
-
-
     private void centerMapOnCurrentLocation() {
         if (googleMap != null && currentLocation != null) {
             LatLng latLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
             googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f));
         } else {
-            Toast.makeText(this, R.string.waiting_for_location, Toast.LENGTH_SHORT).show();
+            showToast(getString(R.string.waiting_for_location), Toast.LENGTH_SHORT);
         }
     }
 
@@ -631,10 +614,7 @@ public class CitizenMainActivity extends AppCompatActivity
         }
 
         // Try to enable my location layer if permission is granted
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            googleMap.setMyLocationEnabled(true);
-        }
+        enableMyLocationIfPermitted();
 
         // If we already have a location, update the map
         if (currentLocation != null) {
@@ -642,6 +622,14 @@ public class CitizenMainActivity extends AppCompatActivity
         }
     }
 
+    private void enableMyLocationIfPermitted() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            if (googleMap != null) {
+                googleMap.setMyLocationEnabled(true);
+            }
+        }
+    }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -650,17 +638,10 @@ public class CitizenMainActivity extends AppCompatActivity
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission granted
                 startLocationUpdates();
-
-                // Enable my location layer on map if it's ready
-                if (googleMap != null) {
-                    if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                            ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                        googleMap.setMyLocationEnabled(true);
-                    }
-                }
+                enableMyLocationIfPermitted();
             } else {
                 // Permission denied
-                Toast.makeText(this, R.string.location_permission_denied, Toast.LENGTH_LONG).show();
+                showToast(getString(R.string.location_permission_denied), Toast.LENGTH_LONG);
             }
         }
     }
@@ -682,86 +663,29 @@ public class CitizenMainActivity extends AppCompatActivity
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        if (mapView != null) {
-            mapView.onResume();
-        }
-        if (locationManager != null) {
-            startLocationUpdates();
-        }
-        // Refresh navigation drawer in case volunteer status changed
-        NavigationView navigationView = findViewById(R.id.nav_view);
-        updateNavigationMenuBasedOnVolunteerStatus(navigationView);
-
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (mapView != null) {
-            mapView.onStart();
-        }
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (mapView != null) {
-            mapView.onStop();
-        }
-    }
-
-    @Override
-    protected void onPause() {
-        if (mapView != null) {
-            mapView.onPause();
-        }
-        if (locationManager != null) {
-            locationManager.stopLocationUpdates();
-        }
-        super.onPause();
-    }
-
-    @Override
-    protected void onDestroy() {
-        if (mapView != null) {
-            mapView.onDestroy();
-        }
-        if (locationManager != null) {
-            locationManager.stopLocationUpdates();
-        }
-        super.onDestroy();
-    }
-
-    @Override
-    public void onLowMemory() {
-        super.onLowMemory();
-        if (mapView != null) {
-            mapView.onLowMemory();
-        }
-    }
-
-    @Override
     public boolean onNavigationItemSelected(@NonNull MenuItem item) {
         int id = item.getItemId();
 
         if (id == R.id.nav_logout) {
-            // Check if we should skip confirmation
-            boolean skipConfirmation = getSharedPreferences("app_prefs", MODE_PRIVATE)
-                    .getBoolean("skip_logout_confirmation", false);
-
-            if (skipConfirmation) {
-                performLogout();
-            } else {
-                showLogoutConfirmationDialog();
-            }
+            handleLogoutRequest();
         } else {
             navigateToFragment(id);
         }
 
         drawer.closeDrawer(GravityCompat.START);
         return true;
+    }
+
+    private void handleLogoutRequest() {
+        // Check if we should skip confirmation
+        boolean skipConfirmation = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean("skip_logout_confirmation", false);
+
+        if (skipConfirmation) {
+            performLogout();
+        } else {
+            showLogoutConfirmationDialog();
+        }
     }
 
     private void navigateToFragment(int fragmentId) {
@@ -781,8 +705,7 @@ public class CitizenMainActivity extends AppCompatActivity
             // Check if user is volunteer before allowing navigation
             if (!sessionManager.isVolunteer()) {
                 // If not a volunteer, redirect to home
-                Toast.makeText(this, R.string.volunteer_access_denied,
-                        Toast.LENGTH_SHORT).show();
+                showToast(getString(R.string.volunteer_access_denied), Toast.LENGTH_SHORT);
                 navigateToFragment(R.id.nav_home);
                 return;
             }
@@ -808,10 +731,7 @@ public class CitizenMainActivity extends AppCompatActivity
             fragment = new ProfileFragment();
         } else {
             title = getString(R.string.menu_home);
-            fragment = PlaceholderFragment.newInstance(
-                    title,
-                    getString(R.string.placeholder_home_description),
-                    R.drawable.ic_home);
+            fragment = new HomeFragment();
             fragmentId = R.id.nav_home;
         }
 
@@ -859,7 +779,6 @@ public class CitizenMainActivity extends AppCompatActivity
         dialog.show();
     }
 
-
     private void performLogout() {
         // Show loading dialog
         ProgressDialog progressDialog = new ProgressDialog(this);
@@ -867,33 +786,26 @@ public class CitizenMainActivity extends AppCompatActivity
         progressDialog.setCancelable(false);
         progressDialog.show();
 
-        // Get auth service for safer logout
+        // Get auth service for logout
         AuthService authService = AuthServiceProvider.getInstance().getAuthService();
 
-        // Get user session manager instance
-        UserSessionManager userSession = UserSessionManager.getInstance(this);
-
-        // First prepare intent for next activity BEFORE signout
+        // Prepare intent for next activity BEFORE signout
         final Intent authIntent = new Intent(this, PhoneAuthActivity.class);
         authIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
 
-        // Sign out from Firebase Auth with our safer method
+        // Sign out from Firebase Auth
         authService.signOut(new AuthService.AuthCallback() {
             @Override
             public void onSuccess() {
-                // Now clear session AFTER Firebase signout succeeds
                 try {
                     // Clear session data
-                    userSession.clearSession();
+                    sessionManager.clearSession();
 
                     // Dismiss progress dialog
-                    if (progressDialog.isShowing()) {
-                        progressDialog.dismiss();
-                    }
+                    safelyDismissDialog(progressDialog);
 
                     // Show success message
-                    Toast.makeText(CitizenMainActivity.this,
-                            R.string.logout_success, Toast.LENGTH_SHORT).show();
+                    showToast(getString(R.string.logout_success), Toast.LENGTH_SHORT);
 
                     // Wait a moment before navigating to ensure UI is ready
                     new Handler().postDelayed(() -> {
@@ -919,75 +831,24 @@ public class CitizenMainActivity extends AppCompatActivity
         });
     }
 
+    private void safelyDismissDialog(ProgressDialog dialog) {
+        if (dialog != null && dialog.isShowing() && !isFinishing()) {
+            try {
+                dialog.dismiss();
+            } catch (Exception e) {
+                Log.e(TAG, "Error dismissing dialog", e);
+            }
+        }
+    }
+
     private void handleLogoutError(ProgressDialog progressDialog, Exception e) {
         Log.e(TAG, "Error during logout: " + e.getMessage(), e);
 
         // Dismiss progress dialog
-        if (progressDialog.isShowing()) {
-            progressDialog.dismiss();
-        }
+        safelyDismissDialog(progressDialog);
 
         // Show error message
-        Toast.makeText(CitizenMainActivity.this,
-                getString(R.string.logout_error, e.getMessage()),
-                Toast.LENGTH_LONG).show();
-    }
-
-    // Add this method to clear application cache
-    private void clearApplicationData() {
-        try {
-            // Clear app cache
-            File cache = getCacheDir();
-            File appDir = new File(cache.getParent());
-            if (appDir.exists()) {
-                String[] children = appDir.list();
-                if (children != null) {
-                    for (String s : children) {
-                        if (!s.equals("lib")) {
-                            deleteDir(new File(appDir, s));
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error clearing application data", e);
-        }
-    }
-
-    private boolean deleteDir(File dir) {
-        if (dir != null && dir.isDirectory()) {
-            String[] children = dir.list();
-            if (children != null) {
-                for (String child : children) {
-                    boolean success = deleteDir(new File(dir, child));
-                    if (!success) {
-                        return false;
-                    }
-                }
-            }
-            return dir.delete();
-        } else if (dir != null && dir.isFile()) {
-            return dir.delete();
-        } else {
-            return false;
-        }
-    }
-
-    private void navigateToAuthScreen() {
-        // Create intent for PhoneAuthActivity
-        Intent intent = new Intent(this, PhoneAuthActivity.class);
-
-        // Clear the activity stack so the user can't go back
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-
-        // Start the activity
-        startActivity(intent);
-
-        // Apply a transition animation
-        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
-
-        // Finish the current activity
-        finish();
+        showToast(getString(R.string.logout_error, e.getMessage()), Toast.LENGTH_LONG);
     }
 
     @Override
@@ -1009,25 +870,83 @@ public class CitizenMainActivity extends AppCompatActivity
     }
 
     public void refreshNavigationDrawer() {
-        try {
-            // Get reference to navigation view
-            NavigationView navigationView = findViewById(R.id.nav_view);
-            if (navigationView == null) return;
 
-            // Get current volunteer status directly from session
-            boolean isVolunteer = sessionManager.isVolunteer();
-            Log.d(TAG, "Refreshing navigation drawer - volunteer status: " + isVolunteer);
+        // Get the NavigationView
+        NavigationView navigationView = findViewById(R.id.nav_view);
+        Menu navMenu = navigationView.getMenu();
 
-            // Update the navigation menu based on volunteer status
-            updateNavigationMenuBasedOnVolunteerStatus(navigationView);
+        // Get the volunteer status directly from UserSessionManager
+        boolean isVolunteer = UserSessionManager.getInstance(this).isVolunteer();
+        Log.d(TAG, "Refreshing navigation drawer. Current volunteer status: " + isVolunteer);
 
-            // Update header info if needed
-            updateNavigationHeader();
+        // Find volunteer-related items
+        MenuItem volunteerSection = navMenu.findItem(R.id.nav_volunteer_alerts);
+        if (volunteerSection != null) {
+            volunteerSection.setVisible(isVolunteer);
+            Log.d(TAG, "Volunteer section visibility set to: " + isVolunteer);
+        }
 
-            // Make sure the correct item is selected
-            navigationView.setCheckedItem(currentFragmentId);
-        } catch (Exception e) {
-            Log.e(TAG, "Error refreshing navigation drawer", e);
+    }
+
+    // Lifecycle methods managed properly to handle MapView and location updates
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mapView != null) {
+            mapView.onResume();
+        }
+        if (locationManager != null) {
+            startLocationUpdates();
+        }
+        // Refresh navigation drawer in case volunteer status changed
+        refreshNavigationDrawer();
+        updateDrawerWithFirebaseCheck();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (mapView != null) {
+            mapView.onStart();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mapView != null) {
+            mapView.onStop();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if (mapView != null) {
+            mapView.onPause();
+        }
+        if (locationManager != null) {
+            locationManager.stopLocationUpdates();
+        }
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (mapView != null) {
+            mapView.onDestroy();
+        }
+        if (locationManager != null) {
+            locationManager.stopLocationUpdates();
+        }
+        super.onDestroy();
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        if (mapView != null) {
+            mapView.onLowMemory();
         }
     }
 }
