@@ -1,0 +1,72 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    
+    "users": {
+      "$phoneNumber": {
+        // Any authenticated user can read
+        ".read": "auth !== null",
+        
+        // Create is allowed if setting userId to current user
+        ".write": "auth !== null && 
+                  ((!data.exists() && newData.child('userId').val() === auth.uid) || 
+                  (data.exists() && data.child('userId').val() === auth.uid))"
+      }
+    },
+    
+    "incidents": {
+      ".read": "auth !== null",
+      "$incidentId": {
+        // Anyone authenticated can create
+        ".write": "auth !== null && 
+                  (!data.exists() || 
+                  data.child('assignedTo').val() === auth.uid || 
+                  root.child('responders').child(auth.uid).exists() || 
+                  root.child('admins').child(auth.uid).exists())"
+      }
+    },
+    
+    "sos": {
+      "$sosId": {
+        // Anyone can create their own SOS
+        ".write": "auth !== null && 
+                  (!data.exists() || 
+                  data.child('userId').val() === auth.uid || 
+                  root.child('admins').child(auth.uid).exists())",
+        
+        // Only creator or admin can read
+        ".read": "auth !== null && 
+                 (data.child('userId').val() === auth.uid || 
+                 root.child('admins').child(auth.uid).exists())"
+      }
+    },
+    
+    "admins": {
+      ".read": "auth !== null",
+      "$userId": {
+        ".write": "auth !== null && root.child('admins').child(auth.uid).exists()"
+      }
+    },
+    
+    "responders": {
+      ".read": "auth !== null",
+      "$responderId": {
+        ".write": "auth !== null && 
+                  (auth.uid === $responderId || 
+                  root.child('admins').child(auth.uid).exists())",
+        ".read": "auth !== null"
+      }
+    },
+    
+    "volunteers": {
+      ".read": "auth !== null",
+      "$volunteerId": {
+        ".write": "auth !== null && 
+                  (auth.uid === $volunteerId || 
+                  root.child('admins').child(auth.uid).exists())",
+        ".read": "auth !== null"
+      }
+    }
+  }
+}

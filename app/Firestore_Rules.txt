@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions for readability
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    
+    // Critical update: Allow document reads by phone number
+    // but restrict modifications based on the contained userId field
+    match /users/{phoneNumber} {
+      // Allow any authenticated user to READ a user document
+      // This is necessary for initial phone number lookup
+      allow get, list: if isAuthenticated();
+      
+      // But only allow updates if the document belongs to the current user
+      // based on the userId field inside the document
+      allow update, delete: if isAuthenticated() && 
+                             resource.data.userId == request.auth.uid;
+      
+      // Allow creation if the userId is set to the current user
+      allow create: if isAuthenticated() && 
+                    request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Fix rules for other collections
+    match /incidents/{incidentId} {
+      // Admin can do everything
+      allow read, write, delete: if isAdmin();
+      
+      // Responders can update
+      allow update: if isAuthenticated() && 
+                    (resource.data.assignedTo == request.auth.uid || 
+                     exists(/databases/$(database)/documents/responders/$(request.auth.uid)));
+      
+      // Any authenticated user can read
+      allow read: if isAuthenticated();
+      
+      // Authenticated users can create new incidents
+      allow create: if isAuthenticated();
+    }
+    
+    // SOS collection that was missing from original rules
+    match /sos/{sosId} {
+      // Anyone can create an SOS
+      allow create: if isAuthenticated();
+      
+      // Only the creator or admin can read/update
+      allow read, update, delete: if isAuthenticated() && 
+                                  (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    
+    // Admin users collection
+    match /admins/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // Keep existing rules for responders and volunteers
+    match /responders/{responderId} {
+      allow read, write, delete: if isAdmin();
+      allow read, write: if isAuthenticated() && request.auth.uid == responderId;
+      allow read: if isAuthenticated();
+    }
+    
+    match /volunteers/{volunteerId} {
+      allow read, write, delete: if isAdmin();
+      allow read, write: if isAuthenticated() && request.auth.uid == volunteerId;
+      allow read: if isAuthenticated();
+    }
+  }
+}
