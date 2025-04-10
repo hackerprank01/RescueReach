@@ -16,8 +16,10 @@ import androidx.core.app.NotificationCompat;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 import com.rescuereach.R;
-import com.rescuereach.citizen.CitizenMainActivity;
+//import com.rescuereach.citizen.CitizenMainActivity;
+import com.rescuereach.interfaces.EmergencyNotificationHandler;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 
 /**
@@ -125,6 +127,7 @@ public class FCMService extends FirebaseMessagingService {
                 intent.putExtra(key, data.get(key));
             }
         }
+
 
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 this, 0, intent, PendingIntent.FLAG_IMMUTABLE);

@@ -248,12 +248,12 @@ This is an automated emergency alert. Please contact emergency services if neede
 /**
  * Firestore trigger to send FCM to the user when SOS status changes
  */
-exports.notifyUserOnSOSStatusChange = functions.firestore
-  .document("sos_reports/{reportId}")
-  .onUpdate(async (change, context) => {
-    const reportId = context.params.reportId;
-    const newData = change.after.data();
-    const previousData = change.before.data();
+exports.notifyUserOnSOSStatusChange = functions.firestore.onDocumentUpdated(
+  "sos_reports/{reportId}",
+  async (event) => {
+    const reportId = event.params.reportId;
+    const newData = event.data.after.data();
+    const previousData = event.data.before.data();
 
     // Only continue if status has changed
     if (newData.status === previousData.status) {
@@ -293,7 +293,7 @@ exports.notifyUserOnSOSStatusChange = functions.firestore
     }
 
     // Create notification based on new status
-    let title = "SOS Status Update";
+    const title = "SOS Status Update";
     let body = `Your SOS report status has changed to ${newData.status}`;
 
     switch (newData.status) {
@@ -328,7 +328,7 @@ exports.notifyUserOnSOSStatusChange = functions.firestore
       );
 
       // Also update the report to indicate notification was sent
-      await change.after.ref.update({
+      await event.data.after.ref.update({
         notificationSent: true,
         lastNotification: {
           status: newData.status,
@@ -341,18 +341,19 @@ exports.notifyUserOnSOSStatusChange = functions.firestore
       console.error("Error sending notification to user:", error);
       return null;
     }
-  });
+  }
+);
 
 /**
  * Firestore trigger to update the realtime database when report status changes
  * This ensures both databases stay in sync
  */
-exports.syncSOSStatusToRealtimeDB = functions.firestore
-  .document("sos_reports/{reportId}")
-  .onUpdate(async (change, context) => {
-    const reportId = context.params.reportId;
-    const newData = change.after.data();
-    const previousData = change.before.data();
+exports.syncSOSStatusToRealtimeDB = functions.firestore.onDocumentUpdated(
+  "sos_reports/{reportId}",
+  async (event) => {
+    const reportId = event.params.reportId;
+    const newData = event.data.after.data();
+    const previousData = event.data.before.data();
 
     // Only continue if status has changed
     if (newData.status === previousData.status) {
@@ -397,4 +398,5 @@ exports.syncSOSStatusToRealtimeDB = functions.firestore
       console.error("Error syncing status to realtime database:", error);
       return null;
     }
-  });
+  }
+);

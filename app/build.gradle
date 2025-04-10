@@ -18,6 +18,15 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    sourceSets {
+        main {
+            java.srcDirs = ['src/main/java']
+        }
+        citizen {
+            java.srcDirs = ['src/citizen/java']
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -122,7 +131,7 @@ dependencies {
     implementation 'com.google.firebase:firebase-messaging:23.1.2'
 
     // For direct SMS functionality (fallback)
-    implementation 'com.twilio:twilio-android:1.0.0'
+//    implementation 'com.twilio:voice-android:5.7.3'
 
     // For background work management
     implementation 'androidx.work:work-runtime:2.8.1'
