@@ -118,5 +118,20 @@ dependencies {
 
     implementation 'androidx.work:work-runtime:2.8.1'
 
+    // Firebase Cloud Messaging
+    implementation 'com.google.firebase:firebase-messaging:23.1.2'
+
+    // For direct SMS functionality (fallback)
+    implementation 'com.twilio:twilio-android:1.0.0'
+
+    // For background work management
+    implementation 'androidx.work:work-runtime:2.8.1'
+
+    // Retrofit for API communication with our Firebase Functions (optional but recommended)
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.11.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.11.0'
+
     
 }

@@ -64,20 +64,20 @@
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.RescueReach" />
 
-        <activity
-            android:name=".citizen.settings.PrivacySettingsActivity"
-            android:exported="false"
-            android:parentActivityName=".citizen.CitizenMainActivity" />
+<!--        <activity-->
+<!--            android:name=".citizen.settings.PrivacySettingsActivity"-->
+<!--            android:exported="false"-->
+<!--            android:parentActivityName=".citizen.CitizenMainActivity" />-->
 
-        <activity
-            android:name=".citizen.settings.AppearanceSettingsActivity"
-            android:exported="false"
-            android:parentActivityName=".citizen.CitizenMainActivity" />
+<!--        <activity-->
+<!--            android:name=".citizen.settings.AppearanceSettingsActivity"-->
+<!--            android:exported="false"-->
+<!--            android:parentActivityName=".citizen.CitizenMainActivity" />-->
 
-        <activity
-            android:name=".citizen.settings.DataManagementActivity"
-            android:exported="false"
-            android:parentActivityName=".citizen.CitizenMainActivity" />
+<!--        <activity-->
+<!--            android:name=".citizen.settings.DataManagementActivity"-->
+<!--            android:exported="false"-->
+<!--            android:parentActivityName=".citizen.CitizenMainActivity" />-->
 
         <provider
             android:name="androidx.core.content.FileProvider"
