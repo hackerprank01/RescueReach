@@ -599,10 +599,8 @@ public class ProfileFragment extends Fragment {
     private void updateVolunteerStatus(boolean isVolunteer) {
         Log.d(TAG, "Updating volunteer status to: " + isVolunteer);
 
-        // First update in SharedPreferences
-        sessionManager.getSharedPreferences().edit()
-                .putBoolean("is_volunteer", isVolunteer)
-                .apply();
+        // First update in SharedPreferences using the proper method
+        sessionManager.setVolunteer(isVolunteer);
 
         // Create a User object for Firebase update
         User user = new User();

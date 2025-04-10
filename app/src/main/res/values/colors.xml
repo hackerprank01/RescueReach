@@ -6,13 +6,20 @@
     <color name="high_contrast_text">#FFFFFF</color>
     <color name="high_contrast_background">#000000</color>
 
-
-    <color name="police_blue">#2979FF</color>
-    <color name="fire_orange">#FF9800</color>
-    <color name="medical_red">#F44336</color>
+    <!-- Add these to your existing colors.xml file -->
+    <color name="light_gray">#DDDDDD</color>
+    <color name="green_success">#4CAF50</color>
+    <color name="warning_yellow">#FFC107</color>
+    <color name="error_red">#F44336</color>
+    <color name="emergency_red">#D32F2F</color>
+    <color name="police_blue">#1565C0</color>
+    <color name="fire_orange">#FF5722</color>
+    <color name="medical_red">#C2185B</color>
+    <color name="stroke_color">#DFDFDF</color>
+    <color name="rescue_primary">#2196F3</color>
 
     <!-- Status Colors -->
-    <color name="green_success">#4CAF50</color>
+
     <color name="amber_warning">#FFC107</color>
     <color name="red_error">#F44336</color>
 
@@ -20,14 +27,13 @@
     <color name="alert_amber">#FF9800</color>
     <color name="alert_red">#F44336</color>
 
-    <!-- UI Elements -->
-    <color name="stroke_color">#E0E0E0</color>
+
 
     <!-- Data Management Colors -->
     <color name="warning_color">#FFA000</color>
     <color name="danger_color">#D32F2F</color>
     <!-- Brand colors -->
-    <color name="rescue_primary">#FF5722</color>
+
     <color name="rescue_primary_dark">#E64A19</color>
     <color name="rescue_primary_light">#FFCCBC</color>
     <color name="rescue_accent">#03A9F4</color>
@@ -55,7 +61,7 @@
     <color name="gradient_end_dark">#212121</color>
 
     <!-- Functional colors -->
-    <color name="emergency_red">#F44336</color>
+
     <color name="success_green">#4CAF50</color>
     <color name="warning_amber">#FFC107</color>
     <color name="info_blue">#2196F3</color>

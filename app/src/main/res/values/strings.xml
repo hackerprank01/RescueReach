@@ -401,24 +401,46 @@
     <string name="emergency_sms_failed">Failed to send emergency SMS</string>
     <string name="emergency_sms_failed_with_reason">SMS failed: %1$s</string>
     <string name="sending_emergency_sms">Sending emergency SMS…</string>
+    <!-- Profile validation error messages -->
+    <string name="error_name_too_short">Name must be at least 3 characters long</string>
+    <string name="error_emergency_same_as_user">Emergency contact cannot be the same as your phone number</string>
+    <string name="error_invalid_state">Please select a valid state</string>
 
     <!-- SOS Status Dialog -->
     <string name="emergency_alert_sent">Emergency Alert Sent</string>
     <string name="emergency_alert_details">Your emergency alert has been sent to responders. Stay calm and await assistance. Your location is being shared with emergency services.</string>
     <string name="current_location">Current Location</string>
 
-    <!-- SMS Status Icons -->
-    <item name="ic_sms_sending" type="drawable">@android:drawable/ic_dialog_email</item>
-    <item name="ic_sms_sent" type="drawable">@android:drawable/ic_dialog_email</item>
-    <item name="ic_sms_failed" type="drawable">@android:drawable/ic_dialog_alert</item>
+<!--    &lt;!&ndash; SMS Status Icons &ndash;&gt;-->
+<!--    <item name="ic_sms_sending" type="drawable">@android:drawable/ic_dialog_email</item>-->
+<!--    <item name="ic_sms_sent" type="drawable">@android:drawable/ic_dialog_email</item>-->
+<!--    <item name="ic_sms_failed" type="drawable">@android:drawable/ic_dialog_alert</item>-->
 
-    <!-- SOS Confirmation Dialog -->
-    <string name="confirm_police_emergency">Police Emergency</string>
-    <string name="confirm_fire_emergency">Fire Emergency</string>
-    <string name="confirm_medical_emergency">Medical Emergency</string>
-    <string name="police_sos_description">Alert police to your location for immediate assistance. Countdown will start automatically.</string>
-    <string name="fire_sos_description">Alert fire services to your location for immediate assistance. Countdown will start automatically.</string>
-    <string name="medical_sos_description">Alert medical services to your location for immediate assistance. Countdown will start automatically.</string>
+    <!-- SOS Confirmation Dialog Strings -->
+    <string name="emergency_icon">Emergency Icon</string>
+    <string name="emergency_sos_title">Emergency SOS</string>
+    <string name="type_police">Police Emergency</string>
+    <string name="type_fire">Fire Emergency</string>
+    <string name="type_medical">Medical Emergency</string>
+    <string name="type_emergency">Emergency</string>
+    <string name="emergency_confirmation_message">Your emergency will be sent in:</string>
+    <string name="tap_to_cancel">Tap anywhere to cancel</string>
+    <string name="confirm_sos">Send Now</string>
+
+    <!-- Home Fragment Status Strings -->
+    <string name="status_ready">Ready for Emergency</string>
+    <string name="status_offline_sms_ready">Ready (SMS Only)</string>
+    <string name="status_limited_functionality">Limited Functionality</string>
+    <string name="status_critical_permissions_missing">Critical Permissions Missing</string>
+
+    <!-- Location Status Strings -->
+    <string name="location_status">Location: %1$s</string>
+    <string name="location_high_accuracy">High Accuracy</string>
+    <string name="location_medium_accuracy">Medium Accuracy</string>
+    <string name="location_low_accuracy">Low Accuracy</string>
+    <string name="location_unavailable">Location Unavailable</string>
+
+
 
 </resources>
 

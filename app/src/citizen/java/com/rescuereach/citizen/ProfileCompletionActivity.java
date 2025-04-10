@@ -101,6 +101,8 @@ public class ProfileCompletionActivity extends AppCompatActivity {
         });
     }
 
+
+
     private void initializeViews() {
         fullNameEditText = findViewById(R.id.edit_full_name);
         dobEditText = findViewById(R.id.edit_dob);
@@ -348,10 +350,8 @@ public class ProfileCompletionActivity extends AppCompatActivity {
     private void updateVolunteerStatus(boolean isVolunteer) {
         Log.d(TAG, "Updating volunteer status to: " + isVolunteer);
 
-        // First update in SharedPreferences
-        sessionManager.getSharedPreferences().edit()
-                .putBoolean("is_volunteer", isVolunteer)
-                .apply();
+        // First update in SharedPreferences using the proper method
+        sessionManager.setVolunteer(isVolunteer);
 
         // Create a User object for Firebase update
         User user = new User();

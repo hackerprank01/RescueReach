@@ -147,63 +147,67 @@ public class UserSessionManager {
         Log.d(TAG, "Loading user profile from Firebase for: " + phoneNumber);
 
         // First check if the user exists, and if so, load their profile
-        userRepository.getUserByPhoneNumber(phoneNumber, new UserRepository.OnUserFetchedListener() {
-            @Override
-            public void onSuccess(User user) {
-                if (user != null) {
-                    Log.d(TAG, "User found in Firebase, updating local data");
-                    // Update SharedPreferences with user data from Firebase
-                    SharedPreferences.Editor editor = sharedPreferences.edit();
+        try {
+            userRepository.getUserByPhoneNumber(phoneNumber, new UserRepository.OnUserFetchedListener() {
+                @Override
+                public void onSuccess(User user) {
+                    if (user != null) {
+                        Log.d(TAG, "User found in Firebase, updating local data");
+                        // Update SharedPreferences with user data from Firebase
+                        SharedPreferences.Editor editor = sharedPreferences.edit();
 
-                    if (user.getFullName() != null) {
-                        editor.putString(KEY_FULL_NAME, user.getFullName());
-                        editor.putString(KEY_FIRST_NAME, user.getFirstName());
-                        editor.putString(KEY_LAST_NAME, user.getLastName());
+                        if (user.getFullName() != null) {
+                            editor.putString(KEY_FULL_NAME, user.getFullName());
+                            editor.putString(KEY_FIRST_NAME, user.getFirstName());
+                            editor.putString(KEY_LAST_NAME, user.getLastName());
+                        }
+
+                        if (user.getGender() != null) {
+                            editor.putString(KEY_GENDER, user.getGender());
+                        }
+
+                        if (user.getState() != null) {
+                            editor.putString(KEY_STATE, user.getState());
+                        }
+
+                        if (user.getEmergencyContact() != null) {
+                            editor.putString(KEY_EMERGENCY_CONTACT, user.getEmergencyContact());
+                        }
+
+                        // CRITICAL: This is the key fix - always update volunteer status from Firebase
+                        editor.putBoolean(KEY_IS_VOLUNTEER, user.isVolunteer());
+                        Log.d(TAG, "Setting volunteer status from Firebase: " + user.isVolunteer());
+
+                        if (user.getDateOfBirth() != null) {
+                            editor.putString(KEY_DATE_OF_BIRTH, storageFormat.format(user.getDateOfBirth()));
+                        }
+
+                        // CRITICAL FIX: Always set profile completion status based on required fields
+                        boolean isComplete = !TextUtils.isEmpty(user.getFullName()) &&
+                                !TextUtils.isEmpty(user.getEmergencyContact());
+                        editor.putBoolean(KEY_PROFILE_COMPLETED, isComplete);
+                        Log.d(TAG, "Setting profile completion status: " + isComplete);
+
+                        editor.apply();
+
+                        // Now we can update online status
+                        updateOnlineStatus();
+                    } else {
+                        Log.d(TAG, "User not found in Firebase");
                     }
-
-                    if (user.getGender() != null) {
-                        editor.putString(KEY_GENDER, user.getGender());
-                    }
-
-                    if (user.getState() != null) {
-                        editor.putString(KEY_STATE, user.getState());
-                    }
-
-                    if (user.getEmergencyContact() != null) {
-                        editor.putString(KEY_EMERGENCY_CONTACT, user.getEmergencyContact());
-                    }
-
-                    // CRITICAL: This is the key fix - always update volunteer status from Firebase
-                    editor.putBoolean(KEY_IS_VOLUNTEER, user.isVolunteer());
-                    Log.d(TAG, "Setting volunteer status from Firebase: " + user.isVolunteer());
-
-                    if (user.getDateOfBirth() != null) {
-                        editor.putString(KEY_DATE_OF_BIRTH, storageFormat.format(user.getDateOfBirth()));
-                    }
-
-                    // Set profile completion status based on required fields
-                    boolean isComplete = !TextUtils.isEmpty(user.getFullName()) &&
-                            !TextUtils.isEmpty(user.getEmergencyContact());
-                    editor.putBoolean(KEY_PROFILE_COMPLETED, isComplete);
-
-                    editor.apply();
-
-                    // Now we can update online status
-                    updateOnlineStatus();
-                } else {
-                    Log.d(TAG, "User not found in Firebase, creating new profile");
-                    // User doesn't exist yet, create them
-                    //createNewUser(phoneNumber, null);
                 }
-            }
 
-            @Override
-            public void onError(Exception e) {
-                Log.e(TAG, "Error loading user profile from Firebase", e);
-                // Still update online status on error
-                updateOnlineStatus();
-            }
-        });
+                @Override
+                public void onError(Exception e) {
+                    Log.e(TAG, "Error loading user profile from Firebase", e);
+                    // Still update online status on error
+                    updateOnlineStatus();
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Exception in loadUserProfileFromFirebase", e);
+            updateOnlineStatus();
+        }
     }
 
 

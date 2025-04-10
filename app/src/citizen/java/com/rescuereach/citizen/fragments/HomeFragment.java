@@ -1,32 +1,26 @@
 package com.rescuereach.citizen.fragments;
 
-import android.Manifest;
-import android.content.pm.PackageManager;
+import android.content.Context;
 import android.location.Location;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.app.ActivityCompat;
-import android.app.AlertDialog;
-import android.os.CountDownTimer;
-import android.view.LayoutInflater;
-import android.widget.Button;
-import android.widget.TextView;
-
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.rescuereach.data.model.SOSReport;
-import com.rescuereach.service.emergency.SOSManager;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -37,596 +31,444 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MapStyleOptions;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
 import com.rescuereach.R;
-import com.rescuereach.service.auth.UserSessionManager;
+import com.rescuereach.citizen.dialogs.SOSConfirmationDialog;
 import com.rescuereach.util.LocationManager;
-import com.rescuereach.util.NetworkMonitor;
+import com.rescuereach.util.PermissionManager;
+import com.rescuereach.util.SafetyTipProvider;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Home screen fragment with emergency buttons and status information
+ */
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
-
     private static final String TAG = "HomeFragment";
-    private static final String ALERTS_MAPVIEW_BUNDLE_KEY = "AlertsMapViewBundleKey";
 
-    // UI Components
-    private View btnSosPolice;
-    private View btnSosFire;
-    private View btnSosMedical;
-    private View btnReportIncident;
+    // UI components
+    private View rootView;
+    private TextView statusText;
+    private ImageView statusIcon;
     private TextView networkStatus;
     private TextView locationAccuracy;
     private TextView lastUpdated;
-    private RecyclerView recyclerAlerts;
+    private LinearLayout btnSosPolice, btnSosFire, btnSosMedical;
+    private MaterialButton btnReportIncident;
     private TextView textNoAlerts;
+    private RecyclerView recyclerAlerts;
     private TextView textViewAllAlerts;
     private TextView textSafetyTip;
-
-    // Map components
     private MapView alertsMapView;
     private GoogleMap alertsGoogleMap;
-    private ImageView btnAlertsCenterLocation;
 
     // Services
-    private UserSessionManager sessionManager;
     private LocationManager locationManager;
+    private PermissionManager permissionManager;
+    private ConnectivityManager connectivityManager;
+    private Handler uiUpdateHandler;
+    private Runnable statusUpdateRunnable;
+    private boolean isMapReady = false;
     private Location currentLocation;
-    private ImageView btnAlertsZoomIn;
-    private ImageView btnAlertsZoomOut;
-    private String currentSosId;
-    private NetworkMonitor networkMonitor;
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        // Initialize services
-        sessionManager = UserSessionManager.getInstance(requireContext());
-        locationManager = new LocationManager(requireContext());
-        // Initialize network monitor
-        networkMonitor = NetworkMonitor.getInstance(requireContext());
+
+    // Time formatter
+    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+
+    // Status update interval (30 seconds)
+    private static final long STATUS_UPDATE_INTERVAL = 30000;
+
+    public HomeFragment() {
+        // Required empty public constructor
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
-        return inflater.inflate(R.layout.fragment_home, container, false);
-    }
+        // Inflate the layout
+        rootView = inflater.inflate(R.layout.fragment_home, container, false);
 
-    @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
+        // Initialize managers
+        locationManager = new LocationManager(requireContext());
+        permissionManager = PermissionManager.getInstance(requireContext());
+        connectivityManager = (ConnectivityManager) requireContext()
+                .getSystemService(Context.CONNECTIVITY_SERVICE);
 
         // Initialize UI components
-        initUI(view);
+        initializeUIComponents();
 
-        // Initialize MapView
-        initMapView(savedInstanceState);
+        // Set up the map with savedInstanceState
+        setupMapView(savedInstanceState);
+
+        // Set up handlers for status updates
+        setupStatusUpdates();
 
         // Set up click listeners
         setupClickListeners();
 
-        // Setup network monitoring
-        setupNetworkMonitoring();
-        
-        // Update UI with status information
-        updateStatusInfo();
+        // Set safety tip
+        updateSafetyTip();
 
-        // Load alerts (none for now, just UI setup)
-        setupAlertsSection();
+        return rootView;
     }
 
-    private void setupNetworkMonitoring() {
-        // Set initial status
-        updateNetworkStatusUI(networkMonitor.isConnected());
+    private void initializeUIComponents() {
+        // Status card
+        statusText = rootView.findViewById(R.id.status_text);
+        statusIcon = rootView.findViewById(R.id.status_icon);
+        networkStatus = rootView.findViewById(R.id.network_status);
+        locationAccuracy = rootView.findViewById(R.id.location_accuracy);
+        lastUpdated = rootView.findViewById(R.id.last_updated);
 
-        // Observe network state changes
-        networkMonitor.getConnectionStatus().observe(getViewLifecycleOwner(), isConnected -> {
-            updateNetworkStatusUI(isConnected);
-        });
-
-        // Observe connection type changes
-        networkMonitor.getConnectionType().observe(getViewLifecycleOwner(), connectionType -> {
-            updateConnectionTypeUI(connectionType);
-        });
-    }
-
-    private void updateConnectionTypeUI(NetworkMonitor.ConnectionType connectionType) {
-        String statusText;
-
-        switch (connectionType) {
-            case WIFI:
-                statusText = getString(R.string.status_wifi);
-                break;
-            case CELLULAR:
-                statusText = getString(R.string.status_cellular);
-                break;
-            case NONE:
-                statusText = getString(R.string.status_offline);
-                break;
-            default:
-                statusText = getString(R.string.status_online);
-                break;
-        }
-
-        // Only update text if we're online
-        if (connectionType != NetworkMonitor.ConnectionType.NONE) {
-            networkStatus.setText(statusText);
-        }
-    }
-
-    private void updateNetworkStatusUI(boolean isConnected) {
-        if (isConnected) {
-            networkStatus.setText(R.string.status_online);
-            networkStatus.setBackgroundResource(R.drawable.badge_green);
-        } else {
-            networkStatus.setText(R.string.status_offline);
-            networkStatus.setBackgroundResource(R.drawable.badge_red);
-        }
-    }
-
-    private void initUI(View view) {
         // SOS buttons
-        btnSosPolice = view.findViewById(R.id.btn_sos_police);
-        btnSosFire = view.findViewById(R.id.btn_sos_fire);
-        btnSosMedical = view.findViewById(R.id.btn_sos_medical);
+        btnSosPolice = rootView.findViewById(R.id.btn_sos_police);
+        btnSosFire = rootView.findViewById(R.id.btn_sos_fire);
+        btnSosMedical = rootView.findViewById(R.id.btn_sos_medical);
 
         // Report incident button
-        btnReportIncident = view.findViewById(R.id.btn_report_incident);
-
-        // Status indicators
-        networkStatus = view.findViewById(R.id.network_status);
-        locationAccuracy = view.findViewById(R.id.location_accuracy);
-        lastUpdated = view.findViewById(R.id.last_updated);
+        btnReportIncident = rootView.findViewById(R.id.btn_report_incident);
 
         // Alerts section
-        recyclerAlerts = view.findViewById(R.id.recycler_alerts);
-        textNoAlerts = view.findViewById(R.id.text_no_alerts);
-        textViewAllAlerts = view.findViewById(R.id.text_view_all_alerts);
+        alertsMapView = rootView.findViewById(R.id.alerts_map_view);
+        textNoAlerts = rootView.findViewById(R.id.text_no_alerts);
+        recyclerAlerts = rootView.findViewById(R.id.recycler_alerts);
+        textViewAllAlerts = rootView.findViewById(R.id.text_view_all_alerts);
 
-        // Map components
-        alertsMapView = view.findViewById(R.id.alerts_map_view);
-        btnAlertsCenterLocation = view.findViewById(R.id.btn_alerts_center_location);
-        btnAlertsZoomIn = view.findViewById(R.id.btn_alerts_zoom_in);
-        btnAlertsZoomOut = view.findViewById(R.id.btn_alerts_zoom_out);
-
-        // Safety tip
-        textSafetyTip = view.findViewById(R.id.text_safety_tip);
+        // Safety tips
+        textSafetyTip = rootView.findViewById(R.id.text_safety_tip);
     }
 
-    private void initMapView(Bundle savedInstanceState) {
-        // Extract MapView bundle if saved
-        Bundle mapViewBundle = null;
-        if (savedInstanceState != null) {
-            mapViewBundle = savedInstanceState.getBundle(ALERTS_MAPVIEW_BUNDLE_KEY);
-        }
+    private void setupMapView(Bundle savedInstanceState) {
+        if (alertsMapView != null) {
+            alertsMapView.onCreate(savedInstanceState);
+            alertsMapView.getMapAsync(this);
 
-        // Initialize MapView
-        alertsMapView.onCreate(mapViewBundle);
-        alertsMapView.getMapAsync(this);
-    }
+            // Set up map control buttons
+            ImageView btnAlertsZoomIn = rootView.findViewById(R.id.btn_alerts_zoom_in);
+            ImageView btnAlertsZoomOut = rootView.findViewById(R.id.btn_alerts_zoom_out);
+            ImageView btnAlertsCenterLocation = rootView.findViewById(R.id.btn_alerts_center_location);
 
-    private void setupClickListeners() {
-        // For now, just add toast messages for the buttons
-        // These will be replaced with actual functionality later
-
-        // SOS - Police
-        btnSosPolice.setOnClickListener(v -> {
-            showSOSConfirmationDialog(SOSReport.CATEGORY_POLICE);
-        });
-
-        // SOS - Fire
-        btnSosFire.setOnClickListener(v -> {
-            showSOSConfirmationDialog(SOSReport.CATEGORY_FIRE);
-        });
-
-        // SOS - Medical
-        btnSosMedical.setOnClickListener(v -> {
-            showSOSConfirmationDialog(SOSReport.CATEGORY_MEDICAL);
-        });
-
-        // Report Incident
-        btnReportIncident.setOnClickListener(v -> {
-            Toast.makeText(requireContext(),
-                    "Report Incident button pressed - Will be implemented",
-                    Toast.LENGTH_SHORT).show();
-        });
-
-        // View all alerts
-        textViewAllAlerts.setOnClickListener(v -> {
-            Toast.makeText(requireContext(),
-                    "View All Alerts - Will be implemented",
-                    Toast.LENGTH_SHORT).show();
-        });
-
-        // Center location on alerts map
-        btnAlertsCenterLocation.setOnClickListener(v -> {
-            centerMapOnCurrentLocation();
-        });
-        // Zoom in on alerts map
-        btnAlertsZoomIn.setOnClickListener(v -> {
-            if (alertsGoogleMap != null) {
-                alertsGoogleMap.animateCamera(CameraUpdateFactory.zoomIn());
-            }
-        });
-
-        // Zoom out on alerts map
-        btnAlertsZoomOut.setOnClickListener(v -> {
-            if (alertsGoogleMap != null) {
-                alertsGoogleMap.animateCamera(CameraUpdateFactory.zoomOut());
-            }
-        });
-    }
-
-    private void showSOSConfirmationDialog(String category) {
-        // Inflate custom dialog layout
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_sos_confirmation, null);
-
-        // Get dialog views
-        TextView titleText = dialogView.findViewById(R.id.text_sos_title);
-        TextView descriptionText = dialogView.findViewById(R.id.text_sos_description);
-        TextView countdownText = dialogView.findViewById(R.id.text_countdown);
-        Button cancelButton = dialogView.findViewById(R.id.btn_sos_cancel);
-        Button confirmButton = dialogView.findViewById(R.id.btn_sos_confirm);
-
-        // Customize dialog based on emergency category
-        customizeSOSDialog(category, titleText, descriptionText);
-
-        // Create and configure dialog
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
-                .setView(dialogView)
-                .setCancelable(false)
-                .create();
-
-        // Create countdown timer - 5 seconds
-        CountDownTimer countDownTimer = new CountDownTimer(5000, 1000) {
-            @Override
-            public void onTick(long millisUntilFinished) {
-                // Update countdown text
-                int secondsRemaining = (int) (millisUntilFinished / 1000);
-                countdownText.setText(String.valueOf(secondsRemaining));
-            }
-
-            @Override
-            public void onFinish() {
-                // Auto-send when countdown completes
-                dialog.dismiss();
-                sendSOSAlert(category);
-            }
-        };
-
-        // Start countdown
-        countDownTimer.start();
-
-        // Set button click listeners
-        cancelButton.setOnClickListener(v -> {
-            // Cancel timer and dismiss dialog
-            countDownTimer.cancel();
-            dialog.dismiss();
-        });
-
-        confirmButton.setOnClickListener(v -> {
-            // Cancel timer, dismiss dialog, and send alert immediately
-            countDownTimer.cancel();
-            dialog.dismiss();
-            sendSOSAlert(category);
-        });
-
-        // Show dialog
-        dialog.show();
-    }
-
-    private void customizeSOSDialog(String category, TextView titleText, TextView descriptionText) {
-        switch (category) {
-            case SOSReport.CATEGORY_POLICE:
-                titleText.setText(R.string.confirm_police_emergency);
-                titleText.setTextColor(requireContext().getColor(R.color.police_blue));
-                descriptionText.setText(R.string.police_sos_description);
-                break;
-            case SOSReport.CATEGORY_FIRE:
-                titleText.setText(R.string.confirm_fire_emergency);
-                titleText.setTextColor(requireContext().getColor(R.color.fire_orange));
-                descriptionText.setText(R.string.fire_sos_description);
-                break;
-            case SOSReport.CATEGORY_MEDICAL:
-                titleText.setText(R.string.confirm_medical_emergency);
-                titleText.setTextColor(requireContext().getColor(R.color.medical_red));
-                descriptionText.setText(R.string.medical_sos_description);
-                break;
-        }
-    }
-
-    private void sendSOSAlert(String category) {
-        // Show loading dialog
-        AlertDialog loadingDialog = new AlertDialog.Builder(requireContext())
-                .setTitle(R.string.sending_emergency_alert)
-                .setMessage(R.string.please_wait)
-                .setCancelable(false)
-                .create();
-        loadingDialog.show();
-
-        // Get SOS manager instance
-        SOSManager sosManager = SOSManager.getInstance(requireContext());
-
-        // Initiate SOS alert
-        sosManager.initiateEmergencySOS(category, new SOSManager.SOSListener() {
-            @Override
-            public void onSOSInitiated() {
-                // Log initiation
-                Log.d(TAG, "SOS initiated: " + category);
-            }
-
-            @Override
-            public void onSOSSuccess(String sosId) {
-                // Dismiss loading dialog
-                if (loadingDialog.isShowing()) {
-                    loadingDialog.dismiss();
-                }
-
-                // Show detailed status dialog with SMS status tracking
-                showSOSStatusDialog(category);
-            }
-
-            @Override
-            public void onSOSFailure(String errorMessage) {
-                // Handle SOS failure
-                if (loadingDialog.isShowing()) {
-                    loadingDialog.dismiss();
-                }
-
-                // Show error message
-                new AlertDialog.Builder(requireContext())
-                        .setTitle(R.string.emergency_alert_failed)
-                        .setMessage(getString(R.string.emergency_alert_error_message, errorMessage))
-                        .setPositiveButton(android.R.string.ok, null)
-                        .show();
-            }
-        });
-    }
-
-    // Add this method to show status dialog with SMS tracking
-    private void showSOSStatusDialog(String category) {
-        // Inflate custom dialog layout
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_sos_status, null);
-
-        // Get dialog views
-        TextView titleText = dialogView.findViewById(R.id.text_sos_success_title);
-        TextView messageText = dialogView.findViewById(R.id.text_sos_success_message);
-        View smsStatusLayout = dialogView.findViewById(R.id.layout_sms_status);
-        ImageView smsStatusIcon = dialogView.findViewById(R.id.img_sms_status);
-        TextView smsStatusText = dialogView.findViewById(R.id.text_sms_status);
-        Button okButton = dialogView.findViewById(R.id.btn_sos_status_ok);
-
-        // Customize dialog based on emergency category
-        switch (category) {
-            case SOSReport.CATEGORY_POLICE:
-                titleText.setTextColor(requireContext().getColor(R.color.police_blue));
-                break;
-            case SOSReport.CATEGORY_FIRE:
-                titleText.setTextColor(requireContext().getColor(R.color.fire_orange));
-                break;
-            case SOSReport.CATEGORY_MEDICAL:
-                titleText.setTextColor(requireContext().getColor(R.color.medical_red));
-                break;
-        }
-
-        // Create and show dialog
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
-                .setView(dialogView)
-                .setCancelable(false)
-                .create();
-
-        // Set OK button click listener
-        okButton.setOnClickListener(v -> dialog.dismiss());
-
-        // Show dialog
-        dialog.show();
-
-        // Start listening for SMS status updates if we have valid SOS ID
-        if (currentSosId != null && !currentSosId.isEmpty()) {
-            listenForSMSStatusUpdates(currentSosId, smsStatusIcon, smsStatusText);
-        } else {
-            // No SOS ID means no SMS tracking possible
-            smsStatusLayout.setVisibility(View.GONE);
-        }
-    }
-
-    // Add this method to listen for SMS status updates
-    private void listenForSMSStatusUpdates(String sosId, ImageView statusIcon, TextView statusText) {
-        // Get Firestore instance
-        FirebaseFirestore db = FirebaseFirestore.getInstance();
-
-        // Listen for document updates
-        db.collection("incidents").document(sosId)
-                .addSnapshotListener((snapshot, e) -> {
-                    if (e != null) {
-                        Log.e(TAG, "Listen failed for SMS status updates", e);
-                        return;
-                    }
-
-                    if (snapshot != null && snapshot.exists()) {
-                        // Get SMS status
-                        String smsStatus = snapshot.getString("smsStatus");
-
-                        if (smsStatus != null) {
-                            // Update UI based on status
-                            switch (smsStatus) {
-                                case "sent":
-                                    statusIcon.setImageResource(R.drawable.ic_sms_sent);
-                                    statusText.setText(R.string.emergency_sms_sent);
-                                    break;
-                                case "delivered":
-                                    statusIcon.setImageResource(R.drawable.ic_sms_sent);
-                                    statusText.setText(R.string.emergency_sms_delivered);
-                                    break;
-                                case "failed":
-                                    statusIcon.setImageResource(R.drawable.ic_sms_failed);
-                                    String error = snapshot.getString("smsError");
-                                    if (error != null && !error.isEmpty()) {
-                                        statusText.setText(getString(R.string.emergency_sms_failed_with_reason, error));
-                                    } else {
-                                        statusText.setText(R.string.emergency_sms_failed);
-                                    }
-                                    break;
-                                default:
-                                    statusIcon.setImageResource(R.drawable.ic_sms_sending);
-                                    statusText.setText(R.string.sending_emergency_sms);
-                            }
-                        }
-                    }
-                });
-    }
-
-    private void updateStatusInfo() {
-        // For now, just show static information
-        // This will be updated with real-time data later
-        networkStatus.setText("Online");
-        locationAccuracy.setText("Location: High Accuracy");
-        lastUpdated.setText("Just now");
-
-        // Sample safety tip - would be randomly selected or relevant to conditions
-        textSafetyTip.setText("In emergency situations, remain calm and provide clear information to help responders reach you quickly.");
-    }
-
-    private void setupAlertsSection() {
-        // Set up RecyclerView with empty adapter for now
-        recyclerAlerts.setLayoutManager(new LinearLayoutManager(requireContext()));
-
-        // For the initial implementation, just show the "No alerts" message
-        recyclerAlerts.setVisibility(View.GONE);
-        textNoAlerts.setVisibility(View.VISIBLE);
-        textViewAllAlerts.setVisibility(View.GONE);
-
-        // Later, we'll add actual alert data from Firebase
-    }
-
-    // Handle location updates from LocationManager
-    private void startLocationUpdates() {
-        // Only request if permission is granted
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) ==
-                        PackageManager.PERMISSION_GRANTED) {
-
-            locationManager.setLocationUpdateListener(new LocationManager.LocationUpdateListener() {
-                @Override
-                public void onLocationUpdated(Location location) {
-                    currentLocation = location;
-                    updateMapWithLocation();
-                }
-
-                @Override
-                public void onLocationError(String message) {
-                    Log.e(TAG, "Location error: " + message);
+            btnAlertsZoomIn.setOnClickListener(v -> {
+                if (alertsGoogleMap != null) {
+                    alertsGoogleMap.animateCamera(CameraUpdateFactory.zoomIn());
                 }
             });
 
-            locationManager.startLocationUpdates();
+            btnAlertsZoomOut.setOnClickListener(v -> {
+                if (alertsGoogleMap != null) {
+                    alertsGoogleMap.animateCamera(CameraUpdateFactory.zoomOut());
+                }
+            });
+
+            btnAlertsCenterLocation.setOnClickListener(v -> centerMapOnCurrentLocation());
         }
     }
 
-    // Center the map on the current location
-    private void centerMapOnCurrentLocation() {
-        if (alertsGoogleMap != null && currentLocation != null) {
-            LatLng latLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
-            alertsGoogleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 13f));
+    private void setupStatusUpdates() {
+        uiUpdateHandler = new Handler(Looper.getMainLooper());
+        statusUpdateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                updateNetworkStatus();
+                updateLocationStatus();
+                updateLastUpdatedTime();
+
+                // Schedule next update
+                uiUpdateHandler.postDelayed(this, STATUS_UPDATE_INTERVAL);
+            }
+        };
+    }
+
+    private void setupClickListeners() {
+        // SOS button click listeners
+        btnSosPolice.setOnClickListener(v -> showSOSConfirmation("POLICE"));
+        btnSosFire.setOnClickListener(v -> showSOSConfirmation("FIRE"));
+        btnSosMedical.setOnClickListener(v -> showSOSConfirmation("MEDICAL"));
+
+        // Report incident button click listener
+        btnReportIncident.setOnClickListener(v -> startIncidentReporting());
+
+        // View all alerts click listener
+        textViewAllAlerts.setOnClickListener(v -> viewAllAlerts());
+    }
+
+    private void showSOSConfirmation(String emergencyType) {
+        Log.d(TAG, "SOS button clicked for: " + emergencyType);
+
+        // Check permissions before showing confirmation
+        checkPermissionsForSOS(() -> {
+            // Create and show SOS confirmation dialog
+            SOSConfirmationDialog dialog = new SOSConfirmationDialog(
+                    requireContext(), emergencyType, new SOSConfirmationDialog.SOSDialogListener() {
+                @Override
+                public void onSOSConfirmed(String type) {
+                    // Handle SOS confirmation
+                    handleSOSConfirmation(type);
+                }
+
+                @Override
+                public void onSOSCancelled() {
+                    // Handle SOS cancellation
+                    Log.d(TAG, "SOS cancelled by user");
+                }
+            });
+            dialog.show();
+        });
+    }
+
+    private void checkPermissionsForSOS(Runnable onPermissionsGranted) {
+        // First check location permission
+        if (!permissionManager.hasLocationPermissions(false)) {
+            permissionManager.requestLocationPermissions(getActivity(), false,
+                    (isGranted, granted, denied) -> {
+                        if (isGranted) {
+                            // Then check SMS permission
+                            checkSMSPermission(onPermissionsGranted);
+                        } else {
+                            Toast.makeText(requireContext(),
+                                    "Location permission needed for emergency services",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    });
         } else {
-            Toast.makeText(requireContext(), R.string.waiting_for_location, Toast.LENGTH_SHORT).show();
+            // Already have location permission, check SMS
+            checkSMSPermission(onPermissionsGranted);
         }
     }
 
-    // Update map with current location and sample alerts
-    private void updateMapWithLocation() {
-        if (alertsGoogleMap != null && currentLocation != null) {
-            LatLng latLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
+    private void checkSMSPermission(Runnable onPermissionsGranted) {
+        if (!permissionManager.hasSmsPermissions()) {
+            permissionManager.requestSmsPermissions(getActivity(),
+                    (isGranted, granted, denied) -> {
+                        // Proceed even if SMS permission is denied (will use internet only)
+                        onPermissionsGranted.run();
 
-            // Clear existing markers
-            alertsGoogleMap.clear();
-
-            // Add marker for current location
-            alertsGoogleMap.addMarker(new MarkerOptions()
-                    .position(latLng)
-                    .title(getString(R.string.current_location))
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
-
-            // Add sample alert markers (for UI demo only)
-            addSampleAlertMarkers(latLng);
-
-            // Center map on current location
-            alertsGoogleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 13f));
+                        if (!isGranted) {
+                            Toast.makeText(requireContext(),
+                                    "SMS permission would be needed if internet is unavailable",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    });
+        } else {
+            // Already have SMS permission
+            onPermissionsGranted.run();
         }
     }
 
-    // Add sample alert markers for UI demonstration
-    private void addSampleAlertMarkers(LatLng currentLocation) {
-        // Sample alert 1: nearby fire alert
-        LatLng alertLocation1 = new LatLng(
-                currentLocation.latitude + 0.01,
-                currentLocation.longitude + 0.01
-        );
-        alertsGoogleMap.addMarker(new MarkerOptions()
-                .position(alertLocation1)
-                .title("Fire Alert")
-                .snippet("Reported 15 minutes ago")
-                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)));
+    private void handleSOSConfirmation(String emergencyType) {
+        Log.d(TAG, "SOS confirmed for: " + emergencyType);
 
-        // Sample alert 2: traffic accident
-        LatLng alertLocation2 = new LatLng(
-                currentLocation.latitude - 0.008,
-                currentLocation.longitude + 0.003
-        );
-        alertsGoogleMap.addMarker(new MarkerOptions()
-                .position(alertLocation2)
-                .title("Traffic Accident")
-                .snippet("Reported 5 minutes ago")
-                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
+        // Get precise location for emergency
+        locationManager.shareLocationDuringEmergency(new LocationManager.LocationUpdateListener() {
+            @Override
+            public void onLocationUpdated(Location location) {
+                // TODO: This will be implemented in the next phase with the SOS data collection service
+                Toast.makeText(requireContext(),
+                        emergencyType + " emergency alert initiated!",
+                        Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onLocationError(String message) {
+                Toast.makeText(requireContext(),
+                        "Location error: " + message + "\nUsing last known location",
+                        Toast.LENGTH_LONG).show();
+
+                // Use last known location if available
+                Location lastLocation = locationManager.getLastKnownLocation();
+                if (lastLocation != null) {
+                    // TODO: Use last location for emergency
+                } else {
+                    Toast.makeText(requireContext(),
+                            "Could not determine location. Please try again.",
+                            Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+    }
+
+    private void startIncidentReporting() {
+        Toast.makeText(requireContext(),
+                "Incident reporting will be implemented in the next phase",
+                Toast.LENGTH_SHORT).show();
+        // TODO: Start incident reporting activity in the next phase
+    }
+
+    private void viewAllAlerts() {
+        Toast.makeText(requireContext(),
+                "View all alerts will be implemented in future phases",
+                Toast.LENGTH_SHORT).show();
+        // TODO: Navigate to alerts list in future phases
+    }
+
+    private void updateNetworkStatus() {
+        if (!isAdded() || getContext() == null) return;
+
+        boolean isOnline = isNetworkAvailable();
+
+        if (isOnline) {
+            networkStatus.setText(R.string.status_online);
+            networkStatus.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.badge_green));
+        } else {
+            networkStatus.setText(R.string.status_offline);
+            networkStatus.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.badge_red));
+        }
+
+        // Update overall status
+        updateOverallStatus(isOnline);
+    }
+
+    private boolean isNetworkAvailable() {
+        if (connectivityManager == null) return false;
+
+        NetworkCapabilities capabilities = connectivityManager
+                .getNetworkCapabilities(connectivityManager.getActiveNetwork());
+
+        return capabilities != null &&
+                (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET));
+    }
+
+    private void updateLocationStatus() {
+        if (!isAdded() || getContext() == null) return;
+
+        boolean hasPermission = permissionManager.hasLocationPermissions(false);
+
+        if (hasPermission) {
+            Location lastKnown = locationManager.getLastKnownLocation();
+            if (lastKnown != null) {
+                float accuracy = lastKnown.getAccuracy();
+                String accuracyText;
+
+                if (accuracy < 20) {
+                    accuracyText = getString(R.string.location_high_accuracy);
+                } else if (accuracy < 100) {
+                    accuracyText = getString(R.string.location_medium_accuracy);
+                } else {
+                    accuracyText = getString(R.string.location_low_accuracy);
+                }
+
+                locationAccuracy.setText(getString(R.string.location_status, accuracyText));
+
+                // Update current location and map if available
+                currentLocation = lastKnown;
+                updateMapWithCurrentLocation();
+            } else {
+                locationAccuracy.setText(getString(R.string.location_unavailable));
+            }
+        } else {
+            locationAccuracy.setText(getString(R.string.location_permission_required));
+        }
+    }
+
+    private void updateLastUpdatedTime() {
+        if (!isAdded()) return;
+
+        String currentTime = timeFormat.format(new Date());
+        lastUpdated.setText(currentTime);
+    }
+
+    private void updateOverallStatus(boolean isOnline) {
+        if (!isAdded() || getContext() == null) return;
+
+        boolean hasLocationPermission = permissionManager.hasLocationPermissions(false);
+        boolean hasSmsPermission = permissionManager.hasSmsPermissions();
+
+        if (isOnline && hasLocationPermission) {
+            // All systems go
+            statusText.setText(R.string.status_ready);
+            statusIcon.setImageResource(R.drawable.ic_check_circle);
+            statusIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.green_success));
+        } else if (!isOnline && hasSmsPermission && hasLocationPermission) {
+            // Offline but SMS available
+            statusText.setText(R.string.status_offline_sms_ready);
+            statusIcon.setImageResource(R.drawable.ic_warning);
+            statusIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.warning_yellow));
+        } else if (!isOnline && !hasSmsPermission && hasLocationPermission) {
+            // Offline, no SMS, but location available
+            statusText.setText(R.string.status_limited_functionality);
+            statusIcon.setImageResource(R.drawable.ic_warning);
+            statusIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.warning_yellow));
+        } else {
+            // Critical services missing
+            statusText.setText(R.string.status_critical_permissions_missing);
+            statusIcon.setImageResource(R.drawable.ic_error);
+            statusIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.error_red));
+        }
+    }
+
+    private void updateSafetyTip() {
+        if (textSafetyTip != null) {
+            String tip = SafetyTipProvider.getRandomSafetyTip(requireContext());
+            textSafetyTip.setText(tip);
+        }
     }
 
     @Override
     public void onMapReady(@NonNull GoogleMap googleMap) {
         alertsGoogleMap = googleMap;
+        isMapReady = true;
 
-        // Configure map UI settings
+        // Configure map settings
+        alertsGoogleMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
         alertsGoogleMap.getUiSettings().setAllGesturesEnabled(true);
         alertsGoogleMap.getUiSettings().setMapToolbarEnabled(false);
-        alertsGoogleMap.getUiSettings().setMyLocationButtonEnabled(false);
         alertsGoogleMap.getUiSettings().setZoomControlsEnabled(false);
+        alertsGoogleMap.getUiSettings().setMyLocationButtonEnabled(false);
 
-        // Apply map style based on night mode
+        // Apply custom style based on night mode
         boolean isNightMode = requireContext().getResources().getBoolean(R.bool.is_night_mode);
         if (isNightMode) {
-            alertsGoogleMap.setMapStyle(MapStyleOptions.loadRawResourceStyle(requireContext(), R.raw.map_style_night));
+            alertsGoogleMap.setMapStyle(MapStyleOptions.loadRawResourceStyle(
+                    requireContext(), R.raw.map_style_night));
         } else {
-            alertsGoogleMap.setMapStyle(MapStyleOptions.loadRawResourceStyle(requireContext(), R.raw.map_style_day));
+            alertsGoogleMap.setMapStyle(MapStyleOptions.loadRawResourceStyle(
+                    requireContext(), R.raw.map_style_day));
         }
 
-        // Enable my location layer if permission is granted
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) ==
-                        PackageManager.PERMISSION_GRANTED) {
-            alertsGoogleMap.setMyLocationEnabled(true);
-        }
+        // Update with current location if available
+        updateMapWithCurrentLocation();
 
-        // Start location updates
-        startLocationUpdates();
+        // For now, show "no alerts" message
+        showNoAlertsState();
+    }
 
-        // If we already have a location (from activity), use it
-        if (currentLocation != null) {
-            updateMapWithLocation();
+    private void updateMapWithCurrentLocation() {
+        if (alertsGoogleMap != null && currentLocation != null) {
+            LatLng latLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
+
+            // Clear previous markers
+            alertsGoogleMap.clear();
+
+            // Add marker for current location
+            alertsGoogleMap.addMarker(new MarkerOptions()
+                    .position(latLng)
+                    .title(getString(R.string.your_location))
+                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+
+            // Move camera to show current location
+            alertsGoogleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 14f));
         }
     }
 
-    // MapView lifecycle methods
-    @Override
-    public void onSaveInstanceState(@NonNull Bundle outState) {
-        super.onSaveInstanceState(outState);
-
-        Bundle mapViewBundle = outState.getBundle(ALERTS_MAPVIEW_BUNDLE_KEY);
-        if (mapViewBundle == null) {
-            mapViewBundle = new Bundle();
-            outState.putBundle(ALERTS_MAPVIEW_BUNDLE_KEY, mapViewBundle);
+    private void centerMapOnCurrentLocation() {
+        if (alertsGoogleMap != null && currentLocation != null) {
+            LatLng latLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
+            alertsGoogleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 14f));
+        } else {
+            Toast.makeText(requireContext(), R.string.waiting_for_location, Toast.LENGTH_SHORT).show();
         }
+    }
 
-        if (alertsMapView != null) {
-            alertsMapView.onSaveInstanceState(mapViewBundle);
+    private void showNoAlertsState() {
+        if (textNoAlerts != null && recyclerAlerts != null && textViewAllAlerts != null) {
+            textNoAlerts.setVisibility(View.VISIBLE);
+            recyclerAlerts.setVisibility(View.GONE);
+            textViewAllAlerts.setVisibility(View.GONE);
         }
     }
 
@@ -636,6 +478,14 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         if (alertsMapView != null) {
             alertsMapView.onStart();
         }
+
+        // Start location updates
+        if (permissionManager.hasLocationPermissions(false)) {
+            locationManager.startLocationUpdates(false, false);
+        }
+
+        // Start periodic status updates
+        uiUpdateHandler.post(statusUpdateRunnable);
     }
 
     @Override
@@ -644,9 +494,11 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         if (alertsMapView != null) {
             alertsMapView.onResume();
         }
-        if (locationManager != null) {
-            startLocationUpdates();
-        }
+
+        // Immediate status update
+        updateNetworkStatus();
+        updateLocationStatus();
+        updateLastUpdatedTime();
     }
 
     @Override
@@ -654,14 +506,17 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         if (alertsMapView != null) {
             alertsMapView.onPause();
         }
-        if (locationManager != null) {
-            locationManager.stopLocationUpdates();
-        }
         super.onPause();
     }
 
     @Override
     public void onStop() {
+        // Remove status update callbacks
+        uiUpdateHandler.removeCallbacks(statusUpdateRunnable);
+
+        // Stop location updates
+        locationManager.stopLocationUpdates();
+
         if (alertsMapView != null) {
             alertsMapView.onStop();
         }
@@ -678,9 +533,24 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     @Override
     public void onLowMemory() {
-        super.onLowMemory();
         if (alertsMapView != null) {
             alertsMapView.onLowMemory();
         }
+        super.onLowMemory();
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (alertsMapView != null) {
+            alertsMapView.onSaveInstanceState(outState);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        permissionManager.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 }

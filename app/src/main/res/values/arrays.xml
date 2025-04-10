@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="safety_tips">
+        <item>In emergency situations, remain calm and provide clear information to help responders reach you quickly.</item>
+        <item>Save important emergency contacts in your phone for quick access.</item>
+        <item>Create a family emergency plan and ensure everyone knows what to do in case of various emergencies.</item>
+        <item>Keep a first aid kit at home, in your car, and at your workplace.</item>
+        <item>Learn basic first aid and CPR - these skills could save a life.</item>
+        <item>For medical emergencies, check if the person is conscious and breathing before performing any first aid.</item>
+        <item>In case of fire, remember to stop, drop, and roll if your clothes catch fire.</item>
+        <item>Never use water to extinguish electrical or oil fires - use appropriate fire extinguishers.</item>
+        <item>During natural disasters, follow evacuation orders promptly and have an emergency kit ready.</item>
+        <item>Keep emergency supplies including water, non-perishable food, and medications for at least 72 hours.</item>
+        <item>If you smell gas, leave the area immediately and call emergency services from a safe location.</item>
+        <item>Always keep your phone charged, especially during emergencies or natural disasters.</item>
+    </string-array>
+</resources>

@@ -126,32 +126,44 @@ public class CitizenMainActivity extends AppCompatActivity
     }
 
     private void updateDrawerWithFirebaseCheck() {
-        // Show loading if needed
-        // progressBar.setVisibility(View.VISIBLE);
+        // Direct Firebase check - this is crucial
+        try {
+            sessionManager.checkVolunteerStatus(new UserSessionManager.VolunteerStatusCallback() {
+                @Override
+                public void onResult(boolean isVolunteer) {
+                    Log.d(TAG, "Volunteer status from Firebase: " + isVolunteer);
 
-        // Direct Firebase check
-        sessionManager.checkVolunteerStatus(isVolunteer -> {
-            Log.d("CitizenMainActivity", "Volunteer status from Firebase: " + isVolunteer);
+                    // First update session manager for consistency
+                    sessionManager.setVolunteer(isVolunteer);
 
-            // Update on main thread with slight delay to ensure drawer is ready
-            drawerUpdateHandler.postDelayed(() -> {
-                try {
-                    NavigationView navigationView = findViewById(R.id.nav_view);
-                    Menu menu = navigationView.getMenu();
+                    // Update on main thread with slight delay to ensure drawer is ready
+                    drawerUpdateHandler.postDelayed(() -> {
+                        try {
+                            NavigationView navigationView = findViewById(R.id.nav_view);
+                            Menu menu = navigationView.getMenu();
 
-                    MenuItem volunteerSection = menu.findItem(R.id.nav_volunteer_alerts);
-                    if (volunteerSection != null) {
-                        volunteerSection.setVisible(isVolunteer);
-                        Log.d("CitizenMainActivity", "Updated drawer visibility: " + isVolunteer);
-                    }
+                            MenuItem volunteerSection = menu.findItem(R.id.nav_volunteer_alerts);
+                            if (volunteerSection != null) {
+                                volunteerSection.setVisible(isVolunteer);
+                                Log.d(TAG, "Updated drawer visibility: " + isVolunteer);
+                            }
 
-                    // Hide loading
-                    // progressBar.setVisibility(View.GONE);
-                } catch (Exception e) {
-                    Log.e("CitizenMainActivity", "Error updating drawer", e);
+                            // Also update the volunteer section header if exists
+                            if (menu.size() >= 2) {
+                                MenuItem volunteerSectionHeader = menu.getItem(1);
+                                if (volunteerSectionHeader != null) {
+                                    volunteerSectionHeader.setVisible(isVolunteer);
+                                }
+                            }
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error updating drawer", e);
+                        }
+                    }, DRAWER_UPDATE_DELAY);
                 }
-            }, DRAWER_UPDATE_DELAY);
-        });
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Error checking volunteer status", e);
+        }
     }
 
     private void initializeServices() {

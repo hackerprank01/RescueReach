@@ -163,6 +163,11 @@ public class FirebaseUserRepository implements UserRepository {
         map.put("emergencyContact", user.getEmergencyContact());
         map.put("createdAt", user.getCreatedAt());
 
+        // Add formatted creation date
+        if (user.getCreatedAt() != null) {
+            map.put(FIELD_CREATED_AT_FORMATTED, dateFormatter.format(user.getCreatedAt()));
+        }
+
         // For backward compatibility
         map.put("firstName", user.getFirstName());
         map.put("lastName", user.getLastName());
@@ -261,8 +266,10 @@ public class FirebaseUserRepository implements UserRepository {
 
         // Add new fields
         if (user.getDateOfBirth() != null) {
-            updates.put("dateOfBirth", user.getDateOfBirth());
+            // Store dateOfBirth as formatted string to avoid complex object creation
+            updates.put("dateOfBirth", dateFormatter.format(user.getDateOfBirth()).split(" ")[0]); // Only take the date part
         }
+
         if (user.getGender() != null) {
             updates.put("gender", user.getGender());
         }
@@ -270,6 +277,11 @@ public class FirebaseUserRepository implements UserRepository {
             updates.put("state", user.getState());
         }
         updates.put("isVolunteer", user.isVolunteer());
+
+        // Add createdAtFormatted field
+        if (user.getCreatedAt() != null) {
+            updates.put("createdAtFormatted", dateFormatter.format(user.getCreatedAt()));
+        }
 
         // Critical for security rules: Include the userId that matches the authenticated UID
         updates.put("userId", currentUser != null ? currentUser.getUid() : user.getUserId());
@@ -377,10 +389,17 @@ public class FirebaseUserRepository implements UserRepository {
         userBasicInfo.put("emergencyContact", user.getEmergencyContact() != null ? user.getEmergencyContact() : "");
         userBasicInfo.put("status", "online");
 
+        // Add createdAtFormatted field
+        if (user.getCreatedAt() != null) {
+            userBasicInfo.put("createdAtFormatted", dateFormatter.format(user.getCreatedAt()));
+        }
+
         // Add new fields
         if (user.getDateOfBirth() != null) {
-            userBasicInfo.put("dateOfBirth", dateFormatter.format(user.getDateOfBirth()));
+            // Store date of birth as a formatted string to prevent complex object creation
+            userBasicInfo.put("dateOfBirth", dateFormatter.format(user.getDateOfBirth()).split(" ")[0]); // Only take the date part
         }
+
         if (user.getGender() != null) {
             userBasicInfo.put("gender", user.getGender());
         }
@@ -437,5 +456,4 @@ public class FirebaseUserRepository implements UserRepository {
 
         return cleaned;
     }
-
 }
