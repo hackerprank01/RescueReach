@@ -30,7 +30,10 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.rescuereach.R;
+import com.rescuereach.data.model.User;
 import com.rescuereach.data.repository.OnCompleteListener;
+import com.rescuereach.data.repository.UserRepository;
+import com.rescuereach.data.repository.RepositoryProvider;
 import com.rescuereach.service.auth.UserSessionManager;
 
 import java.text.SimpleDateFormat;
@@ -63,6 +66,7 @@ public class ProfileCompletionActivity extends AppCompatActivity {
 
     // Service
     private UserSessionManager sessionManager;
+    private UserRepository userRepository;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -71,6 +75,7 @@ public class ProfileCompletionActivity extends AppCompatActivity {
 
         // Initialize services
         sessionManager = UserSessionManager.getInstance(this);
+        userRepository = RepositoryProvider.getUserRepository(this);
 
         // Check if user is authenticated
         if (sessionManager.getSavedPhoneNumber() == null) {
@@ -334,6 +339,40 @@ public class ProfileCompletionActivity extends AppCompatActivity {
         return cleaned.length() == 10 && Pattern.matches("^[6-9]\\d{9}$", cleaned);
     }
 
+    /**
+     * Update the volunteer status in both SharedPreferences and Firebase
+     * This ensures the volunteer status persists correctly between sessions
+     *
+     * @param isVolunteer Whether the user wants to be a volunteer
+     */
+    private void updateVolunteerStatus(boolean isVolunteer) {
+        Log.d(TAG, "Updating volunteer status to: " + isVolunteer);
+
+        // First update in SharedPreferences
+        sessionManager.getSharedPreferences().edit()
+                .putBoolean("is_volunteer", isVolunteer)
+                .apply();
+
+        // Create a User object for Firebase update
+        User user = new User();
+        user.setUserId(sessionManager.getUserId());
+        user.setPhoneNumber(sessionManager.getSavedPhoneNumber());
+        user.setVolunteer(isVolunteer);
+
+        // Update in Firebase to ensure persistence
+        userRepository.updateUserProfile(user, new OnCompleteListener() {
+            @Override
+            public void onSuccess() {
+                Log.d(TAG, "Volunteer status updated in Firebase: " + isVolunteer);
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Log.e(TAG, "Error updating volunteer status in Firebase", e);
+            }
+        });
+    }
+
     private void saveProfile() {
         // Get values from UI
         String fullName = fullNameEditText.getText().toString().trim();
@@ -353,6 +392,9 @@ public class ProfileCompletionActivity extends AppCompatActivity {
         if (!emergencyContact.startsWith("+")) {
             emergencyContact = "+91" + emergencyContact;
         }
+
+        // Update volunteer status directly in Firebase to ensure persistence
+        updateVolunteerStatus(isVolunteer);
 
         // Save profile with the correct parameter order
         // Per UserSessionManager implementation: fullName, emergencyContact, dateOfBirth, gender, state, isVolunteer

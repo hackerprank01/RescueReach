@@ -91,7 +91,11 @@ public class UserSessionManager {
         realtimeDb = FirebaseDatabase.getInstance().getReference();
 
         // Get user repository
-        userRepository = RepositoryProvider.getInstance().getUserRepository();
+        userRepository = RepositoryProvider.getUserRepository(context);
+    }
+
+    public SharedPreferences getSharedPreferences() {
+        return sharedPreferences;
     }
 
     /**

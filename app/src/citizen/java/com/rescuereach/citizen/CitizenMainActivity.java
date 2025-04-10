@@ -910,7 +910,16 @@ public class CitizenMainActivity extends AppCompatActivity
         if (mapView != null) {
             mapView.onStart();
         }
+
+        // Force a direct check with Firebase for volunteer status
+        // This is crucial to ensure the correct status after login
+        sessionManager.checkVolunteerStatus(isVolunteer -> {
+            Log.d(TAG, "onStart volunteer status check: " + isVolunteer);
+            refreshNavigationDrawer();
+        });
     }
+
+
 
     @Override
     protected void onStop() {

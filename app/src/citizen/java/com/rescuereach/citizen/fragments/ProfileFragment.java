@@ -42,6 +42,10 @@ import com.rescuereach.citizen.CitizenMainActivity;
 //import com.rescuereach.citizen.settings.PrivacySettingsActivity;
 //import com.rescuereach.citizen.settings.AppearanceSettingsActivity;
 //import com.rescuereach.citizen.settings.DataManagementActivity;
+import com.rescuereach.data.model.User;
+import com.rescuereach.data.repository.OnCompleteListener;
+import com.rescuereach.data.repository.UserRepository;
+import com.rescuereach.data.repository.RepositoryProvider;
 import com.rescuereach.service.auth.UserSessionManager;
 
 import java.text.SimpleDateFormat;
@@ -74,6 +78,7 @@ public class ProfileFragment extends Fragment {
 
     // Data
     private UserSessionManager sessionManager;
+    private UserRepository userRepository;
     private final Calendar calendar = Calendar.getInstance();
     private boolean isVolunteer = false;
     private boolean isEditMode = false;
@@ -102,6 +107,7 @@ public class ProfileFragment extends Fragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         sessionManager = UserSessionManager.getInstance(requireContext());
+        userRepository = RepositoryProvider.getUserRepository(requireContext());
         db = FirebaseFirestore.getInstance();
         rtDatabase = FirebaseDatabase.getInstance().getReference();
     }
@@ -585,6 +591,44 @@ public class ProfileFragment extends Fragment {
     }
 
     /**
+     * Update the volunteer status in both SharedPreferences and Firebase
+     * This ensures the volunteer status persists correctly between sessions
+     *
+     * @param isVolunteer Whether the user wants to be a volunteer
+     */
+    private void updateVolunteerStatus(boolean isVolunteer) {
+        Log.d(TAG, "Updating volunteer status to: " + isVolunteer);
+
+        // First update in SharedPreferences
+        sessionManager.getSharedPreferences().edit()
+                .putBoolean("is_volunteer", isVolunteer)
+                .apply();
+
+        // Create a User object for Firebase update
+        User user = new User();
+        user.setUserId(sessionManager.getUserId());
+        user.setPhoneNumber(sessionManager.getSavedPhoneNumber());
+        user.setVolunteer(isVolunteer);
+
+        // Update in Firebase using repository to ensure persistence
+        userRepository.updateUserProfile(user, new OnCompleteListener() {
+            @Override
+            public void onSuccess() {
+                Log.d(TAG, "Volunteer status updated in Firebase: " + isVolunteer);
+                // Force drawer refresh if in main activity
+                if (getActivity() instanceof CitizenMainActivity) {
+                    ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Log.e(TAG, "Error updating volunteer status in Firebase", e);
+            }
+        });
+    }
+
+    /**
      * Save profile data following the exact flowchart sequence
      */
     private void saveProfile() {
@@ -611,7 +655,12 @@ public class ProfileFragment extends Fragment {
         // 6. Update session first
         updateSessionWithCurrentValues();
 
-        // 7. Get phone number and user ID
+        // 7. If volunteer status changed, directly update it to ensure persistence
+        if (volunteerStatusChanged) {
+            updateVolunteerStatus(isVolunteer);
+        }
+
+        // 8. Get phone number and user ID
         String phoneNumber = sessionManager.getSavedPhoneNumber();
         String userId = sessionManager.getUserId();
 
@@ -619,13 +668,6 @@ public class ProfileFragment extends Fragment {
             showError("Phone number or user ID is missing");
             showLoading(false);
             return;
-        }
-
-        // 8. If volunteer status changed, update navigation drawer
-        if (volunteerStatusChanged && getActivity() instanceof CitizenMainActivity) {
-            // Initial refresh based on session changes
-            Log.d(TAG, "Refreshing navigation drawer - initial");
-            ((CitizenMainActivity) getActivity()).refreshNavigationDrawer();
         }
 
         // 9. Update Firestore

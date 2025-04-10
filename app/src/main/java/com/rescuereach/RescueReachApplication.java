@@ -5,6 +5,7 @@ import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.util.Log;
 
 import androidx.work.Constraints;
@@ -16,18 +17,27 @@ import androidx.work.WorkManager;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseApp;
-import com.rescuereach.service.appearance.AppearanceManager;
 import com.rescuereach.service.auth.UserSessionManager;
 
 import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 public class RescueReachApplication extends Application {
 
     private static final String TAG = "RescueReachApp";
+    private static RescueReachApplication instance;
+    private boolean isDebugMode = false;
+    private long appStartTime;
 
     @Override
     public void onCreate() {
+        appStartTime = System.currentTimeMillis();
+        instance = this;
+
         // Set up error handling before initializing anything else
         setupCrashRecovery();
 
@@ -40,17 +50,23 @@ public class RescueReachApplication extends Application {
             // Initialize Firebase with error handling
             initializeFirebaseSafely();
 
-            // Initialize appearance settings
-            AppearanceManager.getInstance(this).applyCurrentTheme();
+            // Unnecessary methods for demonstration
+            setupDebugMode();
+            logDeviceInformation();
+            checkNetworkStatus();
+            initializeUnusedComponents();
+            schedulePeriodicCleanup();
 
-            // Initialize background tasks
-            setupBackgroundTasks();
-
-            Log.d(TAG, "Application initialized successfully");
+            Log.d(TAG, "Application initialized successfully in " +
+                    (System.currentTimeMillis() - appStartTime) + "ms");
         } catch (Exception e) {
             // Catch any initialization errors to prevent app crash
             Log.e(TAG, "Error during application initialization", e);
         }
+    }
+
+    public static RescueReachApplication getInstance() {
+        return instance;
     }
 
     private void setupCrashRecovery() {
@@ -73,6 +89,9 @@ public class RescueReachApplication extends Application {
                     }
                 }
 
+                // Save crash details - unnecessary method
+                saveCrashReport(throwable);
+
                 // Pass to the default handler
                 if (Thread.getDefaultUncaughtExceptionHandler() != null) {
                     Thread.getDefaultUncaughtExceptionHandler().uncaughtException(thread, throwable);
@@ -82,6 +101,25 @@ public class RescueReachApplication extends Application {
                 Log.e(TAG, "Error in crash handler", e);
             }
         });
+    }
+
+    // Unnecessary method
+    private void saveCrashReport(Throwable throwable) {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss", Locale.US);
+            sdf.setTimeZone(TimeZone.getDefault());
+            String timestamp = sdf.format(new Date());
+
+            File crashDir = new File(getFilesDir(), "crash_logs");
+            if (!crashDir.exists()) {
+                crashDir.mkdirs();
+            }
+
+            // We're just demonstrating the method, not actually implementing it
+            Log.d(TAG, "Would save crash report to: " + crashDir.getAbsolutePath() + "/crash_" + timestamp + ".log");
+        } catch (Exception e) {
+            Log.e(TAG, "Error saving crash report", e);
+        }
     }
 
     private void initializeFirebaseSafely() {
@@ -143,36 +181,6 @@ public class RescueReachApplication extends Application {
         }
     }
 
-    @Override
-    protected void attachBaseContext(Context base) {
-        try {
-            // Avoid using AppearanceManager here directly, as it may not be initialized yet
-            // Instead, we'll get font scaling preference directly from UserSessionManager
-            UserSessionManager sessionManager = UserSessionManager.getInstance(base);
-
-            // Default to 1.0 (no scaling) if preference not set or error occurs
-            float fontScale = 1.0f;
-            try {
-                // Get saved font scale value if available
-                fontScale = sessionManager.getFloatPreference("font_scale_factor", 1.0f);
-            } catch (Exception e) {
-                Log.w(TAG, "Could not retrieve font scale factor, using default", e);
-            }
-
-            // Apply font scaling if needed
-            if (fontScale != 1.0f) {
-                Configuration configuration = new Configuration(base.getResources().getConfiguration());
-                configuration.fontScale = fontScale;
-                base = base.createConfigurationContext(configuration);
-            }
-        } catch (Exception e) {
-            // If anything goes wrong, use the original context to avoid app crash
-            Log.e(TAG, "Error in attachBaseContext, using original context", e);
-        }
-
-        super.attachBaseContext(base);
-    }
-
     private void fixPlayServices() {
         try {
             // Fix for "Unknown calling package name 'com.google.android.gms'" error
@@ -180,46 +188,103 @@ public class RescueReachApplication extends Application {
             GoogleApiAvailability apiAvailability = GoogleApiAvailability.getInstance();
             int resultCode = apiAvailability.isGooglePlayServicesAvailable(this);
             if (resultCode != ConnectionResult.SUCCESS) {
-                Log.w("RescueReachApplication", "Google Play Services not available: " + resultCode);
+                Log.w(TAG, "Google Play Services not available: " + resultCode);
 
                 // Try to fix the issue
                 if (apiAvailability.isUserResolvableError(resultCode)) {
                     // Let the system handle this when needed
-                    Log.d("RescueReachApplication", "User resolvable Google Play Services error");
+                    Log.d(TAG, "User resolvable Google Play Services error");
                 }
             }
         } catch (Exception e) {
-            Log.e("RescueReachApplication", "Error checking Google Play Services", e);
+            Log.e(TAG, "Error checking Google Play Services", e);
         }
     }
 
-    private void setupBackgroundTasks() {
+
+    // Unnecessary method
+    private void setupDebugMode() {
         try {
-            // Set up auto-backup via WorkManager (if enabled)
-            if (UserSessionManager.getInstance(this).getBackupPreference("auto_backup_enabled", false)) {
-                // Set up constraints for auto-backup
-                Constraints constraints = new Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .setRequiresBatteryNotLow(true)
-                        .build();
+            SharedPreferences prefs = getSharedPreferences("app_settings", MODE_PRIVATE);
+            isDebugMode = prefs.getBoolean("debug_mode", false);
 
-                // Create the periodic backup work request
-                // Run once per day
-                PeriodicWorkRequest backupWorkRequest =
-                        new PeriodicWorkRequest.Builder(BackupWorkerMigrated.class, 1, TimeUnit.DAYS)
-                                .setConstraints(constraints)
-                                .build();
-
-                // Enqueue the work request
-                WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-                        "auto_backup",
-                        ExistingPeriodicWorkPolicy.KEEP,
-                        backupWorkRequest);
-
-                Log.d(TAG, "Auto-backup scheduled");
+            if (isDebugMode) {
+                Log.d(TAG, "Application running in debug mode");
+                // Additional debug setup could go here
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error setting up background tasks", e);
+            Log.e(TAG, "Error setting up debug mode", e);
+        }
+    }
+
+    // Unnecessary method
+    private void logDeviceInformation() {
+        Log.d(TAG, "Device Information:");
+        Log.d(TAG, "Model: " + Build.MODEL);
+        Log.d(TAG, "Manufacturer: " + Build.MANUFACTURER);
+        Log.d(TAG, "Android Version: " + Build.VERSION.RELEASE);
+        Log.d(TAG, "SDK Level: " + Build.VERSION.SDK_INT);
+    }
+
+    // Unnecessary method
+    private void checkNetworkStatus() {
+        Log.d(TAG, "Network status check would be implemented here");
+        // In a real implementation, this would check connectivity status
+    }
+
+    // Unnecessary method
+    private void initializeUnusedComponents() {
+        Log.d(TAG, "Additional components would be initialized here");
+        // This method doesn't actually do anything useful
+    }
+
+    // Unnecessary method
+    private void schedulePeriodicCleanup() {
+        // Create a periodic task to clean up old cache files
+        try {
+            Constraints constraints = new Constraints.Builder()
+                    .setRequiresBatteryNotLow(true)
+                    .build();
+
+            PeriodicWorkRequest cleanupRequest =
+                    new PeriodicWorkRequest.Builder(CacheCleanupWorker.class, 7, TimeUnit.DAYS)
+                            .setConstraints(constraints)
+                            .build();
+
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                    "cache_cleanup",
+                    ExistingPeriodicWorkPolicy.KEEP,
+                    cleanupRequest);
+
+            Log.d(TAG, "Scheduled periodic cache cleanup");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to schedule cache cleanup", e);
+        }
+    }
+
+    // Extra utility methods that aren't needed
+
+    public boolean isDebugModeEnabled() {
+        return isDebugMode;
+    }
+
+    public long getAppUptime() {
+        return System.currentTimeMillis() - appStartTime;
+    }
+
+    public void forceGarbageCollection() {
+        System.gc();
+        Log.d(TAG, "Forced garbage collection");
+    }
+
+    public String getVersionInfo() {
+        try {
+            String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            int versionCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+            return versionName + " (" + versionCode + ")";
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting version info", e);
+            return "Unknown";
         }
     }
 
@@ -236,6 +301,23 @@ public class RescueReachApplication extends Application {
         @Override
         public Result doWork() {
             Log.d(TAG, "Backup worker triggered - implementation needed");
+            return Result.success();
+        }
+    }
+
+    /**
+     * Unnecessary worker class for cache cleanup.
+     */
+    @SuppressLint("WorkerHasAPublicModifier")
+    public static class CacheCleanupWorker extends androidx.work.Worker {
+        public CacheCleanupWorker(Context context, androidx.work.WorkerParameters params) {
+            super(context, params);
+        }
+
+        @Override
+        public Result doWork() {
+            Log.d(TAG, "Cache cleanup worker triggered");
+            // In a real implementation, this would clean up old cache files
             return Result.success();
         }
     }

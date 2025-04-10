@@ -1,66 +1,107 @@
 package com.rescuereach.data.model;
 
+import java.io.Serializable;
 import java.util.Date;
 
-public class User {
+/**
+ * Model class for User data
+ * Represents a user in the RescueReach application
+ */
+public class User implements Serializable {
     private String userId;
+    private String phoneNumber;
     private String fullName;
-    private String phoneNumber; // Always starts with +91
-    private String emergencyContact; // Always starts with +91
-    private Date createdAt;
-    // New fields
-    private Date dateOfBirth;
+    private String firstName;
+    private String lastName;
     private String gender;
+    private Date dateOfBirth;
     private String state;
+    private String emergencyContact;
     private boolean isVolunteer;
+    private Date createdAt;
+    private String status; // For online status tracking
 
-    // Required for Firestore
+    /**
+     * Default constructor required for Firestore
+     */
     public User() {
+        // Required empty constructor for Firestore
     }
 
-    public User(String userId, String phoneNumber) {
+    /**
+     * Constructor with essential fields
+     * @param userId Unique identifier for the user
+     * @param phoneNumber User's phone number
+     * @param fullName User's full name
+     */
+    public User(String userId, String phoneNumber, String fullName) {
         this.userId = userId;
         this.phoneNumber = phoneNumber;
-        this.createdAt = new Date();
-    }
-
-    public User(String userId, String fullName, String phoneNumber, String emergencyContact) {
-        this.userId = userId;
         this.fullName = fullName;
-        this.phoneNumber = phoneNumber;
-        this.emergencyContact = emergencyContact;
+
+        // Parse full name into first and last name for backwards compatibility
+        parseFullName(fullName);
+
         this.createdAt = new Date();
+        this.isVolunteer = false;
+        this.status = "offline";
     }
 
-    // Full constructor with all fields
-    public User(String userId, String fullName, String phoneNumber, String emergencyContact,
-                Date dateOfBirth, String gender, String state, boolean isVolunteer) {
+    /**
+     * Full constructor with all fields
+     */
+    public User(String userId, String phoneNumber, String fullName, String gender,
+                Date dateOfBirth, String state, String emergencyContact, boolean isVolunteer) {
         this.userId = userId;
-        this.fullName = fullName;
         this.phoneNumber = phoneNumber;
-        this.emergencyContact = emergencyContact;
-        this.dateOfBirth = dateOfBirth;
+        this.fullName = fullName;
+
+        // Parse full name into first and last name
+        parseFullName(fullName);
+
         this.gender = gender;
+        this.dateOfBirth = dateOfBirth;
         this.state = state;
+        this.emergencyContact = emergencyContact;
         this.isVolunteer = isVolunteer;
         this.createdAt = new Date();
+        this.status = "offline";
     }
 
-    // Getters and setters
+    /**
+     * Parse full name into first and last name
+     * @param fullName Full name to parse
+     */
+    private void parseFullName(String fullName) {
+        if (fullName != null && !fullName.isEmpty()) {
+            int spaceIndex = fullName.indexOf(' ');
+            if (spaceIndex > 0) {
+                this.firstName = fullName.substring(0, spaceIndex);
+                this.lastName = fullName.substring(spaceIndex + 1);
+            } else {
+                this.firstName = fullName;
+                this.lastName = "";
+            }
+        }
+    }
+
+    /**
+     * Update full name and parse it into first and last name
+     * @param fullName New full name
+     */
+    public void updateFullName(String fullName) {
+        this.fullName = fullName;
+        parseFullName(fullName);
+    }
+
+    // Getters and Setters
+
     public String getUserId() {
         return userId;
     }
 
     public void setUserId(String userId) {
         this.userId = userId;
-    }
-
-    public String getFullName() {
-        return fullName;
-    }
-
-    public void setFullName(String fullName) {
-        this.fullName = fullName;
     }
 
     public String getPhoneNumber() {
@@ -71,29 +112,43 @@ public class User {
         this.phoneNumber = phoneNumber;
     }
 
-    public String getEmergencyContact() {
-        return emergencyContact;
+    public String getFullName() {
+        return fullName;
     }
 
-    public void setEmergencyContact(String emergencyContact) {
-        this.emergencyContact = emergencyContact;
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+        parseFullName(fullName);
     }
 
-    public Date getCreatedAt() {
-        return createdAt;
+    public String getFirstName() {
+        return firstName;
     }
 
-    public void setCreatedAt(Date createdAt) {
-        this.createdAt = createdAt;
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+
+        // Update full name when setting first name
+        if (this.lastName != null) {
+            this.fullName = firstName + (this.lastName.isEmpty() ? "" : " " + this.lastName);
+        } else {
+            this.fullName = firstName;
+        }
     }
 
-    // New getters and setters
-    public Date getDateOfBirth() {
-        return dateOfBirth;
+    public String getLastName() {
+        return lastName;
     }
 
-    public void setDateOfBirth(Date dateOfBirth) {
-        this.dateOfBirth = dateOfBirth;
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+
+        // Update full name when setting last name
+        if (this.firstName != null) {
+            this.fullName = this.firstName + (lastName.isEmpty() ? "" : " " + lastName);
+        } else if (lastName != null && !lastName.isEmpty()) {
+            this.fullName = lastName;
+        }
     }
 
     public String getGender() {
@@ -104,12 +159,28 @@ public class User {
         this.gender = gender;
     }
 
+    public Date getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(Date dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
     public String getState() {
         return state;
     }
 
     public void setState(String state) {
         this.state = state;
+    }
+
+    public String getEmergencyContact() {
+        return emergencyContact;
+    }
+
+    public void setEmergencyContact(String emergencyContact) {
+        this.emergencyContact = emergencyContact;
     }
 
     public boolean isVolunteer() {
@@ -120,42 +191,29 @@ public class User {
         isVolunteer = volunteer;
     }
 
-    // For backward compatibility with code that may still use firstName/lastName
-    @Deprecated
-    public String getFirstName() {
-        if (fullName != null && fullName.contains(" ")) {
-            return fullName.substring(0, fullName.indexOf(" "));
-        }
-        return fullName;
+    public Date getCreatedAt() {
+        return createdAt;
     }
 
-    @Deprecated
-    public String getLastName() {
-        if (fullName != null && fullName.contains(" ")) {
-            return fullName.substring(fullName.indexOf(" ") + 1);
-        }
-        return "";
+    public void setCreatedAt(Date createdAt) {
+        this.createdAt = createdAt;
     }
 
-    @Deprecated
-    public void setFirstName(String firstName) {
-        if (this.fullName == null) {
-            this.fullName = firstName;
-        } else if (this.fullName.contains(" ")) {
-            this.fullName = firstName + this.fullName.substring(this.fullName.indexOf(" "));
-        } else {
-            this.fullName = firstName;
-        }
+    public String getStatus() {
+        return status;
     }
 
-    @Deprecated
-    public void setLastName(String lastName) {
-        if (this.fullName == null) {
-            this.fullName = lastName;
-        } else if (this.fullName.contains(" ")) {
-            this.fullName = this.fullName.substring(0, this.fullName.indexOf(" ") + 1) + lastName;
-        } else {
-            this.fullName = this.fullName + " " + lastName;
-        }
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    @Override
+    public String toString() {
+        return "User{" +
+                "userId='" + userId + '\'' +
+                ", phoneNumber='" + phoneNumber + '\'' +
+                ", fullName='" + fullName + '\'' +
+                ", isVolunteer=" + isVolunteer +
+                '}';
     }
 }

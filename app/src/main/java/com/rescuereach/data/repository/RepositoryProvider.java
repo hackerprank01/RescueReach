@@ -1,29 +1,29 @@
 package com.rescuereach.data.repository;
 
-import com.rescuereach.data.repository.firebase.FirebaseIncidentRepository;
-import com.rescuereach.data.repository.firebase.FirebaseResponderRepository;
+import android.content.Context;
 import com.rescuereach.data.repository.firebase.FirebaseUserRepository;
-import com.rescuereach.data.repository.firebase.FirebaseVolunteerRepository;
 
 /**
- * Singleton provider for all repository implementations.
+ * Singleton provider for repositories
+ * Ensures single instances of repositories are used throughout the app
  */
 public class RepositoryProvider {
     private static RepositoryProvider instance;
-
     private final UserRepository userRepository;
-    private final ResponderRepository responderRepository;
-    private final IncidentRepository incidentRepository;
-    private final VolunteerRepository volunteerRepository;
 
+    /**
+     * Private constructor to prevent direct instantiation
+     * Initializes all repository implementations
+     */
     private RepositoryProvider() {
-        // Initialize repositories with Firebase implementations
+        // Initialize repository implementations
         userRepository = new FirebaseUserRepository();
-        responderRepository = new FirebaseResponderRepository();
-        incidentRepository = new FirebaseIncidentRepository();
-        volunteerRepository = new FirebaseVolunteerRepository();
     }
 
+    /**
+     * Get the singleton instance of RepositoryProvider
+     * @return RepositoryProvider instance
+     */
     public static synchronized RepositoryProvider getInstance() {
         if (instance == null) {
             instance = new RepositoryProvider();
@@ -31,19 +31,28 @@ public class RepositoryProvider {
         return instance;
     }
 
+    /**
+     * Get the UserRepository instance
+     * @return UserRepository instance
+     */
     public UserRepository getUserRepository() {
         return userRepository;
     }
 
-    public ResponderRepository getResponderRepository() {
-        return responderRepository;
+    /**
+     * Static convenience method to get UserRepository directly
+     * @param context Application context
+     * @return UserRepository instance
+     */
+    public static UserRepository getUserRepository(Context context) {
+        return getInstance().getUserRepository();
     }
 
-    public IncidentRepository getIncidentRepository() {
-        return incidentRepository;
-    }
-
-    public VolunteerRepository getVolunteerRepository() {
-        return volunteerRepository;
+    /**
+     * Reset all repositories (for testing or reset purposes)
+     * Creates a new instance of RepositoryProvider
+     */
+    public static void reset() {
+        instance = null;
     }
 }
