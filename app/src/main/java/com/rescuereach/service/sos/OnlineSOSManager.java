@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.SetOptions;
@@ -182,7 +183,7 @@ public class OnlineSOSManager {
         }
 
         // Address info
-        if (sosReport.getAddress() != null) {
+        if (sosReport.getAddress() != null || sosReport.getCity() != null || sosReport.getState() != null) {
             Map<String, Object> addressData = new HashMap<>();
             addressData.put("address", sosReport.getAddress());
             addressData.put("city", sosReport.getCity());
@@ -220,41 +221,50 @@ public class OnlineSOSManager {
         data.put("city", sosReport.getCity());
         data.put("state", sosReport.getState());
 
-        // Call the Cloud Function to notify responders
-        functions.getHttpsCallable("notifyEmergencyResponders")
-                .call(data)
-                .addOnSuccessListener(new OnSuccessListener<HttpsCallableResult>() {
-                    @Override
-                    public void onSuccess(HttpsCallableResult result) {
-                        Log.d(TAG, "Responders notified successfully");
+        // Call the Cloud Function
+        Task<HttpsCallableResult> task = functions
+                .getHttpsCallable("notifyEmergencyResponders")
+                .call(data);
 
-                        // Extract response data
-                        Map<String, Object> responseData = (Map<String, Object>) result.getData();
-                        int notifiedCount = responseData != null && responseData.containsKey("notifiedCount") ?
-                                ((Long) responseData.get("notifiedCount")).intValue() : 0;
+        task.addOnSuccessListener(result -> {
+                    Log.d(TAG, "Responders notified successfully");
 
-                        Log.d(TAG, "Notified " + notifiedCount + " responders");
+                    // Extract response data
+                    Map<String, Object> responseData = (Map<String, Object>) result.getData();
+                    boolean success = responseData != null && responseData.containsKey("success") ?
+                            (Boolean) responseData.get("success") : false;
+                    int notifiedCount = responseData != null && responseData.containsKey("notifiedCount") ?
+                            ((Long) responseData.get("notifiedCount")).intValue() : 0;
 
-                        // Proceed to send SMS via Twilio
-                        sendEmergencyContactSMS();
-                    }
+                    Log.d(TAG, "Notified " + notifiedCount + " responders");
+
+                    // Update Firestore with notification status
+                    Map<String, Object> updates = new HashMap<>();
+                    updates.put("respondersNotified", notifiedCount);
+                    updates.put("respondersNotifiedAt", new Date());
+
+                    firestore.collection(COLLECTION_SOS_REPORTS)
+                            .document(sosReport.getReportId())
+                            .update(updates)
+                            .addOnFailureListener(e ->
+                                    Log.e(TAG, "Error updating responders notification status", e));
+
+                    // Proceed to send SMS via Twilio
+                    sendEmergencyContactSMS();
                 })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.e(TAG, "Error notifying responders", e);
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error notifying responders", e);
 
-                        // Continue with SMS even if FCM notification fails
-                        sendEmergencyContactSMS();
-                    }
+                    // Continue with SMS even if FCM notification fails
+                    sendEmergencyContactSMS();
                 });
     }
 
     /**
-     * Step 4: Send SMS to emergency contacts via Twilio
+     * Step 4: Send SMS to emergency contacts via Twilio Cloud Function
      */
     private void sendEmergencyContactSMS() {
-        Log.d(TAG, "Sending SMS to emergency contacts");
+        Log.d(TAG, "Sending SMS to emergency contacts via Twilio");
 
         List<EmergencyContact> contacts = sosReport.getEmergencyContacts();
 
@@ -265,7 +275,7 @@ public class OnlineSOSManager {
             return;
         }
 
-        // Collect phone numbers
+        // Collect phone numbers to notify
         List<String> phoneNumbers = new ArrayList<>();
         for (EmergencyContact contact : contacts) {
             if (contact.getPhoneNumber() != null && !contact.getPhoneNumber().isEmpty()) {
@@ -280,49 +290,51 @@ public class OnlineSOSManager {
             return;
         }
 
-        // Prepare data for Cloud Function to send SMS
-        Map<String, Object> smsData = new HashMap<>();
-        smsData.put("reportId", sosReport.getReportId());
-        smsData.put("phoneNumbers", phoneNumbers);
-        smsData.put("emergencyType", sosReport.getEmergencyType());
-        smsData.put("userName", sosReport.getUserFullName());
-        smsData.put("address", sosReport.getAddress() != null ? sosReport.getAddress() : "Unknown location");
-        smsData.put("city", sosReport.getCity() != null ? sosReport.getCity() : "");
-        smsData.put("state", sosReport.getState() != null ? sosReport.getState() : "");
-
         // Get nearest emergency service info if available
         EmergencyService primaryService = sosReport.getPrimaryEmergencyService();
+        String nearestServiceName = "";
+        String nearestServicePhone = "";
+        String nearestServiceDistance = "";
+
         if (primaryService != null) {
-            smsData.put("nearestServiceName", primaryService.getName());
-            smsData.put("nearestServicePhone", primaryService.getEmergencyNumber());
-            smsData.put("nearestServiceDistance", primaryService.getFormattedDistance());
+            nearestServiceName = primaryService.getName() != null ? primaryService.getName() : "";
+            nearestServicePhone = primaryService.getEmergencyNumber();
+            nearestServiceDistance = primaryService.getFormattedDistance();
         }
 
-        // Call the Cloud Function to send SMS
-        functions.getHttpsCallable("sendEmergencySMS")
-                .call(smsData)
-                .addOnSuccessListener(new OnSuccessListener<HttpsCallableResult>() {
-                    @Override
-                    public void onSuccess(HttpsCallableResult result) {
-                        Log.d(TAG, "Emergency SMS sent successfully via Twilio");
+        // Prepare data for the Cloud Function
+        Map<String, Object> data = new HashMap<>();
+        data.put("reportId", sosReport.getReportId());
+        data.put("phoneNumbers", phoneNumbers);
+        data.put("emergencyType", sosReport.getEmergencyType());
+        data.put("userName", sosReport.getUserFullName());
+        data.put("address", sosReport.getAddress() != null ? sosReport.getAddress() : "Unknown location");
+        data.put("city", sosReport.getCity() != null ? sosReport.getCity() : "");
+        data.put("state", sosReport.getState() != null ? sosReport.getState() : "");
+        data.put("nearestServiceName", nearestServiceName);
+        data.put("nearestServicePhone", nearestServicePhone);
+        data.put("nearestServiceDistance", nearestServiceDistance);
 
-                        // Extract response data
-                        Map<String, Object> responseData = (Map<String, Object>) result.getData();
-                        boolean success = responseData != null && responseData.containsKey("success") ?
-                                (Boolean) responseData.get("success") : false;
+        // Call the Cloud Function
+        Task<HttpsCallableResult> task = functions
+                .getHttpsCallable("sendEmergencySMS")
+                .call(data);
 
-                        // Update SMS status in the SOS report
-                        updateSMSStatus(success);
-                    }
+        task.addOnSuccessListener(result -> {
+                    Log.d(TAG, "Emergency SMS sent successfully via Twilio");
+
+                    // Extract response data
+                    Map<String, Object> responseData = (Map<String, Object>) result.getData();
+                    boolean success = responseData != null && responseData.containsKey("success") ?
+                            (Boolean) responseData.get("success") : false;
+
+                    // Update SMS status
+                    updateSMSStatus(success);
                 })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.e(TAG, "Error sending SMS via Twilio", e);
-
-                        // Update SMS status as failed
-                        updateSMSStatus(false);
-                    }
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error sending SMS via Twilio", e);
+                    // Update SMS status as failed
+                    updateSMSStatus(false);
                 });
     }
 
@@ -340,19 +352,18 @@ public class OnlineSOSManager {
         Map<String, Object> updates = new HashMap<>();
         updates.put("smsSent", success);
         updates.put("smsStatus", success ? "SENT" : "FAILED");
+        updates.put("smsTimestamp", new Date());
 
         firestore.collection(COLLECTION_SOS_REPORTS)
                 .document(sosReport.getReportId())
                 .update(updates)
                 .addOnSuccessListener(aVoid -> {
                     Log.d(TAG, "SMS status updated in Firestore");
-
                     // Update the SOS status to RECEIVED
                     updateSOSStatus("RECEIVED");
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Error updating SMS status in Firestore", e);
-
                     // Continue with status update even if this fails
                     updateSOSStatus("RECEIVED");
                 });
