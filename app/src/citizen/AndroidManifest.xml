@@ -48,15 +48,17 @@
             </intent-filter>
         </activity>
 
-        <!-- Google Maps API Key -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="@string/google_maps_key" />
-
         <activity
             android:name=".citizen.CitizenMainActivity"
             android:exported="false"
-            android:theme="@style/Theme.RescueReach" />
+            android:theme="@style/Theme.RescueReach">
+            <!-- Add deep link handling for FCM notifications -->
+            <intent-filter>
+                <action android:name="OPEN_EMERGENCY_DETAILS" />
+                <action android:name="OPEN_SOS_DETAILS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".citizen.ProfileCompletionActivity"
@@ -64,16 +66,6 @@
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.RescueReach" />
 
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
 
     </application>
 </manifest>

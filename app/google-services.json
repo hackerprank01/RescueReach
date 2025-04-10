@@ -13,7 +13,16 @@
           "package_name": "com.rescuereach"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "421344929703-09jct1f2h6k3kvoggjbkop84q52f8852.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rescuereach",
+            "certificate_hash": "19672eed27bb98790b167468e7d8236c6968039d"
+          }
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDSXaWSQbGkVBP_87az12AouBFcu3hAtmk"
@@ -32,7 +41,16 @@
           "package_name": "com.rescuereach.citizen"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "421344929703-i6ku9kqrl1cckp1mh4hi9tsdamefid7m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rescuereach.citizen",
+            "certificate_hash": "19672eed27bb98790b167468e7d8236c6968039d"
+          }
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDSXaWSQbGkVBP_87az12AouBFcu3hAtmk"

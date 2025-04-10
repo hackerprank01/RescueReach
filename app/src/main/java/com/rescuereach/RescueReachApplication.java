@@ -17,7 +17,9 @@ import androidx.work.WorkManager;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.rescuereach.service.auth.UserSessionManager;
+import com.rescuereach.service.messaging.FCMManager;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -32,6 +34,7 @@ public class RescueReachApplication extends Application {
     private static RescueReachApplication instance;
     private boolean isDebugMode = false;
     private long appStartTime;
+    private FCMManager fcmManager;
 
     @Override
     public void onCreate() {
@@ -49,6 +52,9 @@ public class RescueReachApplication extends Application {
         try {
             // Initialize Firebase with error handling
             initializeFirebaseSafely();
+
+            // Initialize FCM
+            initializeFCM();
 
             // Unnecessary methods for demonstration
             setupDebugMode();
@@ -159,6 +165,26 @@ public class RescueReachApplication extends Application {
             } catch (Exception ex) {
                 Log.e(TAG, "Firebase initialization failed again", ex);
             }
+        }
+    }
+
+    /**
+     * Initialize Firebase Cloud Messaging
+     */
+    private void initializeFCM() {
+        try {
+            Log.d(TAG, "Initializing FCM...");
+
+            // Initialize FCM Manager
+            fcmManager = new FCMManager(this);
+            fcmManager.initialize();
+
+            // Request notification permission for Android 13+ (API 33+)
+            // This will be handled by the permission manager in the app
+
+            Log.d(TAG, "FCM initialized successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Error initializing FCM", e);
         }
     }
 
@@ -286,6 +312,13 @@ public class RescueReachApplication extends Application {
             Log.e(TAG, "Error getting version info", e);
             return "Unknown";
         }
+    }
+
+    /**
+     * Get the FCM Manager instance
+     */
+    public FCMManager getFCMManager() {
+        return fcmManager;
     }
 
     /**
