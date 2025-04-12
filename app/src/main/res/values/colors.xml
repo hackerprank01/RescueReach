@@ -11,12 +11,11 @@
     <color name="green_success">#4CAF50</color>
     <color name="warning_yellow">#FFC107</color>
     <color name="error_red">#F44336</color>
-    <color name="emergency_red">#D32F2F</color>
+    <color name="emergency_red">#BD0000</color>
     <color name="police_blue">#1565C0</color>
     <color name="fire_orange">#FF5722</color>
     <color name="medical_red">#C2185B</color>
     <color name="stroke_color">#DFDFDF</color>
-    <color name="rescue_primary">#2196F3</color>
 
     <!-- Status Colors -->
 
@@ -32,8 +31,9 @@
     <!-- Data Management Colors -->
     <color name="warning_color">#FFA000</color>
     <color name="danger_color">#D32F2F</color>
-    <!-- Brand colors -->
 
+    <!-- Brand colors -->
+    <color name="rescue_primary">#FF5722</color>
     <color name="rescue_primary_dark">#E64A19</color>
     <color name="rescue_primary_light">#FFCCBC</color>
     <color name="rescue_accent">#03A9F4</color>
