@@ -19,6 +19,12 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
+import android.view.View;
+import androidx.fragment.app.Fragment;
+
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AlertDialog;
@@ -118,12 +124,45 @@ public class CitizenMainActivity extends AppCompatActivity
             navigateToFragment(R.id.nav_home);
         }
 
+//        // Handle emergency notification if received
+//        String reportId = getIntent().getStringExtra("reportId");
+//        if (reportId != null) {
+//            processEmergencyReport(reportId);
+//        }
+
         // Initial drawer update with direct Firebase check
         updateDrawerWithFirebaseCheck();
         
         // Request location permissions if not granted
         requestLocationPermissions();
     }
+
+//    private void processEmergencyReport(String reportId) {
+//        Log.d(TAG, "Processing emergency report: " + reportId);
+//
+//        // Show emergency details in a dedicated fragment
+//        EmergencyDetailsFragment fragment = new EmergencyDetailsFragment();
+//        Bundle args = new Bundle();
+//        args.putString("reportId", reportId);
+//        fragment.setArguments(args);
+//
+//        getSupportFragmentManager().beginTransaction()
+//                .replace(R.id.fragment_container, fragment)
+//                .addToBackStack(null)
+//                .commit();
+//
+//        // Update UI to show emergency mode
+//        findViewById(R.id.emergencyBanner).setVisibility(View.VISIBLE);
+//
+//        // Optionally play an alert sound
+//        try {
+//            Uri notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+//            Ringtone r = RingtoneManager.getRingtone(getApplicationContext(), notification);
+//            r.play();
+//        } catch (Exception e) {
+//            Log.e(TAG, "Could not play notification sound", e);
+//        }
+//    }
 
     private void updateDrawerWithFirebaseCheck() {
         // Direct Firebase check - this is crucial

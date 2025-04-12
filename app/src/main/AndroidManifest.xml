@@ -56,14 +56,14 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="@string/google_maps_key" />
 
-        <!-- FCM Service -->
-        <service
-            android:name=".service.messaging.FCMService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
+<!--        &lt;!&ndash; FCM Service &ndash;&gt;-->
+<!--        <service-->
+<!--            android:name=".service.messaging.FCMService"-->
+<!--            android:exported="false">-->
+<!--            <intent-filter>-->
+<!--                <action android:name="com.google.firebase.MESSAGING_EVENT" />-->
+<!--            </intent-filter>-->
+<!--        </service>-->
 
         <!-- FCM Default Notification Settings -->
         <meta-data

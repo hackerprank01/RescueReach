@@ -1,0 +1,10 @@
+[debug] [2025-04-10T19:49:23.632Z] ----------------------------------------------------------------------
+[debug] [2025-04-10T19:49:23.634Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions:syncSOSStatusToRealtimeDB
+[debug] [2025-04-10T19:49:23.634Z] CLI Version:   14.1.0
+[debug] [2025-04-10T19:49:23.634Z] Platform:      win32
+[debug] [2025-04-10T19:49:23.635Z] Node Version:  v22.14.0
+[debug] [2025-04-10T19:49:23.635Z] Time:          Fri Apr 11 2025 01:19:23 GMT+0530 (India Standard Time)
+[debug] [2025-04-10T19:49:23.635Z] ----------------------------------------------------------------------
+[debug] 
+[error] 
+[error] Error: Not in a Firebase app directory (could not locate firebase.json)
