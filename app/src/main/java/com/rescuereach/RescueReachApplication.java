@@ -15,9 +15,6 @@ import androidx.work.WorkManager;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseApp;
-import com.onesignal.OneSignal;
-import com.rescuereach.service.auth.UserSessionManager;
-//import com.rescuereach.service.notification.OneSignalManager;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -29,12 +26,10 @@ import java.util.concurrent.TimeUnit;
 public class RescueReachApplication extends Application {
 
     private static final String TAG = "RescueReachApp";
-    private static final String ONESIGNAL_APP_ID = "d85004b4-aabf-48ad-8c12-a74b90bdf57c"; // Replace with your actual App ID
-
     private static RescueReachApplication instance;
     private boolean isDebugMode = false;
     private long appStartTime;
-//    private OneSignalManager oneSignalManager;
+    private FCMManager fcmManager;
 
     @Override
     public void onCreate() {
@@ -53,8 +48,8 @@ public class RescueReachApplication extends Application {
             // Initialize Firebase with error handling
             initializeFirebaseSafely();
 
-            // Initialize OneSignal
-            initializeOneSignal();
+            // Initialize FCM
+            initializeFCM();
 
             // Unnecessary methods for demonstration
             setupDebugMode();
@@ -73,43 +68,6 @@ public class RescueReachApplication extends Application {
 
     public static RescueReachApplication getInstance() {
         return instance;
-    }
-
-    /**
-     * Initialize OneSignal for push notifications and SMS
-     */
-    private void initializeOneSignal() {
-        try {
-            Log.d(TAG, "Initializing OneSignal...");
-
-            // OneSignal Initialization
-            OneSignal.initWithContext(this);
-//            OneSignal.setAppId(ONESIGNAL_APP_ID);
-//
-//            // Enable verbose logging in debug mode
-//            if (isDebugMode) {
-//                OneSignal.setLogLevel(OneSignal.LOG_LEVEL.VERBOSE, OneSignal.LOG_LEVEL.NONE);
-//            }
-//
-//            // Initialize our manager class
-//            oneSignalManager = new OneSignalManager(this);
-//
-//            // Request notification permission
-//            OneSignal.promptForPushNotifications();
-
-            // Set external user id if user is logged in
-//            UserSessionManager sessionManager = UserSessionManager.getInstance(this);
-//            if (sessionManager.isLoggedIn()) {
-//                String userId = sessionManager.getUserId();
-//                if (userId != null && !userId.isEmpty()) {
-//                    oneSignalManager.setUserId(userId);
-//                }
-//            }
-
-            Log.d(TAG, "OneSignal initialized successfully");
-        } catch (Exception e) {
-            Log.e(TAG, "Error initializing OneSignal", e);
-        }
     }
 
     private void setupCrashRecovery() {
@@ -205,6 +163,26 @@ public class RescueReachApplication extends Application {
         }
     }
 
+    /**
+     * Initialize Firebase Cloud Messaging
+     */
+    private void initializeFCM() {
+        try {
+            Log.d(TAG, "Initializing FCM...");
+
+            // Initialize FCM Manager
+            fcmManager = new FCMManager(this);
+            fcmManager.initialize();
+
+            // Request notification permission for Android 13+ (API 33+)
+            // This will be handled by the permission manager in the app
+
+            Log.d(TAG, "FCM initialized successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Error initializing FCM", e);
+        }
+    }
+
     private boolean deleteDirectory(File dir) {
         if (dir != null && dir.isDirectory()) {
             String[] children = dir.list();
@@ -243,6 +221,7 @@ public class RescueReachApplication extends Application {
             Log.e(TAG, "Error checking Google Play Services", e);
         }
     }
+
 
     // Unnecessary method
     private void setupDebugMode() {
@@ -331,11 +310,11 @@ public class RescueReachApplication extends Application {
     }
 
     /**
-     * Get the OneSignal manager instance
+     * Get the FCM Manager instance
      */
-//    public OneSignalManager getOneSignalManager() {
-//        return oneSignalManager;
-//    }
+    public FCMManager getFCMManager() {
+        return fcmManager;
+    }
 
     /**
      * This is a temporary placeholder class to prevent crashes.
