@@ -29,7 +29,7 @@ public class RescueReachApplication extends Application {
     private static RescueReachApplication instance;
     private boolean isDebugMode = false;
     private long appStartTime;
-    private FCMManager fcmManager;
+
 
     @Override
     public void onCreate() {
@@ -47,9 +47,6 @@ public class RescueReachApplication extends Application {
         try {
             // Initialize Firebase with error handling
             initializeFirebaseSafely();
-
-            // Initialize FCM
-            initializeFCM();
 
             // Unnecessary methods for demonstration
             setupDebugMode();
@@ -164,24 +161,9 @@ public class RescueReachApplication extends Application {
     }
 
     /**
-     * Initialize Firebase Cloud Messaging
+     * Initialize OneSignal for push notifications
+     * Replaces the previous FCM initialization
      */
-    private void initializeFCM() {
-        try {
-            Log.d(TAG, "Initializing FCM...");
-
-            // Initialize FCM Manager
-            fcmManager = new FCMManager(this);
-            fcmManager.initialize();
-
-            // Request notification permission for Android 13+ (API 33+)
-            // This will be handled by the permission manager in the app
-
-            Log.d(TAG, "FCM initialized successfully");
-        } catch (Exception e) {
-            Log.e(TAG, "Error initializing FCM", e);
-        }
-    }
 
     private boolean deleteDirectory(File dir) {
         if (dir != null && dir.isDirectory()) {
@@ -310,10 +292,11 @@ public class RescueReachApplication extends Application {
     }
 
     /**
-     * Get the FCM Manager instance
+     * Get the OneSignal Manager instance
+     * Replaces the previous FCM Manager getter
      */
-    public FCMManager getFCMManager() {
-        return fcmManager;
+    public OneSignalManager getOneSignalManager() {
+        return oneSignalManager;
     }
 
     /**
