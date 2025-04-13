@@ -26,4 +26,30 @@
     <dimen name="icon_size_small">24dp</dimen>
     <dimen name="icon_size_medium">36dp</dimen>
     <dimen name="icon_size_large">48dp</dimen>
+
+    <!-- Help & Support specific dimensions -->
+    <dimen name="help_card_spacing">@dimen/spacing_normal</dimen>
+    <dimen name="help_card_inner_padding">@dimen/spacing_large</dimen>
+    <dimen name="help_emergency_number_size">24sp</dimen>
+    <dimen name="help_service_icon_size">32dp</dimen>
+    <dimen name="help_badge_height">24dp</dimen>
+    <dimen name="help_divider_height">1dp</dimen>
+    <dimen name="help_bottom_sheet_peek_height">64dp</dimen>
+    <dimen name="help_bottom_sheet_corner_radius">16dp</dimen>
+
+    <!--  Margins & Padding  -->
+    <dimen name="fab_margin">16dp</dimen>
+    <dimen name="card_margin">8dp</dimen>
+    <dimen name="text_margin">16dp</dimen>
+    <dimen name="icon_size">24dp</dimen>
+    <!--  Text Sizes  -->
+    <dimen name="text_headline">24sp</dimen>
+    <dimen name="text_title">20sp</dimen>
+    <dimen name="text_subheading">16sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <!--  Component Sizes  -->
+    <dimen name="emergency_card_height">120dp</dimen>
+    <dimen name="chip_height">32dp</dimen>
+    <dimen name="bottom_sheet_peek_height">64dp</dimen>
+
 </resources>

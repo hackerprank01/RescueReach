@@ -22,5 +22,72 @@
         <item name="android:windowMinWidthMinor">65%</item>
     </style>
 
+    <!-- Help & Support Styles -->
+    <style name="Widget.RescueReach.EmergencyCard" parent="Widget.MaterialComponents.CardView">
+        <item name="cardElevation">@dimen/card_elevation</item>
+        <item name="cardCornerRadius">@dimen/card_corner_radius</item>
+        <item name="cardBackgroundColor">?attr/cardBackgroundColor</item>
+        <item name="rippleColor">@color/rescue_primary_light</item>
+    </style>
+
+    <style name="Widget.RescueReach.EmergencyButton" parent="Widget.MaterialComponents.Button">
+        <item name="android:minHeight">@dimen/button_height</item>
+        <item name="android:textSize">@dimen/text_size_medium</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.025</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+
+    <style name="Widget.RescueReach.FAQTitle" parent="TextAppearance.MaterialComponents.Subtitle1">
+        <item name="android:textSize">@dimen/text_size_medium</item>
+        <item name="android:textColor">?android:textColorPrimary</item>
+        <item name="android:paddingTop">@dimen/spacing_normal</item>
+        <item name="android:paddingBottom">@dimen/spacing_normal</item>
+    </style>
+
+    <style name="Widget.RescueReach.FAQContent" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:textSize">@dimen/text_size_normal</item>
+        <item name="android:textColor">?android:textColorSecondary</item>
+        <item name="android:paddingStart">@dimen/spacing_large</item>
+        <item name="android:paddingEnd">@dimen/spacing_large</item>
+        <item name="android:paddingBottom">@dimen/spacing_large</item>
+    </style>
+
+    <style name="Widget.RescueReach.ServiceBadge" parent="Widget.MaterialComponents.Chip.Action">
+    <item name="android:textSize">@dimen/text_size_small</item>
+    <item name="chipMinHeight">24dp</item>
+    <item name="chipBackgroundColor">@color/help_service_badge</item>
+    <item name="android:textColor">@color/white</item>
+    </style>
+
+    <style name="Button.Primary" parent="Widget.MaterialComponents.Button">
+        <item name="backgroundTint">@color/primary</item>
+        <item name="android:textColor">@color/on_primary</item>
+    </style>
+
+    <!--  FAQ Text Styles  -->
+    <style name="TextAppearance.RescueReach.FAQ.Title" parent="TextAppearance.MaterialComponents.Subtitle1">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">?android:textColorPrimary</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">8dp</item>
+    </style>
+    <style name="TextAppearance.RescueReach.FAQ.Content" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">?android:textColorSecondary</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:paddingBottom">16dp</item>
+    </style>
+    <!--  Emergency Service Badge Style  -->
+    <style name="Widget.RescueReach.Chip.ServiceBadge" parent="Widget.MaterialComponents.Chip.Action">
+        <item name="android:textSize">12sp</item>
+        <item name="chipMinHeight">24dp</item>
+        <item name="chipBackgroundColor">@color/success_green</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textAlignment">center</item>
+    </style>
+
 
 </resources>

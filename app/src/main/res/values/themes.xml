@@ -27,4 +27,6 @@
         <item name="gradientBackgroundStart">@color/gradient_start_light</item>
         <item name="gradientBackgroundEnd">@color/gradient_end_light</item>
     </style>
+
+
 </resources>

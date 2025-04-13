@@ -59,6 +59,7 @@ import com.rescuereach.R;
 import com.rescuereach.citizen.fragments.HomeFragment;
 import com.rescuereach.citizen.fragments.PlaceholderFragment;
 import com.rescuereach.citizen.fragments.ProfileFragment;
+import com.rescuereach.citizen.fragments.SafetyFeaturesFragment;
 import com.rescuereach.service.auth.AuthService;
 import com.rescuereach.service.auth.AuthServiceProvider;
 import com.rescuereach.service.auth.UserSessionManager;
@@ -767,10 +768,7 @@ public class CitizenMainActivity extends AppCompatActivity
                     R.drawable.ic_alerts);
         } else if (fragmentId == R.id.nav_safety_features) {
             title = getString(R.string.menu_safety_features);
-            fragment = PlaceholderFragment.newInstance(
-                    title,
-                    getString(R.string.placeholder_safety_description),
-                    R.drawable.ic_safety);
+            fragment = new SafetyFeaturesFragment();
         } else if (fragmentId == R.id.nav_help_support) {
             title = getString(R.string.menu_help_support);
             fragment = PlaceholderFragment.newInstance(

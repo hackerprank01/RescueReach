@@ -293,13 +293,15 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     private void populateOTPAndVerify(String otp) {
         if (otpInputView != null && !isFinishing() && !isDestroyed()) {
             runOnUiThread(() -> {
-                otpInputView.setOTP(otp);
-                // Give UI time to update before verifying
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (!isFinishing() && !isDestroyed()) {
-                        verifyCode();
-                    }
-                }, 800);
+                if (!isFinishing() && !isDestroyed() && otpInputView != null) {
+                    otpInputView.setOTP(otp);
+                    // Give UI time to update before verifying
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        if (!isFinishing() && !isDestroyed()) {
+                            verifyCode();
+                        }
+                    }, 800);
+                }
             });
         }
     }

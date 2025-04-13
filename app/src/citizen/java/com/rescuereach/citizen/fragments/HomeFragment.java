@@ -11,14 +11,12 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.RecyclerView;
@@ -32,22 +30,30 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MapStyleOptions;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.card.MaterialCardView;
+import com.google.firebase.firestore.GeoPoint;
 import com.rescuereach.R;
+import com.rescuereach.RescueReachApplication;
 import com.rescuereach.citizen.dialogs.SOSConfirmationDialog;
+import com.rescuereach.data.model.SOSReport;
+import com.rescuereach.service.auth.UserSessionManager;
+import com.rescuereach.service.notification.NotificationService;
+import com.rescuereach.service.sos.SOSDataCollectionService;
 import com.rescuereach.util.LocationManager;
 import com.rescuereach.util.PermissionManager;
 import com.rescuereach.util.SafetyTipProvider;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
 import java.util.Locale;
 
 /**
  * Home screen fragment with emergency buttons and status information
  */
-public class HomeFragment extends Fragment implements OnMapReadyCallback {
+public class HomeFragment extends Fragment implements OnMapReadyCallback,
+        NotificationService.NotificationActionListener {
     private static final String TAG = "HomeFragment";
 
     // UI components
@@ -70,6 +76,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private LocationManager locationManager;
     private PermissionManager permissionManager;
     private ConnectivityManager connectivityManager;
+    private NotificationService notificationService;
+    private SOSDataCollectionService sosDataCollectionService;
+    private UserSessionManager sessionManager;
     private Handler uiUpdateHandler;
     private Runnable statusUpdateRunnable;
     private boolean isMapReady = false;
@@ -91,11 +100,8 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         // Inflate the layout
         rootView = inflater.inflate(R.layout.fragment_home, container, false);
 
-        // Initialize managers
-        locationManager = new LocationManager(requireContext());
-        permissionManager = PermissionManager.getInstance(requireContext());
-        connectivityManager = (ConnectivityManager) requireContext()
-                .getSystemService(Context.CONNECTIVITY_SERVICE);
+        // Initialize managers and services
+        initializeServices();
 
         // Initialize UI components
         initializeUIComponents();
@@ -113,6 +119,48 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         updateSafetyTip();
 
         return rootView;
+    }
+
+    private void initializeServices() {
+        locationManager = new LocationManager(requireContext());
+        permissionManager = PermissionManager.getInstance(requireContext());
+        connectivityManager = (ConnectivityManager) requireContext()
+                .getSystemService(Context.CONNECTIVITY_SERVICE);
+
+        // Initialize notification service
+        notificationService = ((RescueReachApplication) requireActivity().getApplication())
+                .getNotificationService();
+        notificationService.setNotificationActionListener(this);
+
+        // Initialize SOS data collection service
+        sosDataCollectionService = new SOSDataCollectionService(requireContext());
+
+        // Initialize session manager
+        sessionManager = UserSessionManager.getInstance(requireContext());
+
+        // Set notification tags based on user profile if available
+        if (notificationService != null) {
+            // Set role as citizen
+            notificationService.setUserRole("citizen");
+
+            // Set volunteer status
+            notificationService.setUserAsVolunteer(sessionManager.isVolunteer());
+
+            // Set user identifier
+            String phoneNumber = sessionManager.getSavedPhoneNumber();
+            if (phoneNumber != null && !phoneNumber.isEmpty()) {
+                notificationService.setUserIdentifier(phoneNumber);
+            }
+
+            // Set region if available
+            String region = sessionManager.getState();
+            if (region != null && !region.isEmpty()) {
+                notificationService.setUserRegion(region);
+            }
+
+            // Update last active timestamp
+            notificationService.updateLastActive();
+        }
     }
 
     private void initializeUIComponents() {
@@ -261,33 +309,94 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private void handleSOSConfirmation(String emergencyType) {
         Log.d(TAG, "SOS confirmed for: " + emergencyType);
 
-        // Get precise location for emergency
-        locationManager.shareLocationDuringEmergency(new LocationManager.LocationUpdateListener() {
+        // Show toast to indicate processing
+        Toast.makeText(requireContext(),
+                getString(R.string.collecting_sos_data, emergencyType),
+                Toast.LENGTH_SHORT).show();
+
+        // Collect all emergency data
+        sosDataCollectionService.collectSOSData(emergencyType, new SOSDataCollectionService.SOSDataCollectionListener() {
             @Override
-            public void onLocationUpdated(Location location) {
-                // TODO: This will be implemented in the next phase with the SOS data collection service
-                Toast.makeText(requireContext(),
-                        emergencyType + " emergency alert initiated!",
-                        Toast.LENGTH_LONG).show();
+            public void onDataCollectionComplete(SOSReport report) {
+                // Process the collected data
+                processSOSReport(report);
             }
 
             @Override
-            public void onLocationError(String message) {
+            public void onDataCollectionFailed(String errorMessage) {
+                // Handle error
                 Toast.makeText(requireContext(),
-                        "Location error: " + message + "\nUsing last known location",
+                        getString(R.string.sos_data_collection_failed, errorMessage),
                         Toast.LENGTH_LONG).show();
 
-                // Use last known location if available
-                Location lastLocation = locationManager.getLastKnownLocation();
-                if (lastLocation != null) {
-                    // TODO: Use last location for emergency
-                } else {
-                    Toast.makeText(requireContext(),
-                            "Could not determine location. Please try again.",
-                            Toast.LENGTH_LONG).show();
-                }
+                // Try with basic location as fallback
+                createFallbackSOSReport(emergencyType);
             }
         });
+    }
+
+    private void processSOSReport(SOSReport report) {
+        if (!isAdded() || getContext() == null) return;
+
+        if (report == null) {
+            Log.e(TAG, "Failed to process null SOS report");
+            Toast.makeText(requireContext(),
+                    getString(R.string.sos_processing_error),
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        // For now, just show a success message
+        // This will be replaced with actual processing in next implementation phase
+        String emergencyType = report.getEmergencyType();
+        String locationString = (report.getAddress() != null) ? report.getAddress() :
+                String.format(Locale.US, "%.6f, %.6f",
+                        report.getLocation().getLatitude(),
+                        report.getLocation().getLongitude());
+
+        Toast.makeText(requireContext(),
+                emergencyType + " emergency alert initiated at " + locationString,
+                Toast.LENGTH_LONG).show();
+
+        // Update notification tags
+        if (notificationService != null) {
+            // Set emergency preference tag
+            notificationService.setEmergencyPreference(emergencyType);
+
+            // Update last active timestamp
+            notificationService.updateLastActive();
+
+            // Set region if available
+            if (report.getState() != null && !report.getState().isEmpty() &&
+                    !report.getState().equalsIgnoreCase("Unknown")) {
+                notificationService.setUserRegion(report.getState());
+            }
+        }
+
+        // TODO: In the next implementation phase, we'll add:
+        // 1. Sending the report to Firebase
+        // 2. Dispatching notifications via OneSignal
+        // 3. Displaying the SOS status dialog
+    }
+
+    private void createFallbackSOSReport(String emergencyType) {
+        if (!isAdded() || getContext() == null) return;
+
+        // Create a basic emergency report with just location
+        Location lastLocation = locationManager.getLastKnownLocation();
+        if (lastLocation != null) {
+            SOSReport report = new SOSReport();
+            report.setEmergencyType(emergencyType);
+            report.setLocation(new GeoPoint(lastLocation.getLatitude(), lastLocation.getLongitude()));
+
+            // Process this basic report
+            processSOSReport(report);
+        } else {
+            // If no location is available, show an error
+            Toast.makeText(requireContext(),
+                    getString(R.string.no_location_available),
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     private void startIncidentReporting() {
@@ -302,6 +411,94 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 "View all alerts will be implemented in future phases",
                 Toast.LENGTH_SHORT).show();
         // TODO: Navigate to alerts list in future phases
+    }
+
+    @Override
+    public void onNotificationOpened(String type, JSONObject data) {
+        try {
+            Log.d(TAG, "Notification opened: " + type);
+
+            switch (type) {
+                case "EMERGENCY":
+                    handleEmergencyNotification(data);
+                    break;
+                case "STATUS_UPDATE":
+                    handleStatusUpdateNotification(data);
+                    break;
+                case "SMS_STATUS":
+                    handleSmsStatusNotification(data);
+                    break;
+                default:
+                    Log.d(TAG, "Unknown notification type: " + type);
+                    break;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error processing notification", e);
+        }
+    }
+
+    @Override
+    public void onForegroundNotification(String type, JSONObject data) {
+        // Similar to onNotificationOpened, but for notifications received while app is in foreground
+        // For now, just log it - we'll handle it in a future implementation
+        Log.d(TAG, "Foreground notification: " + type);
+    }
+
+    @Override
+    public void onInAppMessageAction(String actionId, JSONObject data) {
+        // Handle in-app message actions
+        Log.d(TAG, "In-app message action: " + actionId);
+    }
+
+    private void handleEmergencyNotification(JSONObject data) {
+        try {
+            String emergencyType = data.optString("emergencyType", "UNKNOWN");
+            String reportId = data.optString("reportId", "");
+
+            Log.d(TAG, "Emergency notification: " + emergencyType + " (Report ID: " + reportId + ")");
+
+            // In a future implementation, this would navigate to emergency details screen
+            Toast.makeText(requireContext(),
+                    "Received " + emergencyType + " emergency alert",
+                    Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Log.e(TAG, "Error handling emergency notification", e);
+        }
+    }
+
+    private void handleStatusUpdateNotification(JSONObject data) {
+        try {
+            String reportId = data.optString("reportId", "");
+            String status = data.optString("status", "");
+
+            Log.d(TAG, "Status update notification: " + status + " (Report ID: " + reportId + ")");
+
+            // In a future implementation, this would update the status display in the UI
+            Toast.makeText(requireContext(),
+                    "Emergency status updated to: " + status,
+                    Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Log.e(TAG, "Error handling status update notification", e);
+        }
+    }
+
+    private void handleSmsStatusNotification(JSONObject data) {
+        try {
+            String reportId = data.optString("reportId", "");
+            boolean successful = data.optBoolean("successful", false);
+
+            Log.d(TAG, "SMS status notification: " + (successful ? "SUCCESS" : "FAILURE") +
+                    " (Report ID: " + reportId + ")");
+
+            // Display appropriate message
+            String message = successful ?
+                    "Emergency contact notified via SMS" :
+                    "Could not reach emergency contact via SMS";
+
+            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Log.e(TAG, "Error handling SMS status notification", e);
+        }
     }
 
     private void updateNetworkStatus() {
@@ -486,6 +683,11 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
         // Start periodic status updates
         uiUpdateHandler.post(statusUpdateRunnable);
+
+        // Update last active timestamp in OneSignal
+        if (notificationService != null) {
+            notificationService.updateLastActive();
+        }
     }
 
     @Override

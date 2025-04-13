@@ -26,7 +26,10 @@
     <color name="alert_amber">#FF9800</color>
     <color name="alert_red">#F44336</color>
 
-
+    <color name="primary">#6200EE</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="background_secondary">#F5F5F5</color>
+    <color name="outline">#BDBDBD</color>
 
     <!-- Data Management Colors -->
     <color name="warning_color">#FFA000</color>
@@ -36,8 +39,8 @@
     <color name="rescue_primary">#FF5722</color>
     <color name="rescue_primary_dark">#E64A19</color>
     <color name="rescue_primary_light">#FFCCBC</color>
-    <color name="rescue_accent">#03A9F4</color>
-    <color name="rescue_accent_dark">#0288D1</color>
+    <color name="rescue_accent">#FF5722</color>
+    <color name="rescue_accent_dark">#FF5722</color>
     <color name="rescue_accent_light">#B3E5FC</color>
 
     <!-- Text colors - Light Theme -->
@@ -79,7 +82,36 @@
     <!-- Legacy semantic colors -->
     <color name="colorPrimary">@color/rescue_primary</color>
     <color name="colorPrimaryDark">@color/rescue_primary_dark</color>
-    <color name="colorAccent">@color/rescue_accent</color>
+    <color name="colorAccent">#FF5722</color>
     <color name="colorPrimaryText">@color/text_primary_light</color>
     <color name="colorSecondaryText">@color/text_secondary_light</color>
+
+    <!-- Help & Support specific colors -->
+    <color name="help_emergency_call">#FF1744</color>
+    <color name="help_emergency_call_dark">#D50000</color>
+    <color name="help_service_badge">#43A047</color>
+    <color name="help_service_badge_dark">#2E7D32</color>
+
+    <!-- Emergency Service Colors -->
+    <color name="emergency_number_background">#FBE9E7</color>
+    <color name="emergency_number_background_dark">#3E2723</color>
+    <color name="faq_divider">#EEEEEE</color>
+    <color name="faq_divider_dark">#424242</color>
+
+    <!--  Emergency Colors  -->
+    <color name="emergency_red_dark">#CC0000</color>
+    <color name="positive_green">#4CAF50</color>
+    <color name="negative_red">#F44336</color>
+    <!--  Base Colors  -->
+
+    <color name="primary_dark">#FF5722</color>
+    <color name="primary_light">#FF5722</color>
+    <color name="accent">#FF4081</color>
+    <!--  Status Colors  -->
+    <color name="status_24x7">#43A047</color>
+    <color name="status_inactive">#757575</color>
+    <!--  Background Colors  -->
+    <color name="surface_light">#FFFFFF</color>
+    <color name="on_surface_light">#000000</color>
+
 </resources>

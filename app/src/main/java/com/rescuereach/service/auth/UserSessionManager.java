@@ -514,12 +514,21 @@ public class UserSessionManager {
         // First check if we have explicitly marked the profile as complete
         if (sharedPreferences.getBoolean(KEY_PROFILE_COMPLETED, false)) {
             return true;
+//            return !TextUtils.isEmpty(getFullName()) &&
+//                    !TextUtils.isEmpty(getEmergencyContactPhone()) &&
+//                    !TextUtils.isEmpty(getState()) &&
+//                    !TextUtils.isEmpty(getDateOfBirthString()) &&
+//                    !TextUtils.isEmpty(getGender());
         }
 
         // Otherwise check if we have all the essential fields
         return !TextUtils.isEmpty(getFullName()) &&
                 !TextUtils.isEmpty(getEmergencyContactPhone()) &&
-                !TextUtils.isEmpty(getState());
+                !TextUtils.isEmpty(getState()) &&
+                !TextUtils.isEmpty(getDateOfBirthString()) &&
+                !TextUtils.isEmpty(getGender());
+
+//        return true;
     }
 
     /**

@@ -1,26 +1,39 @@
 package com.rescuereach.data.model;
 
-import com.google.firebase.firestore.Exclude;
 import com.google.firebase.firestore.GeoPoint;
 
+import java.io.Serializable;
+
 /**
- * Model class representing an emergency service location
- * (police station, fire station, hospital)
+ * Model class representing an emergency service location (hospital, police station, fire station)
  */
-public class EmergencyService {
+public class EmergencyService implements Serializable {
     private String placeId;
     private String name;
-    private String type; // POLICE, FIRE, MEDICAL
+    private String type; // POLICE, FIRE, HOSPITAL
     private GeoPoint location;
     private String address;
     private String phoneNumber;
     private double distance; // in km
     private String tollFreeNumber; // Emergency service toll-free number
 
+    // Default constructor required for Firestore
     public EmergencyService() {
-        // Required empty constructor for Firestore
     }
 
+    public EmergencyService(String placeId, String name, String type, GeoPoint location,
+                            String address, String phoneNumber, double distance, String tollFreeNumber) {
+        this.placeId = placeId;
+        this.name = name;
+        this.type = type;
+        this.location = location;
+        this.address = address;
+        this.phoneNumber = phoneNumber;
+        this.distance = distance;
+        this.tollFreeNumber = tollFreeNumber;
+    }
+
+    // Getters and setters
     public String getPlaceId() {
         return placeId;
     }
@@ -83,47 +96,5 @@ public class EmergencyService {
 
     public void setTollFreeNumber(String tollFreeNumber) {
         this.tollFreeNumber = tollFreeNumber;
-    }
-
-    /**
-     * Get formatted distance string
-     */
-    @Exclude
-    public String getFormattedDistance() {
-        if (distance < 0) {
-            return "Unknown";
-        } else if (distance < 1) {
-            return String.format("%.0f m", distance * 1000);
-        } else {
-            return String.format("%.1f km", distance);
-        }
-    }
-
-    /**
-     * Get the most appropriate phone number to call
-     */
-    @Exclude
-    public String getEmergencyNumber() {
-        // Prefer toll-free emergency number if available
-        if (tollFreeNumber != null && !tollFreeNumber.isEmpty()) {
-            return tollFreeNumber;
-        }
-
-        // Fallback to direct phone number
-        if (phoneNumber != null && !phoneNumber.isEmpty()) {
-            return phoneNumber;
-        }
-
-        // Default emergency numbers based on type
-        switch (type) {
-            case "POLICE":
-                return "100";
-            case "FIRE":
-                return "101";
-            case "MEDICAL":
-                return "108";
-            default:
-                return "112";  // Universal emergency number
-        }
     }
 }

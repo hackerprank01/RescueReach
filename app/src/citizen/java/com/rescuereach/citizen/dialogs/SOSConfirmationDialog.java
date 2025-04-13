@@ -2,13 +2,14 @@ package com.rescuereach.citizen.dialogs;
 
 import android.app.Dialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -19,10 +20,14 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.constraintlayout.widget.ConstraintLayout;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.rescuereach.R;
+import com.rescuereach.RescueReachApplication;
+import com.rescuereach.service.auth.UserSessionManager;
+import com.rescuereach.service.notification.NotificationService;
 
 /**
  * Dialog for confirming SOS emergency alerts
@@ -33,11 +38,11 @@ public class SOSConfirmationDialog extends Dialog {
     private static final String TAG = "SOSConfirmationDialog";
 
     // UI components
+    private ConstraintLayout rootLayout;
     private ImageView imageEmergencyType;
     private TextView textEmergencyType;
     private TextView textCountdown;
     private CircularProgressIndicator progressCountdown;
-    private MaterialButton buttonCancel;
     private MaterialButton buttonConfirm;
 
     // State
@@ -46,6 +51,10 @@ public class SOSConfirmationDialog extends Dialog {
     private CountDownTimer countDownTimer;
     private boolean isConfirmed = false;
     private boolean isCancelled = false;
+
+    // Services
+    private NotificationService notificationService;
+    private UserSessionManager sessionManager;
 
     // Constants
     private static final int COUNTDOWN_SECONDS = 5;
@@ -63,6 +72,11 @@ public class SOSConfirmationDialog extends Dialog {
         super(context, R.style.Theme_RescueReach_Dialog);
         this.emergencyType = emergencyType;
         this.listener = listener;
+
+        // Initialize services
+        this.notificationService = ((RescueReachApplication) context.getApplicationContext())
+                .getNotificationService();
+        this.sessionManager = UserSessionManager.getInstance(context);
     }
 
     @Override
@@ -101,11 +115,11 @@ public class SOSConfirmationDialog extends Dialog {
     }
 
     private void initializeViews() {
+        rootLayout = findViewById(R.id.sos_dialog_root);
         imageEmergencyType = findViewById(R.id.image_emergency_type);
         textEmergencyType = findViewById(R.id.text_emergency_type);
         textCountdown = findViewById(R.id.text_countdown);
         progressCountdown = findViewById(R.id.progress_countdown);
-        buttonCancel = findViewById(R.id.button_cancel);
         buttonConfirm = findViewById(R.id.button_confirm);
 
         // Set max progress for countdown
@@ -135,22 +149,37 @@ public class SOSConfirmationDialog extends Dialog {
     }
 
     private void setupClickListeners() {
-        // Cancel button
-        buttonCancel.setOnClickListener(v -> cancelSOS());
+        if (rootLayout == null || buttonConfirm == null) {
+            Log.e(TAG, "Views not initialized properly");
+            return;
+        }
 
-        // Confirm button
+        // Set root layout as tap-to-cancel area
+        rootLayout.setOnClickListener(v -> {
+            if (!isConfirmed && !isCancelled) {
+                cancelSOS();
+            }
+        });
+
+        // Setup confirm button that shouldn't trigger the root click
         buttonConfirm.setOnClickListener(v -> confirmSOS());
 
-        // Allow tapping progress indicator to cancel
-        View.OnClickListener cancelListener = v -> cancelSOS();
-        progressCountdown.setOnClickListener(cancelListener);
-        textCountdown.setOnClickListener(cancelListener);
+        // Prevent click propagation from confirm button to root layout
+        buttonConfirm.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                v.performClick();
+                return true;
+            }
+            return false;
+        });
     }
 
     private void startCountdown() {
         countDownTimer = new CountDownTimer(COUNTDOWN_SECONDS * 1000, COUNTDOWN_INTERVAL) {
             @Override
             public void onTick(long millisUntilFinished) {
+                if (isCancelled || isConfirmed) return;
+
                 // Update countdown text
                 int secondsRemaining = (int) Math.ceil(millisUntilFinished / 1000.0);
                 textCountdown.setText(String.valueOf(secondsRemaining));
@@ -167,8 +196,8 @@ public class SOSConfirmationDialog extends Dialog {
 
             @Override
             public void onFinish() {
-                // When countdown finishes and user hasn't canceled, confirm SOS
-                if (!isCancelled) {
+                // When countdown finishes and dialog is still active, confirm SOS
+                if (!isCancelled && !isConfirmed) {
                     confirmSOS();
                 }
             }
@@ -184,11 +213,21 @@ public class SOSConfirmationDialog extends Dialog {
     }
 
     private void cancelSOS() {
+        if (isCancelled) return; // Prevent double cancellation
+
+        isCancelled = true;
+
         if (countDownTimer != null) {
             countDownTimer.cancel();
         }
 
-        isCancelled = true;
+        Log.d(TAG, "SOS cancelled by user");
+
+        // Update notification tags to indicate user has interacted with SOS
+        if (notificationService != null) {
+            notificationService.updateLastActive();
+        }
+
         dismiss();
 
         if (listener != null) {
@@ -199,14 +238,13 @@ public class SOSConfirmationDialog extends Dialog {
     private void confirmSOS() {
         if (isConfirmed) return; // Prevent double confirmation
 
+        isConfirmed = true;
+
         if (countDownTimer != null) {
             countDownTimer.cancel();
         }
 
-        isConfirmed = true;
-
-        // Disable buttons to prevent further interaction
-        buttonCancel.setEnabled(false);
+        // Disable button to prevent further interaction
         buttonConfirm.setEnabled(false);
 
         // Show a brief visual feedback before closing dialog
@@ -214,6 +252,12 @@ public class SOSConfirmationDialog extends Dialog {
         textCountdown.setTextColor(getContext().getResources().getColor(R.color.green_success, null));
         progressCountdown.setIndicatorColor(getContext().getResources().getColor(R.color.green_success, null));
         progressCountdown.setProgress(TOTAL_PROGRESS);
+
+        // Update notification tags to indicate emergency type preference
+        if (notificationService != null) {
+            notificationService.setEmergencyPreference(emergencyType);
+            notificationService.updateLastActive();
+        }
 
         // Close dialog after brief delay
         new Handler(Looper.getMainLooper()).postDelayed(() -> {

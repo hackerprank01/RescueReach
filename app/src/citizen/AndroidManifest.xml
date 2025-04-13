@@ -52,7 +52,7 @@
             android:name=".citizen.CitizenMainActivity"
             android:exported="false"
             android:theme="@style/Theme.RescueReach">
-            <!-- Add deep link handling for FCM notifications -->
+            <!-- Updated deep link handling for generic notifications -->
             <intent-filter>
                 <action android:name="OPEN_EMERGENCY_DETAILS" />
                 <action android:name="OPEN_SOS_DETAILS" />
@@ -65,7 +65,6 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.RescueReach" />
-
 
     </application>
 </manifest>

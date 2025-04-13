@@ -135,10 +135,10 @@
     <string name="zoom_in">Zoom in</string>
     <string name="zoom_out">Zoom out</string>
     <string name="nearby">Nearby</string>
-    <string name="hospitals">Hospitals</string>
+    <string name="hospitals">Medical</string>
     <string name="police">Police</string>
     <string name="nearby_emergency">Nearby Emergency Services</string>
-    <string name="fire">Fire Stations</string>
+    <string name="fire">Fire</string>
     <string name="loading_places">Loading nearby emergency services…</string>
     <string name="place_distance">%.1f km away</string>
     <string name="places_loaded">Emergency services loaded</string>
@@ -440,7 +440,171 @@
     <string name="location_low_accuracy">Low Accuracy</string>
     <string name="location_unavailable">Location Unavailable</string>
 
+    <!-- OneSignal App ID -->
+    <string name="onesignal_app_id">d85004b4-aabf-48ad-8c12-a74b90bdf57c</string>
 
+    <!-- Emergency Notification Titles -->
+    <string name="police_emergency_title">POLICE EMERGENCY ALERT</string>
+    <string name="fire_emergency_title">FIRE EMERGENCY ALERT</string>
+    <string name="medical_emergency_title">MEDICAL EMERGENCY ALERT</string>
+
+    <!-- Emergency Notification Messages -->
+    <string name="police_emergency_message">Someone needs police assistance at %s. Please respond if you can help.</string>
+    <string name="fire_emergency_message">Fire emergency reported at %s. Please respond if you can help.</string>
+    <string name="medical_emergency_message">Medical emergency at %s. Please respond if you can help.</string>
+
+    <!-- Status Update Notifications -->
+    <string name="status_update_title">Emergency Status Update</string>
+    <string name="status_update_message">Your emergency report status has been updated to: %s</string>
+
+    <!-- SMS Delivery Status -->
+    <string name="sms_delivered_title">Emergency Contact Notified</string>
+    <string name="sms_delivered_message">Your emergency contact has been notified via SMS</string>
+    <string name="sms_failed_title">SMS Delivery Failed</string>
+    <string name="sms_failed_message">Could not reach your emergency contact via SMS</string>
+
+    <!-- Status Display Text -->
+    <string name="status_pending">Pending</string>
+    <string name="status_received">Received</string>
+    <string name="status_responding">Help is on the way</string>
+    <string name="status_resolved">Resolved</string>
+    <string name="status_unknown">Unknown</string>
+
+    <!-- Other -->
+    <string name="unknown_location">Unknown location</string>
+
+    <!-- SOS Data Collection Status -->
+    <string name="collecting_sos_data">Collecting %s emergency data...</string>
+    <string name="sos_data_collection_failed">Emergency data collection failed: %s</string>
+    <string name="sos_processing_error">Error processing emergency. Please try again.</string>
+    <string name="no_location_available">Could not determine your location. Please try again.</string>
+
+    <string name="search">Search</string>
+    <string name="center_location">Center Location</string>
+    <string-array name="proximity_options">
+        <item>Select Proximity</item>
+        <item>1 KM</item>
+        <item>3 KM</item>
+        <item>5 KM</item>
+        <item>10 KM</item>
+    </string-array>
+
+    <string name="help_emergency_title">Emergency Numbers</string>
+    <string name="help_national_emergency">National Emergency</string>
+    <string name="help_police">Police</string>
+    <string name="help_fire">Fire Services</string>
+    <string name="help_ambulance">Ambulance</string>
+    <string name="help_disaster">Disaster Management</string>
+    <string name="help_women">Women\'s Helpline</string>
+    <!--  Emergency Numbers  -->
+    <string name="help_number_112">112</string>
+    <string name="help_number_100">100</string>
+    <string name="help_number_101">101</string>
+    <string name="help_number_102">102</string>
+    <string name="help_number_108">108</string>
+    <string name="help_number_1091">1091</string>
+    <!--  Service Status  -->
+    <string name="help_service_24x7">24/7</string>
+    <string name="help_call_now">Call Now</string>
+    <!--  FAQs  -->
+    <string name="help_faq_title">Frequently Asked Questions</string>
+    <string name="help_faq_search_hint">Search FAQs…</string>
+    <string name="help_faq_no_results">No matching FAQs found</string>
+    <!--  Support  -->
+    <string name="help_support_email">admin_rescuereach@gmail.com</string>
+    <string name="help_support_contact">Contact Support</string>
+    <string name="help_support_suggestions">Suggested Solutions</string>
+    <!--  Accessibility  -->
+    <string name="help_cd_emergency_call">Call %1$s emergency number %2$s</string>
+    <string name="help_cd_expand_faq">Expand FAQ</string>
+    <string name="help_cd_collapse_faq">Collapse FAQ</string>
+    <string name="help_cd_service_icon">%1$s service icon</string>
+
+    <!--  Help & Support  -->
+    <string name="help_support_title">Help and Support</string>
+    <string name="emergency_contacts">Emergency Contacts</string>
+    <string name="faqs">FAQs</string>
+    <string name="contact_support">Contact Support</string>
+    <!--  Emergency Services  -->
+    <string name="service_icon_description">Service Icon</string>
+    <string name="service_24x7">24/7</string>
+    <string name="call_now">Call Now</string>
+    <string name="national_emergency">National Emergency</string>
+
+    <string name="fire_services">Fire Services</string>
+    <string name="ambulance">Ambulance</string>
+    <string name="disaster_management">Disaster Management</string>
+    <string name="womens_helpline">Women\'s Helpline</string>
+    <!--  FAQs  -->
+    <string name="expand_collapse_description">Expand or collapse</string>
+    <string name="helpful">Helpful</string>
+    <string name="not_helpful">Not Helpful</string>
+    <string name="search_faqs">Search FAQs</string>
+    <!--  Support Contact  -->
+    <string name="before_contacting_support">Before Contacting Support</string>
+    <string name="proceed_to_contact">Contact via Email</string>
+    <!--  Emergency Numbers  -->
+    <string name="emergency_number_112">112</string>
+    <string name="emergency_number_100">100</string>
+    <string name="emergency_number_101">101</string>
+    <string name="emergency_number_102">102</string>
+    <string name="emergency_number_108">108</string>
+    <string name="emergency_number_1091">1091</string>
+    <!--  FAQs  -->
+    <string name="search_hint">Type to search FAQs…</string>
+    <string name="no_faqs_found">No FAQs found matching your search</string>
+    <!--  Support Contact  -->
+    <string name="support_email">admin_rescuereach@gmail.com</string>
+    <string name="support_email_subject">RescueReach Support Request</string>
+    <!--  Accessibility  -->
+    <string name="cd_emergency_number">Call %1$s emergency number %2$s</string>
+    <string name="cd_expand_faq">Expand FAQ</string>
+    <string name="cd_collapse_faq">Collapse FAQ</string>
+    <!--  Messages  -->
+    <string name="call_permission_required">Call permission is required to make emergency calls</string>
+    <string name="feedback_submitted">Thank you for your feedback</string>
+    <string name="error_no_email_app">No email app found</string>
+
+    <!-- Safety Features Fragment -->
+    <string name="service_category">Service Category</string>
+    <string name="proximity">Proximity</string>
+    <string name="all">All</string>
+    <string name="search_emergency_services">Search Emergency Services</string>
+
+    <!-- Offline Mode -->
+    <string name="offline_mode">OFFLINE MODE</string>
+    <string name="offline_icon_desc">Offline status icon</string>
+    <string name="offline_mode_message">You are currently offline. Emergency services search requires an internet connection.</string>
+    <string name="use_cached">Use Cached Data</string>
+    <string name="use_cached_data">Use Cached Data</string>
+    <string name="using_cached_data">Using cached data from %1$s</string>
+    <string name="using_cached_location">Using cached location data</string>
+    <string name="no_cached_data">No cached data available</string>
+    <string name="no_emergency_services_cached">No emergency services cached yet</string>
+    <string name="offline_no_data">Cannot search in offline mode. No cached data available.</string>
+    <string name="error_loading_cached_data">Error loading cached data</string>
+    <string name="back_online_refreshing">Connection restored. Refreshing data.</string>
+    <string name="warning_amber">#FFA900</string>
+
+    <!-- Real-time Location Updates -->
+    <string name="location_moved_refreshing">Moved %s: refreshing emergency services</string>
+    <string name="disable_auto_refresh">Disable Auto-refresh</string>
+    <string name="auto_refresh_disabled">Automatic refresh disabled</string>
+
+    <!-- Marker Info Window -->
+    <string name="call">Call</string>
+    <string name="navigate">Navigate</string>
+    <string name="phone">Phone</string>
+    <string name="tap_for_options">Tap for options</string>
+    <string name="no_phone_available">No phone number available</string>
+    <string name="address_unavailable">Address unavailable</string>
+
+    <!-- User Interactions -->
+    <string name="no_places_found">No emergency services found</string>
+    <string name="no_services_in_radius">No emergency services found within %d km radius</string>
+    <string name="increase_radius">Increase Radius</string>
+    <string name="already_max_radius">Already at maximum search radius</string>
+    <string name="permission_settings">Settings</string>
 
 </resources>
 

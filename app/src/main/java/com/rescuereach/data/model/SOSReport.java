@@ -5,64 +5,67 @@ import com.google.firebase.firestore.Exclude;
 import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.ServerTimestamp;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Model class representing an SOS emergency report
  */
-public class SOSReport {
+public class SOSReport implements Serializable {
     @DocumentId
     private String reportId;
     private String userId;
-    private String userPhoneNumber;
-    private String userFullName;
     private String emergencyType; // POLICE, FIRE, MEDICAL
     private GeoPoint location;
     private String address;
     private String city;
     private String state;
-    private String zipCode;
-    private double latitude;
-    private double longitude;
-    private float locationAccuracy;
-
     @ServerTimestamp
     private Date timestamp;
-
     private Map<String, Object> userInfo;
     private Map<String, Object> deviceInfo;
-    private List<EmergencyService> nearbyServices;
-    private List<EmergencyContact> emergencyContacts;
-
+    private List<EmergencyService> nearbyServices; // Nearest relevant emergency services
+    private List<String> emergencyContactNumbers; // Emergency contact phone numbers
     private String status; // PENDING, RECEIVED, RESPONDING, RESOLVED
     private boolean isOnline;
     private boolean smsSent;
     private String smsStatus;
-    private Date lastStatusUpdate;
+    private Map<String, Object> responderInfo;
 
+    // Non-persistent fields (excluded from Firestore)
+    @Exclude
+    private List<byte[]> mediaData;
+
+    // Constants for status values
+    public static final String STATUS_PENDING = "PENDING";
+    public static final String STATUS_RECEIVED = "RECEIVED";
+    public static final String STATUS_RESPONDING = "RESPONDING";
+    public static final String STATUS_RESOLVED = "RESOLVED";
+
+    // Default constructor required for Firestore
     public SOSReport() {
-        // Required empty constructor for Firestore
-        this.reportId = UUID.randomUUID().toString();
-        this.timestamp = new Date();
-        this.status = "PENDING";
-        this.isOnline = false;
-        this.smsSent = false;
-        this.smsStatus = "NOT_SENT";
+        this.nearbyServices = new ArrayList<>();
+        this.emergencyContactNumbers = new ArrayList<>();
         this.userInfo = new HashMap<>();
         this.deviceInfo = new HashMap<>();
-        this.nearbyServices = new ArrayList<>();
-        this.emergencyContacts = new ArrayList<>();
-        this.lastStatusUpdate = new Date();
+        this.responderInfo = new HashMap<>();
+        this.status = STATUS_PENDING;
     }
 
-    public SOSReport(String emergencyType) {
+    // Constructor with essential fields
+    public SOSReport(String userId, String emergencyType, GeoPoint location,
+                     String address, String city, String state) {
         this();
+        this.userId = userId;
         this.emergencyType = emergencyType;
+        this.location = location;
+        this.address = address;
+        this.city = city;
+        this.state = state;
     }
 
     // Getters and setters
@@ -82,22 +85,6 @@ public class SOSReport {
         this.userId = userId;
     }
 
-    public String getUserPhoneNumber() {
-        return userPhoneNumber;
-    }
-
-    public void setUserPhoneNumber(String userPhoneNumber) {
-        this.userPhoneNumber = userPhoneNumber;
-    }
-
-    public String getUserFullName() {
-        return userFullName;
-    }
-
-    public void setUserFullName(String userFullName) {
-        this.userFullName = userFullName;
-    }
-
     public String getEmergencyType() {
         return emergencyType;
     }
@@ -112,10 +99,6 @@ public class SOSReport {
 
     public void setLocation(GeoPoint location) {
         this.location = location;
-        if (location != null) {
-            this.latitude = location.getLatitude();
-            this.longitude = location.getLongitude();
-        }
     }
 
     public String getAddress() {
@@ -140,38 +123,6 @@ public class SOSReport {
 
     public void setState(String state) {
         this.state = state;
-    }
-
-    public String getZipCode() {
-        return zipCode;
-    }
-
-    public void setZipCode(String zipCode) {
-        this.zipCode = zipCode;
-    }
-
-    public double getLatitude() {
-        return latitude;
-    }
-
-    public void setLatitude(double latitude) {
-        this.latitude = latitude;
-    }
-
-    public double getLongitude() {
-        return longitude;
-    }
-
-    public void setLongitude(double longitude) {
-        this.longitude = longitude;
-    }
-
-    public float getLocationAccuracy() {
-        return locationAccuracy;
-    }
-
-    public void setLocationAccuracy(float locationAccuracy) {
-        this.locationAccuracy = locationAccuracy;
     }
 
     public Date getTimestamp() {
@@ -206,12 +157,12 @@ public class SOSReport {
         this.nearbyServices = nearbyServices;
     }
 
-    public List<EmergencyContact> getEmergencyContacts() {
-        return emergencyContacts;
+    public List<String> getEmergencyContactNumbers() {
+        return emergencyContactNumbers;
     }
 
-    public void setEmergencyContacts(List<EmergencyContact> emergencyContacts) {
-        this.emergencyContacts = emergencyContacts;
+    public void setEmergencyContactNumbers(List<String> emergencyContactNumbers) {
+        this.emergencyContactNumbers = emergencyContactNumbers;
     }
 
     public String getStatus() {
@@ -220,7 +171,6 @@ public class SOSReport {
 
     public void setStatus(String status) {
         this.status = status;
-        this.lastStatusUpdate = new Date();
     }
 
     public boolean isOnline() {
@@ -247,17 +197,23 @@ public class SOSReport {
         this.smsStatus = smsStatus;
     }
 
-    public Date getLastStatusUpdate() {
-        return lastStatusUpdate;
+    public Map<String, Object> getResponderInfo() {
+        return responderInfo;
     }
 
-    public void setLastStatusUpdate(Date lastStatusUpdate) {
-        this.lastStatusUpdate = lastStatusUpdate;
+    public void setResponderInfo(Map<String, Object> responderInfo) {
+        this.responderInfo = responderInfo;
     }
 
-    /**
-     * Add nearby emergency service
-     */
+    @Exclude
+    public List<byte[]> getMediaData() {
+        return mediaData;
+    }
+
+    public void setMediaData(List<byte[]> mediaData) {
+        this.mediaData = mediaData;
+    }
+
     public void addNearbyService(EmergencyService service) {
         if (nearbyServices == null) {
             nearbyServices = new ArrayList<>();
@@ -265,19 +221,13 @@ public class SOSReport {
         nearbyServices.add(service);
     }
 
-    /**
-     * Add emergency contact
-     */
-    public void addEmergencyContact(EmergencyContact contact) {
-        if (emergencyContacts == null) {
-            emergencyContacts = new ArrayList<>();
+    public void addEmergencyContactNumber(String phoneNumber) {
+        if (emergencyContactNumbers == null) {
+            emergencyContactNumbers = new ArrayList<>();
         }
-        emergencyContacts.add(contact);
+        emergencyContactNumbers.add(phoneNumber);
     }
 
-    /**
-     * Add user info
-     */
     public void addUserInfo(String key, Object value) {
         if (userInfo == null) {
             userInfo = new HashMap<>();
@@ -285,52 +235,10 @@ public class SOSReport {
         userInfo.put(key, value);
     }
 
-    /**
-     * Add device info
-     */
     public void addDeviceInfo(String key, Object value) {
         if (deviceInfo == null) {
             deviceInfo = new HashMap<>();
         }
         deviceInfo.put(key, value);
-    }
-
-    /**
-     * Get a shorter ID for display purposes
-     */
-    @Exclude
-    public String getShortId() {
-        if (reportId != null && reportId.length() > 8) {
-            return reportId.substring(0, 8).toUpperCase();
-        }
-        return reportId != null ? reportId.toUpperCase() : "";
-    }
-
-    /**
-     * Get a formatted display ID
-     */
-    @Exclude
-    public String getDisplayId() {
-        return "SOS-" + getShortId();
-    }
-
-    /**
-     * Get the most appropriate emergency service based on the emergency type
-     */
-    @Exclude
-    public EmergencyService getPrimaryEmergencyService() {
-        if (nearbyServices == null || nearbyServices.isEmpty()) {
-            return null;
-        }
-
-        // Look for matching type
-        for (EmergencyService service : nearbyServices) {
-            if (service.getType().equalsIgnoreCase(emergencyType)) {
-                return service;
-            }
-        }
-
-        // Return first one if no match
-        return nearbyServices.get(0);
     }
 }

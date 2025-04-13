@@ -10,4 +10,13 @@
             <attr name="respectFontScaling" format="boolean" />
         </declare-styleable>
 
+    <!-- Help & Support specific attributes -->
+    <declare-styleable name="EmergencyServiceView">
+        <attr name="serviceIcon" format="reference" />
+        <attr name="serviceTitle" format="string" />
+        <attr name="serviceNumber" format="string" />
+        <attr name="is24x7" format="boolean" />
+    </declare-styleable>
+
+
 </resources>

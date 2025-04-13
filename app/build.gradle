@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.google.gms.google.services)
     alias(libs.plugins.google.firebase.crashlytics)
+    // Add this plugin for OneSignal integration
+    // id('com.onesignal.androidsdk.onesignal-gradle-plugin')
 }
 
 android {
@@ -34,23 +36,14 @@ android {
         }
 
     }
-//    buildscript {
-//        repositories {
-//            google()
-//            jcenter()
-//            // Add the OneSignal repository
-//            maven { url 'https://plugins.gradle.org/m2/' }
-//        }
-//        dependencies {
-//            // Add the OneSignal Gradle Plugin
-//            classpath 'gradle.plugin.com.onesignal:onesignal-gradle-plugin:[0.14.0]' // Use latest version
-//        }
-//    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
 
 
     flavorDimensions "role"
@@ -99,7 +92,7 @@ dependencies {
     implementation libs.firebase.firestore
     implementation libs.firebase.functions
     implementation libs.firebase.crashlytics
-    implementation libs.firebase.messaging
+    // REMOVED: implementation libs.firebase.messaging - Not needed with OneSignal
     implementation libs.firebase.inappmessaging.display
     implementation libs.firebase.storage
     implementation libs.play.services.location
@@ -140,21 +133,23 @@ dependencies {
 
     implementation 'androidx.work:work-runtime:2.8.1'
 
-    // Firebase Cloud Messaging
-    implementation 'com.google.firebase:firebase-messaging:23.1.2'
+    // REMOVED: Firebase Cloud Messaging
+    // implementation 'com.google.firebase:firebase-messaging:23.1.2'
 
-    // For direct SMS functionality (fallback)
-//    implementation 'com.twilio:voice-android:5.7.3'
+    // REMOVED: Twilio
+    // implementation 'com.twilio:voice-android:5.7.3'
 
     // For background work management
     implementation 'androidx.work:work-runtime:2.8.1'
 
-    // Retrofit for API communication with our Firebase Functions (optional but recommended)
+    // Retrofit for API communication (still useful for other API calls)
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
     implementation 'com.squareup.okhttp3:okhttp:4.11.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.11.0'
 
-    implementation 'com.onesignal:OneSignal:[5.1.6, 5.1.99]'
+    // OneSignal SDK
+    implementation 'com.onesignal:OneSignal:4.8.6'
+
 
 }

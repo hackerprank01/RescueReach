@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <!-- The MapView that covers the full screen -->
+    <com.google.android.gms.maps.MapView
+        android:id="@+id/safety_map_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:focusable="true" />
+
+    <!-- Offline Mode Banner -->
+    <LinearLayout
+        android:id="@+id/offline_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/warning_amber"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@string/offline_icon_desc"
+            android:src="@drawable/ic_offline"
+            app:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/offline_mode_indicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/offline_mode"
+            android:textColor="@color/white"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Map Controls (Zoom & Center) -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|top"
+        android:layout_margin="16dp"
+        android:orientation="vertical">
+
+        <!-- Zoom in button -->
+        <ImageView
+            android:id="@+id/btn_zoom_in"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/map_control_background"
+            android:contentDescription="@string/zoom_in"
+            android:elevation="2dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_zoom_in"
+            app:tint="@color/rescue_primary" />
+
+        <!-- Zoom out button -->
+        <ImageView
+            android:id="@+id/btn_zoom_out"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/map_control_background"
+            android:contentDescription="@string/zoom_out"
+            android:elevation="2dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_zoom_out"
+            app:tint="@color/rescue_primary" />
+
+        <!-- Center on location button -->
+        <ImageView
+            android:id="@+id/btn_center_location"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/map_control_background"
+            android:contentDescription="@string/center_on_location"
+            android:elevation="2dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_my_location"
+            app:tint="@color/rescue_primary" />
+    </LinearLayout>
+
+    <!-- Filter Panel -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/filter_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:layout_gravity="bottom"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="3dp"
+        app:strokeColor="@color/stroke_color"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/service_category"
+                android:textAppearance="?attr/textAppearanceSubtitle1"
+                android:textColor="?android:attr/textColorPrimary"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Fixed RadioGroup with aligned radio buttons -->
+            <RadioGroup
+                android:id="@+id/service_category_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp"
+                android:gravity="center_vertical">
+
+                <com.google.android.material.radiobutton.MaterialRadioButton
+                    android:id="@+id/radio_all"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/all"
+                    android:gravity="center_vertical"
+                    android:checked="true"
+                    android:minHeight="48dp" />
+
+                <com.google.android.material.radiobutton.MaterialRadioButton
+                    android:id="@+id/radio_hospital"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/hospitals"
+                    android:gravity="center_vertical"
+                    android:minHeight="48dp" />
+
+                <com.google.android.material.radiobutton.MaterialRadioButton
+                    android:id="@+id/radio_police"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/police"
+                    android:gravity="center_vertical"
+                    android:minHeight="48dp" />
+
+                <com.google.android.material.radiobutton.MaterialRadioButton
+                    android:id="@+id/radio_fire"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/fire"
+                    android:gravity="center_vertical"
+                    android:minHeight="48dp" />
+            </RadioGroup>
+
+            <!-- Proximity Filter -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/proximity"
+                android:textAppearance="?attr/textAppearanceSubtitle1"
+                android:textColor="?android:attr/textColorPrimary"
+                android:layout_marginBottom="8dp" />
+
+            <Spinner
+                android:id="@+id/proximity_spinner"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/spinner_background"
+                android:spinnerMode="dropdown" />
+
+            <!-- Search Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_search"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/search_emergency_services"
+                android:textAllCaps="false"
+                app:cornerRadius="8dp"
+                app:icon="@drawable/ic_search" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Loading Indicator -->
+    <ProgressBar
+        android:id="@+id/progress_bar"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

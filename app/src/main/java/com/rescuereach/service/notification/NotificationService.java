@@ -5,17 +5,22 @@ import android.util.Log;
 
 import com.onesignal.OSDeviceState;
 import com.onesignal.OSNotification;
+import com.onesignal.OSNotificationAction;
 import com.onesignal.OSNotificationOpenedResult;
+import com.onesignal.OSNotificationReceivedEvent;
 import com.onesignal.OneSignal;
 import com.onesignal.OneSignal.OSNotificationOpenedHandler;
 import com.onesignal.OneSignal.OSNotificationWillShowInForegroundHandler;
 import com.onesignal.OSInAppMessageAction;
 import com.onesignal.OneSignal.OSInAppMessageClickHandler;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -81,12 +86,14 @@ public class NotificationService {
         // Set foreground notification handler
         OneSignal.setNotificationWillShowInForegroundHandler(new OSNotificationWillShowInForegroundHandler() {
             @Override
-            public void notificationWillShowInForeground(OSNotification notification) {
-                // Always display the notification when in foreground
-                notification.setDisplayOption(OSNotification.DisplayOption.Notification);
+            public void notificationWillShowInForeground(OSNotificationReceivedEvent notificationReceivedEvent) {
+                OSNotification notification = notificationReceivedEvent.getNotification();
 
                 // Pass to our handler
                 handleForegroundNotification(notification);
+
+                // Allow the notification to display
+                notificationReceivedEvent.complete(notification);
             }
         });
 
@@ -185,7 +192,7 @@ public class NotificationService {
         }
 
         // Set OneSignal external user ID
-        OneSignal.setExternalUserId(phoneNumber, EXTERNAL_ID_PHONE);
+        OneSignal.setExternalUserId(phoneNumber);
         Log.d(TAG, "User identifier set: " + phoneNumber);
     }
 
@@ -276,6 +283,25 @@ public class NotificationService {
     }
 
     /**
+     * Delete multiple tags from the user
+     * @param keys List of tag keys to delete
+     */
+    public void deleteTags(List<String> keys) {
+        if (keys != null && !keys.isEmpty()) {
+            try {
+                // Convert the list to a JSONArray
+                JSONArray jsonArray = new JSONArray();
+                for (String key : keys) {
+                    jsonArray.put(key);
+                }
+                OneSignal.deleteTags(jsonArray.toString());
+            } catch (Exception e) {
+                Log.e(TAG, "Error deleting tags", e);
+            }
+        }
+    }
+
+    /**
      * Send a notification to specific users (requires REST API key)
      * This is a server-side operation that would typically be done through a backend service
      * @param heading Notification heading
@@ -343,14 +369,13 @@ public class NotificationService {
         // Remove external user ID
         OneSignal.removeExternalUserId();
 
-        // Delete all tags
-        OneSignal.deleteTags(new String[]{
-                TAG_ROLE,
-                TAG_VOLUNTEER,
-                TAG_REGION,
-                TAG_LAST_ACTIVE,
-                TAG_EMERGENCY_PREFERENCE
-        });
+        // Delete all tags - OneSignal 4.8.6 doesn't support deleteTag with String array,
+        // so we need to delete them one by one
+        deleteTag(TAG_ROLE);
+        deleteTag(TAG_VOLUNTEER);
+        deleteTag(TAG_REGION);
+        deleteTag(TAG_LAST_ACTIVE);
+        deleteTag(TAG_EMERGENCY_PREFERENCE);
 
         Log.d(TAG, "Notification data cleared");
     }
