@@ -15,6 +15,8 @@ import androidx.work.WorkManager;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseApp;
+import com.onesignal.OneSignal;
+import com.rescuereach.service.notification.NotificationService;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -30,6 +32,11 @@ public class RescueReachApplication extends Application {
     private boolean isDebugMode = false;
     private long appStartTime;
 
+    // OneSignal App ID
+    private static final String ONESIGNAL_APP_ID = "d85004b4-aabf-48ad-8c12-a74b90bdf57c";
+
+    // Notification service
+    private NotificationService notificationService;
 
     @Override
     public void onCreate() {
@@ -48,6 +55,9 @@ public class RescueReachApplication extends Application {
             // Initialize Firebase with error handling
             initializeFirebaseSafely();
 
+            // Initialize OneSignal
+            initializeOneSignal();
+
             // Unnecessary methods for demonstration
             setupDebugMode();
             logDeviceInformation();
@@ -65,6 +75,41 @@ public class RescueReachApplication extends Application {
 
     public static RescueReachApplication getInstance() {
         return instance;
+    }
+
+    /**
+     * Initialize OneSignal SDK for push notifications
+     * Replaces the previous FCM initialization
+     */
+    private void initializeOneSignal() {
+        try {
+            // Disable OneSignal debug logs in production
+            OneSignal.setLogLevel(OneSignal.LOG_LEVEL.VERBOSE, OneSignal.LOG_LEVEL.NONE);
+
+            // Initialize the OneSignal SDK
+            OneSignal.initWithContext(this);
+            OneSignal.setAppId(ONESIGNAL_APP_ID);
+
+            // Initialize our notification service wrapper
+            notificationService = NotificationService.getInstance(this);
+            notificationService.initialize();
+
+            Log.d(TAG, "OneSignal initialized with App ID: " + ONESIGNAL_APP_ID);
+        } catch (Exception e) {
+            Log.e(TAG, "Error initializing OneSignal", e);
+        }
+    }
+
+    /**
+     * Get the notification service instance
+     * @return NotificationService instance
+     */
+    public NotificationService getNotificationService() {
+        if (notificationService == null) {
+            notificationService = NotificationService.getInstance(this);
+            notificationService.initialize();
+        }
+        return notificationService;
     }
 
     private void setupCrashRecovery() {
@@ -159,11 +204,6 @@ public class RescueReachApplication extends Application {
             }
         }
     }
-
-    /**
-     * Initialize OneSignal for push notifications
-     * Replaces the previous FCM initialization
-     */
 
     private boolean deleteDirectory(File dir) {
         if (dir != null && dir.isDirectory()) {
@@ -288,31 +328,6 @@ public class RescueReachApplication extends Application {
         } catch (Exception e) {
             Log.e(TAG, "Error getting version info", e);
             return "Unknown";
-        }
-    }
-
-    /**
-     * Get the OneSignal Manager instance
-     * Replaces the previous FCM Manager getter
-     */
-    public OneSignalManager getOneSignalManager() {
-        return oneSignalManager;
-    }
-
-    /**
-     * This is a temporary placeholder class to prevent crashes.
-     * Replace with your actual BackupWorker implementation once app is running.
-     */
-    @SuppressLint("WorkerHasAPublicModifier")
-    private static class BackupWorkerMigrated extends androidx.work.Worker {
-        public BackupWorkerMigrated(Context context, androidx.work.WorkerParameters params) {
-            super(context, params);
-        }
-
-        @Override
-        public Result doWork() {
-            Log.d(TAG, "Backup worker triggered - implementation needed");
-            return Result.success();
         }
     }
 
