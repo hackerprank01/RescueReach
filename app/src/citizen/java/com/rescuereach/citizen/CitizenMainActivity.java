@@ -308,9 +308,9 @@ public class CitizenMainActivity extends AppCompatActivity
     private void setupSosButton() {
         FloatingActionButton fab = findViewById(R.id.fab_sos);
         fab.setOnClickListener(view -> {
-            Toast.makeText(this, "SOS Button Pressed - Emergency Reporting will be implemented soon",
-                    Toast.LENGTH_SHORT).show();
-            // SOS functionality will be implemented in a future step
+            Toast.makeText(this, getString(R.string.sos_pressed), Toast.LENGTH_SHORT).show();
+            // Navigate to home fragment
+            navigateToFragment(R.id.nav_home);
         });
     }
 

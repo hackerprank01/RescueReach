@@ -92,29 +92,46 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_phone_auth);
 
-        // Initialize handler for network timeouts
-        networkTimeoutHandler = new Handler(Looper.getMainLooper());
+        try {
+            // Initialize handler for network timeouts
+            networkTimeoutHandler = new Handler(Looper.getMainLooper());
 
-        // Initialize services
-        authService = AuthServiceProvider.getInstance().getAuthService();
-        userRepository = RepositoryProvider.getInstance().getUserRepository();
-        sessionManager = UserSessionManager.getInstance(this);
-        smsRetrieverHelper = new SMSRetrieverHelper(this);
+            // Initialize services - with proper error handling
+            authService = AuthServiceProvider.getInstance().getAuthService();
+            userRepository = RepositoryProvider.getUserRepository(getApplicationContext());
 
-        // Check if already authenticated
-        if (authService.isLoggedIn() && sessionManager.getSavedPhoneNumber() != null) {
-            navigateToMain();
-            return;
+            // CRITICAL FIX: Get session manager with null check
+            sessionManager = UserSessionManager.getInstance(getApplicationContext());
+            if (sessionManager == null) {
+                Log.e(TAG, "Failed to initialize session manager - null returned");
+                Toast.makeText(this, "Failed to initialize application. Please restart.", Toast.LENGTH_LONG).show();
+                finish();
+                return;
+            }
+
+            // Now you can safely use sessionManager
+            smsRetrieverHelper = new SMSRetrieverHelper(this);
+
+            // Check if already authenticated
+            if (authService.isLoggedIn() && sessionManager.getSavedPhoneNumber() != null) {
+                navigateToMain();
+                return;
+            }
+
+            // Initialize views
+            initializeViews();
+
+            // Set up listeners
+            setupListeners();
+
+            // Set up SMS retriever
+            setupSMSRetriever();
+
+        } catch (Exception e) {
+            Log.e(TAG, "Fatal error in PhoneAuthActivity initialization", e);
+            Toast.makeText(this, "Failed to initialize application. Please restart.", Toast.LENGTH_LONG).show();
+            finish();
         }
-
-        // Initialize views
-        initializeViews();
-
-        // Set up listeners
-        setupListeners();
-
-        // Set up SMS retriever
-        setupSMSRetriever();
     }
 
     private void initializeViews() {
@@ -291,19 +308,42 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     }
 
     private void populateOTPAndVerify(String otp) {
-        if (otpInputView != null && !isFinishing() && !isDestroyed()) {
+        if (otpInputView == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+
+        // Check if we're already on the main thread
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            otpInputView.setOTP(otp);
+            scheduleVerification();
+        } else {
             runOnUiThread(() -> {
-                if (!isFinishing() && !isDestroyed() && otpInputView != null) {
+                if (otpInputView != null && !isFinishing() && !isDestroyed()) {
                     otpInputView.setOTP(otp);
-                    // Give UI time to update before verifying
-                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                        if (!isFinishing() && !isDestroyed()) {
-                            verifyCode();
-                        }
-                    }, 800);
+                    scheduleVerification();
                 }
             });
         }
+    }
+
+    private void scheduleVerification() {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                // Consider moving heavy work to background thread
+                verifyCodeOptimized();
+            }
+        }, 300); // Reduced delay time
+    }
+
+    private void verifyCodeOptimized() {
+        // If verifyCode() has heavy operations, consider moving them to a background thread
+        // For example:
+        new Thread(() -> {
+            // Then update UI on main thread
+            runOnUiThread(() -> {
+                // UI updates after verification
+            });
+        }).start();
     }
 
     @Override

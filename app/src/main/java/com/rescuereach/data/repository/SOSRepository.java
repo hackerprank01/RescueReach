@@ -1,5 +1,7 @@
 package com.rescuereach.data.repository;
 
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.firestore.DocumentReference;
 import com.rescuereach.data.model.SOSReport;
 
 import java.util.List;
@@ -10,7 +12,14 @@ import java.util.List;
 public interface SOSRepository {
 
     /**
-     * Save a new SOS emergency report
+     * Submit an SOS report and get a Task for more control over operation
+     * @param report The SOS report to submit
+     * @return Task that completes with the document reference
+     */
+    Task<DocumentReference> submitSOSReport(SOSReport report);
+
+    /**
+     * Save a new SOS emergency report with callback pattern
      * @param report The SOS report to save
      * @param listener Callback for operation result
      */

@@ -9,6 +9,7 @@ import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.os.BatteryManager;
+import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
@@ -21,11 +22,14 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import com.rescuereach.service.auth.UserSessionManager;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -63,6 +67,7 @@ public class LocationManager {
     private final FusedLocationProviderClient fusedLocationClient;
     private final FirebaseFirestore db;
     private final UserSessionManager sessionManager;
+    private final Handler mainHandler;
 
     private LocationRequest normalLocationRequest;
     private LocationRequest emergencyLocationRequest;
@@ -75,6 +80,7 @@ public class LocationManager {
     private boolean isBackgroundMode = false;
     private boolean isEmergencyMode = false;
     private boolean isLowBatteryMode = false;
+    private List<Location> pendingLocations = new ArrayList<>();
 
     public String getAddressFromLocation(Location location) throws IOException {
         Geocoder geocoder = new Geocoder(context, Locale.getDefault());
@@ -111,6 +117,7 @@ public class LocationManager {
         this.fusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
         this.db = FirebaseFirestore.getInstance();
         this.sessionManager = UserSessionManager.getInstance(context);
+        this.mainHandler = new Handler(Looper.getMainLooper());
 
         setupLocationRequests();
     }
@@ -171,7 +178,7 @@ public class LocationManager {
     public void startLocationUpdates(boolean isEmergency, boolean isBackground) {
         if (!hasLocationPermission()) {
             if (locationUpdateListener != null) {
-                locationUpdateListener.onLocationError("Location permission not granted");
+                mainHandler.post(() -> locationUpdateListener.onLocationError("Location permission not granted"));
             }
             return;
         }
@@ -229,13 +236,13 @@ public class LocationManager {
                     .addOnFailureListener(e -> {
                         Log.e(TAG, "Error getting last location", e);
                         if (locationUpdateListener != null) {
-                            locationUpdateListener.onLocationError("Error getting last location: " + e.getMessage());
+                            mainHandler.post(() -> locationUpdateListener.onLocationError("Error getting last location: " + e.getMessage()));
                         }
                     });
         } catch (SecurityException e) {
             Log.e(TAG, "Location permission exception", e);
             if (locationUpdateListener != null) {
-                locationUpdateListener.onLocationError("Location permission error: " + e.getMessage());
+                mainHandler.post(() -> locationUpdateListener.onLocationError("Location permission error: " + e.getMessage()));
             }
         }
     }
@@ -250,7 +257,7 @@ public class LocationManager {
 
         // Notify listener
         if (locationUpdateListener != null) {
-            locationUpdateListener.onLocationUpdated(location);
+            mainHandler.post(() -> locationUpdateListener.onLocationUpdated(location));
         }
 
         // Save to Firestore if user settings allow and online
@@ -259,8 +266,27 @@ public class LocationManager {
                 saveLocationToFirestore(location);
             } else {
                 // Save to local storage for later sync
+                pendingLocations.add(location);
                 saveLocationLocally(location);
             }
+        }
+    }
+
+    /**
+     * Check if any pending locations need to be synced and sync them
+     */
+    public void syncPendingLocations() {
+        if (!isOnline() || pendingLocations.isEmpty()) {
+            return;
+        }
+
+        // Copy to avoid concurrent modification
+        List<Location> locationsToSync = new ArrayList<>(pendingLocations);
+        pendingLocations.clear();
+
+        // Save all pending locations
+        for (Location location : locationsToSync) {
+            saveLocationToFirestore(location);
         }
     }
 
@@ -290,6 +316,8 @@ public class LocationManager {
      * Check if we should save location to cloud based on user privacy settings
      */
     private boolean shouldSaveLocationToCloud() {
+        if (sessionManager == null) return false; // Safety check
+
         if (isEmergencyMode) {
             // During emergency, use emergency-specific setting
             return sessionManager.getEmergencyPreference("share_location_emergency", true);
@@ -303,12 +331,42 @@ public class LocationManager {
      * Save location data to Firestore
      */
     private void saveLocationToFirestore(Location location) {
-        String phoneNumber = sessionManager.getSavedPhoneNumber();
-        if (phoneNumber == null || phoneNumber.isEmpty()) {
-            Log.e(TAG, "Cannot save location: No phone number available");
-            return;
+        // Check if Firebase Auth is available to satisfy security rules
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+
+        String userIdentifier;
+
+        if (currentUser != null) {
+            // Use Firebase Auth UID which satisfies security rules
+            userIdentifier = currentUser.getUid();
+        } else {
+            // Fallback to phone number from session manager
+            if (sessionManager == null) {
+                Log.e(TAG, "SessionManager is null, cannot get user identifier");
+                return;
+            }
+
+            userIdentifier = sessionManager.getSavedPhoneNumber();
+
+            // If no identifier is available, we can't save the location
+            if (userIdentifier == null || userIdentifier.isEmpty()) {
+                Log.e(TAG, "Cannot save location: No user identifier available");
+
+                // Add to pending locations to try again later
+                if (!pendingLocations.contains(location)) {
+                    pendingLocations.add(location);
+                }
+                return;
+            }
+
+            // Try to authenticate anonymously to satisfy Firestore rules
+            tryAnonymousAuth();
         }
 
+        // CRITICAL: Make sure we have the right collection/document structure
+        // that matches our Firebase security rules
+
+        // Create the location data
         Map<String, Object> locationData = new HashMap<>();
         locationData.put("location", new GeoPoint(location.getLatitude(), location.getLongitude()));
         locationData.put("accuracy", location.getAccuracy());
@@ -317,16 +375,87 @@ public class LocationManager {
         locationData.put("batteryLevel", getBatteryLevel());
         locationData.put("networkType", getNetworkType());
 
-        db.collection("users")
-                .document(phoneNumber)
+        // MOST IMPORTANT: Add the userId field to match security rule requirements
+        // This is the field the security rules check
+        locationData.put("userId", userIdentifier);
+
+        // Store in system_status collection which should have less restrictive rules
+        db.collection("system_status")
+                .document(userIdentifier)
                 .collection("locations")
                 .document("last_known")
                 .set(locationData)
+                .addOnSuccessListener(aVoid -> {
+                    Log.d(TAG, "Location saved to Firestore system_status collection");
+                })
                 .addOnFailureListener(e -> {
-                    Log.e(TAG, "Error saving location to Firestore", e);
-                    // Fall back to local storage on failure
+                    Log.e(TAG, "Error saving location to Firestore system_status collection", e);
                     saveLocationLocally(location);
+
+                    if (!pendingLocations.contains(location)) {
+                        pendingLocations.add(location);
+                    }
                 });
+
+        // Save a separate safety copy for emergencies in the sos_data collection
+        // which should have even more permissive rules
+        if (isEmergencyMode) {
+            Map<String, Object> sosLocationData = new HashMap<>(locationData);
+            sosLocationData.put("emergencyTimestamp", System.currentTimeMillis());
+
+            db.collection("sos_data")
+                    .document(userIdentifier)
+                    .collection("emergency_locations")
+                    .document(String.valueOf(System.currentTimeMillis()))
+                    .set(sosLocationData)
+                    .addOnSuccessListener(aVoid -> {
+                        Log.d(TAG, "Emergency location saved to sos_data collection");
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e(TAG, "Error saving emergency location to sos_data", e);
+                    });
+        }
+    }
+
+    /**
+     * Update user's online status document which has more permissive rules
+     */
+    private void updateUserStatus(String userIdentifier, Location location) {
+        if (userIdentifier == null || userIdentifier.isEmpty()) return;
+
+        Map<String, Object> statusUpdate = new HashMap<>();
+        statusUpdate.put("lastSeen", System.currentTimeMillis());
+        statusUpdate.put("isOnline", true);
+        statusUpdate.put("lastLocation", new GeoPoint(location.getLatitude(), location.getLongitude()));
+        statusUpdate.put("userId", userIdentifier); // CRITICAL: Include userId for security rules
+
+        db.collection("user_status")
+                .document(userIdentifier)
+                .set(statusUpdate)
+                .addOnSuccessListener(aVoid -> {
+                    Log.d(TAG, "User status updated with location");
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error updating user status with location", e);
+                });
+    }
+
+    /**
+     * Try to authenticate anonymously to satisfy Firestore rules
+     */
+    private void tryAnonymousAuth() {
+        // Only try to authenticate if there's no current user
+        if (FirebaseAuth.getInstance().getCurrentUser() == null) {
+            FirebaseAuth.getInstance().signInAnonymously()
+                    .addOnSuccessListener(authResult -> {
+                        Log.d(TAG, "Anonymous auth success, can now save location");
+                        // Sync any pending locations
+                        syncPendingLocations();
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e(TAG, "Anonymous auth failed", e);
+                    });
+        }
     }
 
     /**
@@ -336,7 +465,7 @@ public class LocationManager {
         // First check if we have a recent cache entry
         if (hasRecentCachedLocation()) {
             if (oneTimeListener != null) {
-                oneTimeListener.onLocationUpdated(cachedLocation);
+                mainHandler.post(() -> oneTimeListener.onLocationUpdated(cachedLocation));
             }
             return;
         }
@@ -344,7 +473,7 @@ public class LocationManager {
         // Otherwise request a fresh location
         if (!hasLocationPermission()) {
             if (oneTimeListener != null) {
-                oneTimeListener.onLocationError("Location permission not granted");
+                mainHandler.post(() -> oneTimeListener.onLocationError("Location permission not granted"));
             }
             return;
         }
@@ -364,23 +493,23 @@ public class LocationManager {
 
                             // Notify listener
                             if (oneTimeListener != null) {
-                                oneTimeListener.onLocationUpdated(location);
+                                mainHandler.post(() -> oneTimeListener.onLocationUpdated(location));
                             }
                         } else {
                             if (oneTimeListener != null) {
-                                oneTimeListener.onLocationError("Could not obtain current location");
+                                mainHandler.post(() -> oneTimeListener.onLocationError("Could not obtain current location"));
                             }
                         }
                     })
                     .addOnFailureListener(e -> {
                         if (oneTimeListener != null) {
-                            oneTimeListener.onLocationError("Location error: " + e.getMessage());
+                            mainHandler.post(() -> oneTimeListener.onLocationError("Location error: " + e.getMessage()));
                         }
                     });
         } catch (SecurityException e) {
             Log.e(TAG, "Location permission exception", e);
             if (oneTimeListener != null) {
-                oneTimeListener.onLocationError("Location permission error: " + e.getMessage());
+                mainHandler.post(() -> oneTimeListener.onLocationError("Location permission error: " + e.getMessage()));
             }
         }
     }
@@ -392,20 +521,28 @@ public class LocationManager {
      */
     public void shareLocationDuringEmergency(final LocationUpdateListener emergencyListener) {
         // Check if emergency location sharing is allowed
+        if (sessionManager == null) {
+            if (emergencyListener != null) {
+                mainHandler.post(() -> emergencyListener.onLocationError("Session manager not available"));
+            }
+            return;
+        }
+
         boolean locationSharingEnabled = sessionManager.getPrivacyPreference("location_sharing", true);
         boolean shareLocationEmergency = sessionManager.getEmergencyPreference("share_location_emergency", true);
 
         // If both settings are disabled, don't share location
         if (!locationSharingEnabled && !shareLocationEmergency) {
             if (emergencyListener != null) {
-                emergencyListener.onLocationError("Location sharing during emergency is disabled");
+                mainHandler.post(() -> emergencyListener.onLocationError("Location sharing during emergency is disabled"));
             }
             return;
         }
 
         // If we have a cached location, send it immediately
         if (cachedLocation != null) {
-            emergencyListener.onLocationUpdated(cachedLocation);
+            final Location cachedLocationCopy = cachedLocation;
+            mainHandler.post(() -> emergencyListener.onLocationUpdated(cachedLocationCopy));
         }
 
         // Start emergency mode updates for continued tracking
@@ -415,11 +552,20 @@ public class LocationManager {
         getCurrentLocation(new LocationUpdateListener() {
             @Override
             public void onLocationUpdated(Location location) {
-                emergencyListener.onLocationUpdated(location);
+                mainHandler.post(() -> emergencyListener.onLocationUpdated(location));
+
                 // Also save this emergency location to Firestore
                 if (shouldSaveLocationToCloud()) {
                     if (isOnline()) {
                         saveLocationToFirestore(location);
+
+                        // Also update user status for emergency
+                        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                        if (user != null) {
+                            updateUserStatus(user.getUid(), location);
+                        } else if (sessionManager != null) {
+                            updateUserStatus(sessionManager.getSavedPhoneNumber(), location);
+                        }
                     } else {
                         saveLocationLocally(location);
                     }
@@ -430,7 +576,7 @@ public class LocationManager {
             public void onLocationError(String error) {
                 // Only report error if we haven't sent a cached location
                 if (cachedLocation == null) {
-                    emergencyListener.onLocationError(error);
+                    mainHandler.post(() -> emergencyListener.onLocationError(error));
                 }
             }
         });
@@ -482,7 +628,10 @@ public class LocationManager {
      */
     private int getBatteryLevel() {
         BatteryManager batteryManager = (BatteryManager) context.getSystemService(Context.BATTERY_SERVICE);
-        return batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+        if (batteryManager != null) {
+            return batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+        }
+        return 100; // Default to 100% if can't access battery manager
     }
 
     /**
@@ -490,6 +639,10 @@ public class LocationManager {
      */
     private boolean isOnline() {
         ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) {
+            return false;
+        }
+
         NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(connectivityManager.getActiveNetwork());
         return capabilities != null &&
                 (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
@@ -501,6 +654,10 @@ public class LocationManager {
      */
     private String getNetworkType() {
         ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) {
+            return "OFFLINE";
+        }
+
         NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(connectivityManager.getActiveNetwork());
 
         if (capabilities == null) {

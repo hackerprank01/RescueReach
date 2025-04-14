@@ -21,6 +21,7 @@
 
     <color name="amber_warning">#FFC107</color>
     <color name="red_error">#F44336</color>
+    <color name="gray_light">#80FFFFFF</color>
 
     <!-- Alert Colors -->
     <color name="alert_amber">#FF9800</color>

@@ -628,13 +628,14 @@
     <string name="error_cancelling_emergency">Error cancelling emergency: %s</string>
     <string name="current_status">Current Status</string>
     <string name="status_updates">Status Updates</string>
+    <string name="sos_pressed">SOS Button Pressed - Redirecting to Home</string>
     <string name="location">Location</string>
     <string name="reported_time">Reported Time</string>
     <string name="cancel_emergency">Cancel</string>
     <string name="emergency_status_title">Emergency Status</string>
     <string name="responder_icon">Responder Icon</string>
-
-
+    <string name="search_error">An error occurred during search. Please try again.</string>
+    <string name="tap_anywhere_to_cancel">Tap anywhere outside to cancel</string>
 </resources>
 
 

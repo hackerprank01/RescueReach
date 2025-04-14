@@ -66,6 +66,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallback {
@@ -116,6 +118,14 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     private boolean hasPerformedSearch = false; // Track if a search has been performed
     private boolean isOfflineMode = false; // Track if we're in offline mode
     private boolean hasShownOfflineNotice = false; // Track if we've already shown the offline notice
+    private boolean isStopped = false; // Track if the fragment is stopped
+
+    // ANR prevention - debounce control
+    private long lastUIInteractionTime = 0;
+    private long lastSearchRequestTime = 0;
+
+    // Background thread executor for offloading heavy operations
+    private final Executor backgroundExecutor = Executors.newFixedThreadPool(2);
 
     // Place search configuration
     private final Map<String, List<String>> placeTypeKeywords = new HashMap<>();
@@ -123,7 +133,6 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     // Store place data for markers
     private final Map<String, EmergencyServicePlace> markerPlaceData = new HashMap<>();
 
-    // Field to track the total number of places found
     // Field to track the total number of places found
     private int totalPlacesFound = 0;
 
@@ -149,6 +158,9 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Reset the stopped flag
+        isStopped = false;
 
         // Initialize location manager
         locationManager = new LocationManager(requireContext());
@@ -217,7 +229,7 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
         requestLocationPermissions();
 
         // Try to load cached location data if available
-        loadCachedLocationData();
+        backgroundExecutor.execute(this::loadCachedLocationData);
     }
 
     /**
@@ -226,27 +238,33 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     private void setupNetworkMonitoring() {
         networkManager.startNetworkMonitoring(isConnected -> {
             // Update UI based on network state
+            boolean wasOffline = isOfflineMode;
             isOfflineMode = !isConnected;
-            updateOfflineModeUI();
 
-            if (isConnected) {
-                // Reconnected - try to refresh data
-                if (hasPerformedSearch) {
-                    showToast(getString(R.string.back_online_refreshing), Toast.LENGTH_SHORT);
-                    searchNearbyServices();
-                }
-            } else {
-                // Went offline - notify user
-                if (!hasShownOfflineNotice) {
-                    showOfflineSnackbar();
-                    hasShownOfflineNotice = true;
-                }
+            mainHandler.post(() -> {
+                if (isStopped || !isAdded() || isDetached()) return;
 
-                // Try to use cached data
-                if (!hasPerformedSearch && hasCachedServicesData()) {
-                    loadCachedServicesData();
+                updateOfflineModeUI();
+
+                if (isConnected && wasOffline) {
+                    // Reconnected - try to refresh data
+                    if (hasPerformedSearch) {
+                        showToast(getString(R.string.back_online_refreshing), Toast.LENGTH_SHORT);
+                        triggerSearchNearbyServices();
+                    }
+                } else if (!isConnected) {
+                    // Went offline - notify user
+                    if (!hasShownOfflineNotice) {
+                        showOfflineSnackbar();
+                        hasShownOfflineNotice = true;
+                    }
+
+                    // Try to use cached data
+                    if (!hasPerformedSearch && hasCachedServicesData()) {
+                        loadCachedServicesData();
+                    }
                 }
-            }
+            });
         });
     }
 
@@ -345,9 +363,11 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
                         currentLocation = cachedLocation;
 
                         // Update map if ready
-                        if (googleMap != null) {
-                            updateUserLocationMarker();
-                        }
+                        mainHandler.post(() -> {
+                            if (googleMap != null && !isStopped) {
+                                updateUserLocationMarker();
+                            }
+                        });
                     }
                 }
             } catch (Exception e) {
@@ -361,14 +381,16 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
      */
     private void cacheLocationData() {
         if (currentLocation != null) {
-            String locationJson = String.format(Locale.US, "%f,%f,%d",
-                    currentLocation.getLatitude(),
-                    currentLocation.getLongitude(),
-                    currentLocation.getTime());
+            backgroundExecutor.execute(() -> {
+                String locationJson = String.format(Locale.US, "%f,%f,%d",
+                        currentLocation.getLatitude(),
+                        currentLocation.getLongitude(),
+                        currentLocation.getTime());
 
-            sharedPreferences.edit()
-                    .putString(KEY_LAST_LOCATION, locationJson)
-                    .apply();
+                sharedPreferences.edit()
+                        .putString(KEY_LAST_LOCATION, locationJson)
+                        .apply();
+            });
         }
     }
 
@@ -380,20 +402,23 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
             return;
         }
 
-        try {
-            // Convert to JSON
-            String servicesJson = gson.toJson(new ArrayList<>(markerPlaceData.values()));
+        // Move to background thread to prevent ANR
+        backgroundExecutor.execute(() -> {
+            try {
+                // Convert to JSON
+                String servicesJson = gson.toJson(new ArrayList<>(markerPlaceData.values()));
 
-            // Save to SharedPreferences
-            sharedPreferences.edit()
-                    .putString(KEY_CACHED_SERVICES, servicesJson)
-                    .putLong(KEY_CACHE_TIMESTAMP, System.currentTimeMillis())
-                    .apply();
+                // Save to SharedPreferences
+                sharedPreferences.edit()
+                        .putString(KEY_CACHED_SERVICES, servicesJson)
+                        .putLong(KEY_CACHE_TIMESTAMP, System.currentTimeMillis())
+                        .apply();
 
-            Log.d(TAG, "Cached " + markerPlaceData.size() + " emergency services for offline use");
-        } catch (Exception e) {
-            Log.e(TAG, "Error caching services data", e);
-        }
+                Log.d(TAG, "Cached " + markerPlaceData.size() + " emergency services for offline use");
+            } catch (Exception e) {
+                Log.e(TAG, "Error caching services data", e);
+            }
+        });
     }
 
     /**
@@ -402,71 +427,96 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     private void loadCachedServicesData() {
         if (!isAdded()) return;
 
-        try {
-            String servicesJson = sharedPreferences.getString(KEY_CACHED_SERVICES, null);
-            if (servicesJson != null) {
+        // Show loading indicator
+        mainHandler.post(() -> {
+            if (!isStopped && isAdded() && !isDetached()) {
                 progressBar.setVisibility(View.VISIBLE);
+            }
+        });
 
-                // Parse JSON
-                Type listType = new TypeToken<ArrayList<EmergencyServicePlace>>(){}.getType();
-                List<EmergencyServicePlace> cachedServices = gson.fromJson(servicesJson, listType);
+        // Process data in background
+        backgroundExecutor.execute(() -> {
+            try {
+                String servicesJson = sharedPreferences.getString(KEY_CACHED_SERVICES, null);
+                if (servicesJson != null) {
+                    // Parse JSON in background thread
+                    Type listType = new TypeToken<ArrayList<EmergencyServicePlace>>(){}.getType();
+                    List<EmergencyServicePlace> cachedServices = gson.fromJson(servicesJson, listType);
 
-                // Clear existing markers
-                if (googleMap != null) {
-                    googleMap.clear();
-                    markerPlaceData.clear();
-                    userLocationMarker = null;
-                }
-
-                // Add user location marker
-                updateUserLocationMarker();
-
-                // Add service markers
-                for (EmergencyServicePlace place : cachedServices) {
-                    // Only add services matching the selected filter
-                    if (shouldAddServiceBasedOnFilter(place)) {
-                        // Choose marker color based on service type
-                        float markerColor;
-                        if (place.placeType.equals("hospital")) {
-                            markerColor = BitmapDescriptorFactory.HUE_RED;
-                        } else if (place.placeType.equals("police")) {
-                            markerColor = BitmapDescriptorFactory.HUE_BLUE;
-                        } else if (place.placeType.equals("fire_station")) {
-                            markerColor = BitmapDescriptorFactory.HUE_ORANGE;
-                        } else {
-                            markerColor = BitmapDescriptorFactory.HUE_GREEN;
-                        }
-
-                        // Add marker
-                        Marker marker = googleMap.addMarker(new MarkerOptions()
-                                .position(place.location)
-                                .title(place.name)
-                                .snippet(String.format(Locale.getDefault(),
-                                        getString(R.string.place_distance), place.distanceKm))
-                                .icon(BitmapDescriptorFactory.defaultMarker(markerColor))
-                                .zIndex(0.5f));
-
-                        if (marker != null) {
-                            markerPlaceData.put(marker.getId(), place);
+                    // Filter services in background
+                    List<EmergencyServicePlace> filteredServices = new ArrayList<>();
+                    for (EmergencyServicePlace place : cachedServices) {
+                        if (shouldAddServiceBasedOnFilter(place)) {
+                            filteredServices.add(place);
                         }
                     }
+
+                    // Update UI on main thread
+                    mainHandler.post(() -> {
+                        if (isStopped || !isAdded() || isDetached()) return;
+
+                        // Clear existing markers
+                        if (googleMap != null) {
+                            googleMap.clear();
+                            markerPlaceData.clear();
+                            userLocationMarker = null;
+                        }
+
+                        // Add user location marker
+                        updateUserLocationMarker();
+
+                        // Add service markers efficiently in batches
+                        for (EmergencyServicePlace place : filteredServices) {
+                            // Choose marker color based on service type
+                            float markerColor;
+                            if (place.placeType.equals("hospital")) {
+                                markerColor = BitmapDescriptorFactory.HUE_RED;
+                            } else if (place.placeType.equals("police")) {
+                                markerColor = BitmapDescriptorFactory.HUE_BLUE;
+                            } else if (place.placeType.equals("fire_station")) {
+                                markerColor = BitmapDescriptorFactory.HUE_ORANGE;
+                            } else {
+                                markerColor = BitmapDescriptorFactory.HUE_GREEN;
+                            }
+
+                            // Add marker
+                            Marker marker = googleMap.addMarker(new MarkerOptions()
+                                    .position(place.location)
+                                    .title(place.name)
+                                    .snippet(String.format(Locale.getDefault(),
+                                            getString(R.string.place_distance), place.distanceKm))
+                                    .icon(BitmapDescriptorFactory.defaultMarker(markerColor))
+                                    .zIndex(0.5f));
+
+                            if (marker != null) {
+                                markerPlaceData.put(marker.getId(), place);
+                            }
+                        }
+
+                        // Hide progress and show notice
+                        progressBar.setVisibility(View.GONE);
+                        showToast(getString(R.string.using_cached_data,
+                                        formatTimestamp(sharedPreferences.getLong(KEY_CACHE_TIMESTAMP, 0))),
+                                Toast.LENGTH_LONG);
+
+                        hasPerformedSearch = true;
+                    });
+                } else {
+                    mainHandler.post(() -> {
+                        if (isStopped || !isAdded() || isDetached()) return;
+                        progressBar.setVisibility(View.GONE);
+                        showToast(getString(R.string.no_cached_data), Toast.LENGTH_SHORT);
+                    });
                 }
-
-                // Hide progress and show notice
-                progressBar.setVisibility(View.GONE);
-                showToast(getString(R.string.using_cached_data,
-                                formatTimestamp(sharedPreferences.getLong(KEY_CACHE_TIMESTAMP, 0))),
-                        Toast.LENGTH_LONG);
-
-                hasPerformedSearch = true;
-            } else {
-                showToast(getString(R.string.no_cached_data), Toast.LENGTH_SHORT);
+            } catch (Exception e) {
+                Log.e(TAG, "Error loading cached services data", e);
+                mainHandler.post(() -> {
+                    if (isStopped || !isAdded() || isDetached()) return;
+                    progressBar.setVisibility(View.GONE);
+                    showToast(getString(R.string.error_loading_cached_data), Toast.LENGTH_SHORT);
+                });
             }
-        } catch (Exception e) {
-            Log.e(TAG, "Error loading cached services data", e);
-            showToast(getString(R.string.error_loading_cached_data), Toast.LENGTH_SHORT);
-            progressBar.setVisibility(View.GONE);
-        }
+        });
     }
 
     /**
@@ -538,6 +588,13 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
         proximitySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                // Add debounce to prevent rapid interactions
+                long currentTime = System.currentTimeMillis();
+                if (currentTime - lastUIInteractionTime < 500) {
+                    return;
+                }
+                lastUIInteractionTime = currentTime;
+
                 String selected = proximityOptions.get(position);
                 int previousRadius = selectedProximityMeters;
 
@@ -562,8 +619,12 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
                         // In offline mode, reload cached data with new filter
                         loadCachedServicesData();
                     } else if (!isOfflineMode) {
-                        // Online mode - do a new search
-                        searchNearbyServices();
+                        // Online mode - trigger search but with a delay to prevent excessive calls
+                        mainHandler.postDelayed(() -> {
+                            if (!isStopped && !isSearchingPlaces) {
+                                triggerSearchNearbyServices();
+                            }
+                        }, 300);
                     }
                 }
             }
@@ -601,16 +662,39 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
 
     private void setupClickListeners() {
         // Set up location centering button
-        centerLocationButton.setOnClickListener(v -> centerMapOnCurrentLocation());
+        centerLocationButton.setOnClickListener(v -> {
+            // Add debounce
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - lastUIInteractionTime < 500) {
+                return;
+            }
+            lastUIInteractionTime = currentTime;
+
+            centerMapOnCurrentLocation();
+        });
 
         // Set up zoom controls
         zoomInButton.setOnClickListener(v -> {
+            // Add debounce
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - lastUIInteractionTime < 300) {
+                return;
+            }
+            lastUIInteractionTime = currentTime;
+
             if (googleMap != null) {
                 googleMap.animateCamera(CameraUpdateFactory.zoomIn());
             }
         });
 
         zoomOutButton.setOnClickListener(v -> {
+            // Add debounce
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - lastUIInteractionTime < 300) {
+                return;
+            }
+            lastUIInteractionTime = currentTime;
+
             if (googleMap != null) {
                 googleMap.animateCamera(CameraUpdateFactory.zoomOut());
             }
@@ -618,6 +702,13 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
 
         // Setup service category radio buttons
         serviceCategoryGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            // Add debounce
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - lastUIInteractionTime < 500) {
+                return;
+            }
+            lastUIInteractionTime = currentTime;
+
             if (checkedId == R.id.radio_all) {
                 selectedServiceType = "all";
             } else if (checkedId == R.id.radio_hospital) {
@@ -633,63 +724,82 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
                 if (isOfflineMode && hasCachedServicesData()) {
                     // In offline mode, reload cached data with new filter
                     loadCachedServicesData();
-                } else if (!isOfflineMode) {
-                    // Online mode - do a new search
-                    searchNearbyServices();
+                } else if (!isOfflineMode && !isSearchingPlaces) {
+                    // Online mode - trigger search after a small delay
+                    mainHandler.postDelayed(() -> {
+                        if (!isStopped) {
+                            triggerSearchNearbyServices();
+                        }
+                    }, 200);
                 }
             }
         });
 
-        // Setup search button
+        // Setup search button with debounce
         searchButton.setOnClickListener(v -> {
-            if (isOfflineMode) {
-                // In offline mode, use cached data
-                if (hasCachedServicesData()) {
-                    loadCachedServicesData();
-                } else if (hasCachedLocationData() && currentLocation == null) {
-                    loadCachedLocationData();
-                    showToast(getString(R.string.no_emergency_services_cached), Toast.LENGTH_SHORT);
-                } else {
-                    showToast(getString(R.string.no_cached_data), Toast.LENGTH_SHORT);
-                }
+            // Add debounce for search button
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - lastSearchRequestTime < 1000) { // Longer delay for search
                 return;
             }
+            lastSearchRequestTime = currentTime;
 
-            // Online mode
-            if (currentLocation != null) {
-                searchNearbyServices();
+            triggerSearchNearbyServices();
+        });
+    }
+
+    private void triggerSearchNearbyServices() {
+        if (isOfflineMode) {
+            // In offline mode, use cached data
+            if (hasCachedServicesData()) {
+                loadCachedServicesData();
+            } else if (hasCachedLocationData() && currentLocation == null) {
+                loadCachedLocationData();
+                showToast(getString(R.string.no_emergency_services_cached), Toast.LENGTH_SHORT);
             } else {
-                showToast(getString(R.string.waiting_for_location), Toast.LENGTH_SHORT);
-                // Try to get a fresh location
-                locationManager.getCurrentLocation(new LocationManager.LocationUpdateListener() {
-                    @Override
-                    public void onLocationUpdated(Location location) {
-                        currentLocation = location;
-                        cacheLocationData();
-                        searchNearbyServices();
-                    }
+                showToast(getString(R.string.no_cached_data), Toast.LENGTH_SHORT);
+            }
+            return;
+        }
 
-                    @Override
-                    public void onLocationError(String message) {
-                        showToast(getString(R.string.location_unavailable), Toast.LENGTH_SHORT);
+        // Online mode
+        if (currentLocation != null) {
+            searchNearbyServices();
+        } else {
+            showToast(getString(R.string.waiting_for_location), Toast.LENGTH_SHORT);
+            // Try to get a fresh location
+            locationManager.getCurrentLocation(new LocationManager.LocationUpdateListener() {
+                @Override
+                public void onLocationUpdated(Location location) {
+                    if (isStopped) return;
+                    currentLocation = location;
+                    cacheLocationData();
+                    searchNearbyServices();
+                }
 
-                        // Try to use cached location as fallback
-                        if (hasCachedLocationData()) {
-                            loadCachedLocationData();
-                            if (currentLocation != null) {
-                                searchNearbyServices();
-                            }
+                @Override
+                public void onLocationError(String message) {
+                    if (isStopped) return;
+                    showToast(getString(R.string.location_unavailable), Toast.LENGTH_SHORT);
+
+                    // Try to use cached location as fallback
+                    if (hasCachedLocationData()) {
+                        loadCachedLocationData();
+                        if (currentLocation != null) {
+                            searchNearbyServices();
                         }
                     }
-                });
-            }
-        });
+                }
+            });
+        }
     }
 
     private void setupLocationListener() {
         locationManager.setLocationUpdateListener(new LocationManager.LocationUpdateListener() {
             @Override
             public void onLocationUpdated(Location location) {
+                if (isStopped) return;
+
                 // Check if we've moved enough to warrant an update
                 boolean significantMove = isSignificantLocationChange(currentLocation, location);
 
@@ -700,7 +810,11 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
                 cacheLocationData();
 
                 // Update user marker
-                updateUserLocationMarker();
+                mainHandler.post(() -> {
+                    if (!isStopped) {
+                        updateUserLocationMarker();
+                    }
+                });
 
                 // Check if we should refresh emergency services
                 if (!isOfflineMode && hasPerformedSearch && significantMove && autoRefreshEnabled && lastSearchLocation != null) {
@@ -709,14 +823,22 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
 
                     // If we've moved beyond the threshold, refresh services
                     if (distanceFromLastSearch > LOCATION_REFRESH_THRESHOLD) {
-                        showLocationUpdateSnackbar(distanceFromLastSearch);
-                        searchNearbyServices();
+                        mainHandler.post(() -> {
+                            if (!isStopped) {
+                                showLocationUpdateSnackbar(distanceFromLastSearch);
+                                if (!isSearchingPlaces) {
+                                    triggerSearchNearbyServices();
+                                }
+                            }
+                        });
                     }
                 }
             }
 
             @Override
             public void onLocationError(String message) {
+                if (isStopped) return;
+
                 showToast("Location error: " + message, Toast.LENGTH_SHORT);
 
                 // Use cached location as fallback if we don't have a current location
@@ -753,7 +875,7 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
      * @param distance Distance in meters from last search
      */
     private void showLocationUpdateSnackbar(float distance) {
-        if (!isAdded() || getView() == null) return;
+        if (!isAdded() || getView() == null || isStopped) return;
 
         // Convert to appropriate unit
         String distanceText;
@@ -801,6 +923,8 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
      * Updates just the user's location marker without affecting other markers
      */
     private void updateUserLocationMarker() {
+        if (isStopped || !isAdded() || isDetached()) return;
+
         if (googleMap != null && currentLocation != null && isAdded()) {
             LatLng latLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
 
@@ -839,9 +963,11 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     }
 
     private void showToast(String message, int duration) {
-        if (getActivity() == null) return;
+        if (getActivity() == null || isStopped) return;
 
-        requireActivity().runOnUiThread(() -> {
+        mainHandler.post(() -> {
+            if (isStopped || !isAdded() || isDetached()) return;
+
             // Cancel any existing toast
             if (currentToast != null) {
                 currentToast.cancel();
@@ -854,6 +980,8 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     }
 
     private void searchNearbyServices() {
+        if (isStopped) return;
+
         if (isOfflineMode) {
             // In offline mode, use cached data
             if (hasCachedServicesData()) {
@@ -873,63 +1001,111 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
         }
 
         // Show loading indicator
-        progressBar.setVisibility(View.VISIBLE);
+        mainHandler.post(() -> {
+            if (!isStopped && isAdded() && !isDetached()) {
+                progressBar.setVisibility(View.VISIBLE);
+            }
+        });
 
-        // Mark as searching
-        isSearchingPlaces = true;
+        // Move heavy work to background thread
+        backgroundExecutor.execute(() -> {
+            try {
+                // Mark as searching
+                isSearchingPlaces = true;
 
-        // Store this location as the last search location
-        lastSearchLocation = new Location(currentLocation);
+                // Store this location as the last search location
+                lastSearchLocation = new Location(currentLocation);
 
-        // Mark that we've performed a search
-        hasPerformedSearch = true;
+                // Mark that we've performed a search
+                hasPerformedSearch = true;
 
-        // Clear previous markers and data, but keep user marker reference
-        if (googleMap != null) {
-            googleMap.clear();
-            markerPlaceData.clear();
-            userLocationMarker = null;
+                mainHandler.post(() -> {
+                    if (isStopped || !isAdded() || isDetached()) return;
 
-            // Add back the user's current location marker
-            updateUserLocationMarker();
-        }
+                    // Clear previous markers and data, but keep user marker reference
+                    if (googleMap != null) {
+                        googleMap.clear();
+                        markerPlaceData.clear();
+                        userLocationMarker = null;
 
-        // Create location for search
-        LatLng location = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
+                        // Add back the user's current location marker
+                        updateUserLocationMarker();
+                    }
+                });
 
-        // Counter to track completion of all searches
-        AtomicInteger searchCounter = new AtomicInteger(0);
+                // Create location for search
+                LatLng location = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
 
-        // For larger search radii, adjust the priority to find more results
-        int maxResultsPerType;
-        if (selectedProximityMeters <= 3000) {
-            maxResultsPerType = 5;  // Default 5 results for smaller radii
-        } else if (selectedProximityMeters <= 5000) {
-            maxResultsPerType = 8;  // Increase for 5km
-        } else {
-            maxResultsPerType = 10; // Max 10 results for 10km
-        }
+                // Counter to track completion of all searches
+                AtomicInteger searchCounter = new AtomicInteger(0);
 
-        // Determine services to search based on selection
-        if (selectedServiceType.equals("all") || selectedServiceType.equals("hospital")) {
-            searchNearbyPlaces(location, "hospital", BitmapDescriptorFactory.HUE_RED, searchCounter, maxResultsPerType);
-        }
+                // For larger search radii, adjust the priority to find more results
+                int maxResultsPerType;
+                if (selectedProximityMeters <= 3000) {
+                    maxResultsPerType = 5;  // Default 5 results for smaller radii
+                } else if (selectedProximityMeters <= 5000) {
+                    maxResultsPerType = 8;  // Increase for 5km
+                } else {
+                    maxResultsPerType = 10; // Max 10 results for 10km
+                }
 
-        if (selectedServiceType.equals("all") || selectedServiceType.equals("police")) {
-            searchNearbyPlaces(location, "police", BitmapDescriptorFactory.HUE_BLUE, searchCounter, maxResultsPerType);
-        }
+                // Add master timeout for entire search operation
+                final Handler timeoutHandler = new Handler(Looper.getMainLooper());
+                final Runnable timeoutRunnable = () -> {
+                    if (isSearchingPlaces) {
+                        Log.w(TAG, "Search timed out, forcing completion");
+                        checkSearchCompletion(searchCounter, true); // Force completion
+                    }
+                };
 
-        if (selectedServiceType.equals("all") || selectedServiceType.equals("fire_station")) {
-            searchNearbyPlaces(location, "fire_station", BitmapDescriptorFactory.HUE_ORANGE, searchCounter, maxResultsPerType);
-        }
+                // Set a 10 second timeout for entire search
+                timeoutHandler.postDelayed(timeoutRunnable, 10000);
 
-        showToast(getString(R.string.loading_places), Toast.LENGTH_SHORT);
+                try {
+                    // Determine services to search based on selection
+                    if (selectedServiceType.equals("all") || selectedServiceType.equals("hospital")) {
+                        searchNearbyPlaces(location, "hospital", BitmapDescriptorFactory.HUE_RED, searchCounter, maxResultsPerType);
+                    }
+
+                    if (selectedServiceType.equals("all") || selectedServiceType.equals("police")) {
+                        searchNearbyPlaces(location, "police", BitmapDescriptorFactory.HUE_BLUE, searchCounter, maxResultsPerType);
+                    }
+
+                    if (selectedServiceType.equals("all") || selectedServiceType.equals("fire_station")) {
+                        searchNearbyPlaces(location, "fire_station", BitmapDescriptorFactory.HUE_ORANGE, searchCounter, maxResultsPerType);
+                    }
+                } finally {
+                    // Show searching toast
+                    mainHandler.post(() -> {
+                        if (!isStopped && isAdded() && !isDetached()) {
+                            showToast(getString(R.string.loading_places), Toast.LENGTH_SHORT);
+                        }
+                    });
+                }
+
+            } catch (Exception e) {
+                Log.e(TAG, "Search error", e);
+                mainHandler.post(() -> {
+                    if (!isStopped && isAdded() && !isDetached()) {
+                        progressBar.setVisibility(View.GONE);
+                        isSearchingPlaces = false;
+                        showToast(getString(R.string.search_error), Toast.LENGTH_SHORT);
+                    }
+                });
+            }
+        });
     }
 
     private void searchNearbyPlaces(LatLng location, String placeType, float markerColor, AtomicInteger counter, int maxResults) {
+        if (isStopped) {
+            counter.incrementAndGet(); // Make sure to count even if stopped
+            return;
+        }
+
         // Get the keywords for this place type
         List<String> keywords = placeTypeKeywords.get(placeType);
         if (keywords == null || keywords.isEmpty()) {
+            counter.incrementAndGet(); // Make sure to count this search even if no keywords
             return;
         }
 
@@ -976,11 +1152,31 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
         final int totalKeywords = effectiveKeywords.size();
         final int MAX_RESULTS = maxResults;
 
+        // Add timeout for this specific search
+        final Handler searchTimeoutHandler = new Handler(Looper.getMainLooper());
+        final Runnable searchTimeoutRunnable = () -> {
+            // If we're still searching after timeout, force complete this keyword search
+            Log.w(TAG, "Search timeout for " + placeType);
+            if (keywordRequestsCounter.get() < totalKeywords) {
+                keywordRequestsCounter.set(totalKeywords);
+                checkSearchCompletion(counter);
+            }
+        };
+
+        // Set 5-second timeout for this search type
+        searchTimeoutHandler.postDelayed(searchTimeoutRunnable, 5000);
+
         // Search for places using each keyword
         for (String keyword : effectiveKeywords) {
+            if (isStopped) {
+                // Skip if fragment is stopped
+                continue;
+            }
+
             if (foundPlacesCounter.get() >= MAX_RESULTS) {
                 // Already found enough places
                 if (keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                    searchTimeoutHandler.removeCallbacks(searchTimeoutRunnable);
                     checkSearchCompletion(counter);
                 }
                 continue;
@@ -993,100 +1189,204 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
                     .setQuery(keyword)
                     .build();
 
+            // Per-request timeout handling
+            final Handler requestTimeoutHandler = new Handler(Looper.getMainLooper());
+            final String keywordFinal = keyword; // For logging
+            final Runnable requestTimeoutRunnable = () -> {
+                Log.w(TAG, "Request timeout for keyword: " + keywordFinal);
+                if (keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                    searchTimeoutHandler.removeCallbacks(searchTimeoutRunnable);
+                    checkSearchCompletion(counter);
+                }
+            };
+
+            // 3-second timeout per request
+            requestTimeoutHandler.postDelayed(requestTimeoutRunnable, 3000);
+
             // Execute the request
             placesClient.findAutocompletePredictions(request)
                     .addOnSuccessListener(response -> {
-                        // Process predictions (places found)
-                        for (AutocompletePrediction prediction : response.getAutocompletePredictions()) {
-                            // Skip if we have enough places
-                            if (foundPlacesCounter.get() >= MAX_RESULTS) {
-                                continue;
+                        // Remove timeout for this request
+                        requestTimeoutHandler.removeCallbacks(requestTimeoutRunnable);
+
+                        if (isStopped) {
+                            // Skip if fragment is stopped
+                            if (keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                                searchTimeoutHandler.removeCallbacks(searchTimeoutRunnable);
+                                checkSearchCompletion(counter);
                             }
-
-                            // Create a fetch place request to get place details
-                            List<Place.Field> placeFields = Arrays.asList(
-                                    Place.Field.ID, Place.Field.NAME, Place.Field.LAT_LNG,
-                                    Place.Field.ADDRESS, Place.Field.PHONE_NUMBER);
-
-                            FetchPlaceRequest fetchRequest = FetchPlaceRequest.builder(
-                                    prediction.getPlaceId(), placeFields).build();
-
-                            // Fetch the place details
-                            placesClient.fetchPlace(fetchRequest)
-                                    .addOnSuccessListener(fetchResponse -> {
-                                        Place place = fetchResponse.getPlace();
-
-                                        // Skip if no valid location
-                                        if (place.getLatLng() == null) return;
-
-                                        // Calculate distance from user
-                                        float[] results = new float[1];
-                                        Location.distanceBetween(
-                                                location.latitude, location.longitude,
-                                                place.getLatLng().latitude, place.getLatLng().longitude,
-                                                results);
-
-                                        float distanceKm = results[0] / 1000; // Convert meters to km
-
-                                        if (distanceKm <= (selectedProximityMeters / 1000.0f)) {
-                                            // Store place data
-                                            String phoneNumber = place.getPhoneNumber() != null ?
-                                                    place.getPhoneNumber() : getString(R.string.no_phone_available);
-                                            String address = place.getAddress() != null ?
-                                                    place.getAddress() : getString(R.string.address_unavailable);
-
-                                            // Create place data object
-                                            EmergencyServicePlace servicePlace = new EmergencyServicePlace(
-                                                    place.getName(),
-                                                    address,
-                                                    phoneNumber,
-                                                    placeType,
-                                                    distanceKm,
-                                                    place.getLatLng()
-                                            );
-
-                                            // Add marker to map on main thread
-                                            mainHandler.post(() -> {
-                                                if (googleMap != null && isAdded() && !isDetached()) {
-                                                    // Add marker
-                                                    Marker marker = googleMap.addMarker(new MarkerOptions()
-                                                            .position(place.getLatLng())
-                                                            .title(place.getName())
-                                                            .snippet(String.format(Locale.getDefault(),
-                                                                    getString(R.string.place_distance), distanceKm))
-                                                            .icon(BitmapDescriptorFactory.defaultMarker(markerColor))
-                                                            .zIndex(0.5f)); // Lower than user marker
-
-                                                    // Store marker data with marker ID
-                                                    if (marker != null) {
-                                                        markerPlaceData.put(marker.getId(), servicePlace);
-                                                    }
-
-                                                    // Increment counter only for unique places
-                                                    foundPlacesCounter.incrementAndGet();
-                                                }
-                                            });
-                                        }
-                                    })
-                                    .addOnCompleteListener(task -> {
-                                        // Whether successful or not, count this request as completed
-                                        if (keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
-                                            checkSearchCompletion(counter);
-                                        }
-                                    });
+                            return;
                         }
+
+                        // Process predictions (places found)
+                        backgroundExecutor.execute(() -> {
+                            processPredictions(response.getAutocompletePredictions(), location,
+                                    placeType, markerColor, foundPlacesCounter,
+                                    keywordRequestsCounter, totalKeywords,
+                                    MAX_RESULTS, counter, searchTimeoutHandler, searchTimeoutRunnable);
+                        });
 
                         // If no predictions found, we still need to track completion
                         if (response.getAutocompletePredictions().isEmpty() &&
                                 keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                            searchTimeoutHandler.removeCallbacks(searchTimeoutRunnable);
                             checkSearchCompletion(counter);
                         }
                     })
                     .addOnFailureListener(exception -> {
+                        // Remove timeout for this request
+                        requestTimeoutHandler.removeCallbacks(requestTimeoutRunnable);
+
                         Log.e(TAG, "Place search failed: " + exception.getMessage());
 
                         // Count this as completed even on failure
                         if (keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                            searchTimeoutHandler.removeCallbacks(searchTimeoutRunnable);
+                            checkSearchCompletion(counter);
+                        }
+                    });
+        }
+    }
+
+    private void processPredictions(List<AutocompletePrediction> predictions, LatLng location,
+                                    String placeType, float markerColor, AtomicInteger foundPlacesCounter,
+                                    AtomicInteger keywordRequestsCounter, int totalKeywords,
+                                    int maxResults, AtomicInteger counter,
+                                    Handler timeoutHandler, Runnable timeoutRunnable) {
+
+        // Process each prediction efficiently
+        AtomicInteger pendingFetches = new AtomicInteger(predictions.size());
+
+        if (predictions.isEmpty()) {
+            return;
+        }
+
+        for (AutocompletePrediction prediction : predictions) {
+            // Skip if we have enough places or fragment is stopped
+            if (foundPlacesCounter.get() >= maxResults || isStopped) {
+                // Count this prediction as processed
+                if (pendingFetches.decrementAndGet() <= 0 &&
+                        keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                    timeoutHandler.removeCallbacks(timeoutRunnable);
+                    checkSearchCompletion(counter);
+                }
+                continue;
+            }
+
+            // Create a fetch place request to get place details
+            List<Place.Field> placeFields = Arrays.asList(
+                    Place.Field.ID, Place.Field.NAME, Place.Field.LAT_LNG,
+                    Place.Field.ADDRESS, Place.Field.PHONE_NUMBER);
+
+            FetchPlaceRequest fetchRequest = FetchPlaceRequest.builder(
+                    prediction.getPlaceId(), placeFields).build();
+
+            // Per-fetch timeout handling
+            final Handler fetchTimeoutHandler = new Handler(Looper.getMainLooper());
+            final Runnable fetchTimeoutRunnable = () -> {
+                Log.w(TAG, "Place fetch timeout for ID: " + prediction.getPlaceId());
+                if (pendingFetches.decrementAndGet() <= 0 &&
+                        keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                    timeoutHandler.removeCallbacks(timeoutRunnable);
+                    checkSearchCompletion(counter);
+                }
+            };
+
+            // 2-second timeout for each place fetch
+            fetchTimeoutHandler.postDelayed(fetchTimeoutRunnable, 2000);
+
+            // Fetch the place details
+            placesClient.fetchPlace(fetchRequest)
+                    .addOnSuccessListener(fetchResponse -> {
+                        // Remove timeout for this fetch
+                        fetchTimeoutHandler.removeCallbacks(fetchTimeoutRunnable);
+
+                        if (isStopped) {
+                            // Skip if fragment is stopped
+                            if (pendingFetches.decrementAndGet() <= 0 &&
+                                    keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                                timeoutHandler.removeCallbacks(timeoutRunnable);
+                                checkSearchCompletion(counter);
+                            }
+                            return;
+                        }
+
+                        Place place = fetchResponse.getPlace();
+
+                        // Skip if no valid location
+                        if (place.getLatLng() == null) {
+                            if (pendingFetches.decrementAndGet() <= 0 &&
+                                    keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                                timeoutHandler.removeCallbacks(timeoutRunnable);
+                                checkSearchCompletion(counter);
+                            }
+                            return;
+                        }
+
+                        // Calculate distance from user
+                        float[] results = new float[1];
+                        Location.distanceBetween(
+                                location.latitude, location.longitude,
+                                place.getLatLng().latitude, place.getLatLng().longitude,
+                                results);
+
+                        float distanceKm = results[0] / 1000; // Convert meters to km
+
+                        if (distanceKm <= (selectedProximityMeters / 1000.0f)) {
+                            // Store place data
+                            String phoneNumber = place.getPhoneNumber() != null ?
+                                    place.getPhoneNumber() : getString(R.string.no_phone_available);
+                            String address = place.getAddress() != null ?
+                                    place.getAddress() : getString(R.string.address_unavailable);
+
+                            // Create place data object
+                            EmergencyServicePlace servicePlace = new EmergencyServicePlace(
+                                    place.getName(),
+                                    address,
+                                    phoneNumber,
+                                    placeType,
+                                    distanceKm,
+                                    place.getLatLng()
+                            );
+
+                            // Add marker to map on main thread
+                            mainHandler.post(() -> {
+                                if (!isStopped && googleMap != null && isAdded() && !isDetached()) {
+                                    // Add marker
+                                    Marker marker = googleMap.addMarker(new MarkerOptions()
+                                            .position(place.getLatLng())
+                                            .title(place.getName())
+                                            .snippet(String.format(Locale.getDefault(),
+                                                    getString(R.string.place_distance), distanceKm))
+                                            .icon(BitmapDescriptorFactory.defaultMarker(markerColor))
+                                            .zIndex(0.5f)); // Lower than user marker
+
+                                    // Store marker data with marker ID
+                                    if (marker != null) {
+                                        markerPlaceData.put(marker.getId(), servicePlace);
+                                        foundPlacesCounter.incrementAndGet();
+                                    }
+                                }
+                            });
+                        }
+
+                        // Check if all fetches for this set of predictions are done
+                        if (pendingFetches.decrementAndGet() <= 0 &&
+                                keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                            timeoutHandler.removeCallbacks(timeoutRunnable);
+                            checkSearchCompletion(counter);
+                        }
+                    })
+                    .addOnFailureListener(exception -> {
+                        // Remove timeout for this fetch
+                        fetchTimeoutHandler.removeCallbacks(fetchTimeoutRunnable);
+
+                        Log.e(TAG, "Place fetch failed: " + exception.getMessage());
+
+                        // Check if all fetches for this set of predictions are done
+                        if (pendingFetches.decrementAndGet() <= 0 &&
+                                keywordRequestsCounter.incrementAndGet() >= totalKeywords) {
+                            timeoutHandler.removeCallbacks(timeoutRunnable);
                             checkSearchCompletion(counter);
                         }
                     });
@@ -1094,10 +1394,19 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     }
 
     private void checkSearchCompletion(AtomicInteger counter) {
+        checkSearchCompletion(counter, false);
+    }
+
+    private void checkSearchCompletion(AtomicInteger counter, boolean forced) {
+        if (isStopped) {
+            // Don't update UI if fragment is stopped
+            return;
+        }
+
         // For "all" services, we need to wait for all 3 types to complete
         int requiredCompletions = selectedServiceType.equals("all") ? 3 : 1;
 
-        if (counter.incrementAndGet() >= requiredCompletions) {
+        if (forced || counter.incrementAndGet() >= requiredCompletions) {
             // All searches completed
             isSearchingPlaces = false;
 
@@ -1106,7 +1415,7 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
 
             // Hide progress bar
             mainHandler.post(() -> {
-                if (isAdded() && !isDetached()) {
+                if (!isStopped && isAdded() && !isDetached()) {
                     progressBar.setVisibility(View.GONE);
 
                     // Check if we found any places
@@ -1121,11 +1430,20 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
                     updateUserLocationMarker();
                 }
             });
+
+            // Using System.gc() is generally not recommended, but in this case
+            // it may help recover memory after a heavy search operation
+            // that created many temporary objects
+            backgroundExecutor.execute(() -> {
+                try {
+                    System.gc();
+                } catch (Exception ignored) {}
+            });
         }
     }
 
     private void showNoServicesFoundMessage() {
-        if (!isAdded() || getView() == null) return;
+        if (!isAdded() || getView() == null || isStopped) return;
 
         // Show toast
         showToast(getString(R.string.no_places_found), Toast.LENGTH_SHORT);
@@ -1210,6 +1528,8 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     }
 
     private void handleInfoWindowClick(Marker marker) {
+        if (isStopped) return;
+
         // Retrieve the place data associated with this marker
         EmergencyServicePlace place = markerPlaceData.get(marker.getId());
         if (place == null) return;
@@ -1257,6 +1577,7 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     // Custom Info Window Adapter for emergency service markers
     private class EmergencyServiceInfoWindowAdapter implements GoogleMap.InfoWindowAdapter {
         private final View infoWindow;
+        private String lastMarkerId = null;
 
         EmergencyServiceInfoWindowAdapter() {
             infoWindow = getLayoutInflater().inflate(R.layout.emergency_service_info_window, null);
@@ -1270,6 +1591,8 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
 
         @Override
         public View getInfoContents(Marker marker) {
+            if (isStopped) return null;
+
             // Get place data associated with this marker
             EmergencyServicePlace place = markerPlaceData.get(marker.getId());
 
@@ -1277,6 +1600,14 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
             if (place == null) {
                 return null;
             }
+
+            // Optimization: If we're showing the same marker again, just return the existing view
+            if (lastMarkerId != null && lastMarkerId.equals(marker.getId())) {
+                return infoWindow;
+            }
+
+            // Track this marker ID
+            lastMarkerId = marker.getId();
 
             // Set up the custom info window view
             TextView titleText = infoWindow.findViewById(R.id.text_title);
@@ -1336,7 +1667,7 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     }
 
     private void showPermissionDeniedMessage() {
-        if (!isAdded() || getView() == null) return;
+        if (!isAdded() || getView() == null || isStopped) return;
 
         // Show toast
         showToast(getString(R.string.location_permission_denied), Toast.LENGTH_SHORT);
@@ -1377,6 +1708,7 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     @Override
     public void onStart() {
         super.onStart();
+        isStopped = false;
         mapView.onStart();
         startLocationUpdates();
 
@@ -1387,6 +1719,7 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
     @Override
     public void onResume() {
         super.onResume();
+        isStopped = false;
         mapView.onResume();
 
         // Check network state when resuming
@@ -1401,6 +1734,7 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
 
     @Override
     public void onStop() {
+        isStopped = true;
         mapView.onStop();
         locationManager.stopLocationUpdates();
         super.onStop();
@@ -1408,6 +1742,10 @@ public class SafetyFeaturesFragment extends Fragment implements OnMapReadyCallba
 
     @Override
     public void onDestroy() {
+        isStopped = true;
+        // Cancel any pending operations
+        mainHandler.removeCallbacksAndMessages(null);
+
         mapView.onDestroy();
         networkManager.stopNetworkMonitoring();
         super.onDestroy();

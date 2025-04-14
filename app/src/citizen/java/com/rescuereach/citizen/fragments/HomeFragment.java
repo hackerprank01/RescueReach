@@ -45,6 +45,7 @@ import com.rescuereach.util.NetworkUtils;
 import com.rescuereach.util.PermissionManager;
 import com.rescuereach.util.SafetyTipProvider;
 import com.rescuereach.util.SharedPreferencesManager;
+import com.rescuereach.util.ToastUtil;
 
 import org.json.JSONObject;
 
@@ -402,9 +403,8 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         Log.d(TAG, "SOS confirmed for: " + emergencyType);
 
         // Show toast to indicate processing
-        Toast.makeText(requireContext(),
-                getString(R.string.collecting_sos_data, emergencyType),
-                Toast.LENGTH_SHORT).show();
+        ToastUtil.showShort(requireContext(),
+                getString(R.string.collecting_sos_data, emergencyType));
 
         // Collect all emergency data
         sosDataCollectionService.collectSOSData(emergencyType, new SOSDataCollectionService.SOSDataCollectionListener() {

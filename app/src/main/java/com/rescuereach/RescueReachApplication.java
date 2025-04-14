@@ -15,15 +15,23 @@ import androidx.work.WorkManager;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreSettings;
 import com.onesignal.OneSignal;
 import com.rescuereach.service.notification.NotificationService;
 
 import java.io.File;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import okhttp3.OkHttpClient;
 
 public class RescueReachApplication extends Application {
 
@@ -31,12 +39,21 @@ public class RescueReachApplication extends Application {
     private static RescueReachApplication instance;
     private boolean isDebugMode = false;
     private long appStartTime;
+    private final AtomicBoolean isHandlingCrash = new AtomicBoolean(false);
 
     // OneSignal App ID
     private static final String ONESIGNAL_APP_ID = "d85004b4-aabf-48ad-8c12-a74b90bdf57c";
 
+    // Network timeout configuration
+    private static final int CONNECTION_TIMEOUT = 30; // seconds
+    private static final int READ_TIMEOUT = 30; // seconds
+    private static final int WRITE_TIMEOUT = 30; // seconds
+
     // Notification service
     private NotificationService notificationService;
+
+    // Original uncaught exception handler
+    private Thread.UncaughtExceptionHandler originalExceptionHandler;
 
     @Override
     public void onCreate() {
@@ -45,6 +62,9 @@ public class RescueReachApplication extends Application {
 
         // Set up error handling before initializing anything else
         setupCrashRecovery();
+
+        // Configure global OkHttp client with proper timeouts
+        configureOkHttpDefaults();
 
         // Fix Google Play Services
         fixPlayServices();
@@ -79,12 +99,16 @@ public class RescueReachApplication extends Application {
 
     /**
      * Initialize OneSignal SDK for push notifications
-     * Replaces the previous FCM initialization
+     * Updated for compatibility with current OneSignal version
      */
     private void initializeOneSignal() {
         try {
-            // Disable OneSignal debug logs in production
-            OneSignal.setLogLevel(OneSignal.LOG_LEVEL.VERBOSE, OneSignal.LOG_LEVEL.NONE);
+            // Enable verbose logging for debug builds
+            if (BuildConfig.DEBUG) {
+                OneSignal.setLogLevel(OneSignal.LOG_LEVEL.VERBOSE, OneSignal.LOG_LEVEL.NONE);
+            } else {
+                OneSignal.setLogLevel(OneSignal.LOG_LEVEL.ERROR, OneSignal.LOG_LEVEL.NONE);
+            }
 
             // Initialize the OneSignal SDK
             OneSignal.initWithContext(this);
@@ -112,56 +136,163 @@ public class RescueReachApplication extends Application {
         return notificationService;
     }
 
-    private void setupCrashRecovery() {
-        // Set up a handler for uncaught exceptions to recover from Firestore crashes
-        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
-            try {
-                Log.e(TAG, "Uncaught exception:", throwable);
+    /**
+     * Configure default OkHttp client settings to prevent timeouts
+     */
+    private void configureOkHttpDefaults() {
+        try {
+            // Create a custom global OkHttpClient
+            OkHttpClient customClient = createCustomOkHttpClient();
 
-                // Check if this is a Firestore panic
-                if (throwable instanceof RuntimeException &&
-                        throwable.getMessage() != null &&
-                        throwable.getMessage().contains("Internal error in Cloud Firestore")) {
-
-                    // Clear Firestore state to recover
-                    try {
-                        SharedPreferences prefs = getSharedPreferences("auth_state", MODE_PRIVATE);
-                        prefs.edit().putBoolean("firestore_error_recovery", true).apply();
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error saving recovery state", e);
-                    }
-                }
-
-                // Save crash details - unnecessary method
-                saveCrashReport(throwable);
-
-                // Pass to the default handler
-                if (Thread.getDefaultUncaughtExceptionHandler() != null) {
-                    Thread.getDefaultUncaughtExceptionHandler().uncaughtException(thread, throwable);
-                }
-            } catch (Exception e) {
-                // Last resort if our error handler itself crashes
-                Log.e(TAG, "Error in crash handler", e);
+            // Try to set this client using reflection for various libraries
+            if (customClient != null) {
+                setGlobalOkHttpDefaults(customClient);
             }
-        });
+
+            Log.d(TAG, "OkHttp timeouts configured successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to configure OkHttp defaults", e);
+        }
     }
 
-    // Unnecessary method
-    private void saveCrashReport(Throwable throwable) {
+    /**
+     * Create a custom OkHttpClient with better timeout settings
+     */
+    private OkHttpClient createCustomOkHttpClient() {
         try {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss", Locale.US);
-            sdf.setTimeZone(TimeZone.getDefault());
-            String timestamp = sdf.format(new Date());
+            // Use reflection to avoid direct dependency on specific OkHttp version
+            Class<?> clientBuilderClass = Class.forName("okhttp3.OkHttpClient$Builder");
+            Object builder = clientBuilderClass.newInstance();
 
-            File crashDir = new File(getFilesDir(), "crash_logs");
-            if (!crashDir.exists()) {
-                crashDir.mkdirs();
+            // Set timeouts
+            Method connectTimeout = clientBuilderClass.getMethod("connectTimeout", long.class, TimeUnit.class);
+            Method readTimeout = clientBuilderClass.getMethod("readTimeout", long.class, TimeUnit.class);
+            Method writeTimeout = clientBuilderClass.getMethod("writeTimeout", long.class, TimeUnit.class);
+            Method retryOnConnectionFailure = clientBuilderClass.getMethod("retryOnConnectionFailure", boolean.class);
+
+            connectTimeout.invoke(builder, CONNECTION_TIMEOUT, TimeUnit.SECONDS);
+            readTimeout.invoke(builder, READ_TIMEOUT, TimeUnit.SECONDS);
+            writeTimeout.invoke(builder, WRITE_TIMEOUT, TimeUnit.SECONDS);
+            retryOnConnectionFailure.invoke(builder, true);
+
+            // Build the client
+            Method buildMethod = clientBuilderClass.getMethod("build");
+            return (OkHttpClient) buildMethod.invoke(builder);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Error creating custom OkHttpClient", e);
+            return null;
+        }
+    }
+
+    /**
+     * Attempt to set global OkHttp defaults through various methods
+     */
+    private void setGlobalOkHttpDefaults(OkHttpClient client) {
+        if (client == null) return;
+
+        try {
+            // Try setting client on various classes that might use it
+
+            // 1. Try Firebase HTTP adapter
+            try {
+                Class<?> firebaseHttpClass = Class.forName("com.google.firebase.FirebaseNetworkAdapter");
+                Field instanceField = firebaseHttpClass.getDeclaredField("INSTANCE");
+                instanceField.setAccessible(true);
+                Object instance = instanceField.get(null);
+
+                Field clientField = instance.getClass().getDeclaredField("httpClient");
+                clientField.setAccessible(true);
+                clientField.set(instance, client);
+
+                Log.d(TAG, "Set Firebase HTTP client");
+            } catch (Exception e) {
+                Log.d(TAG, "Could not set Firebase HTTP client: " + e.getMessage());
             }
 
-            // We're just demonstrating the method, not actually implementing it
-            Log.d(TAG, "Would save crash report to: " + crashDir.getAbsolutePath() + "/crash_" + timestamp + ".log");
+            // 2. Try OneSignal's client
+            try {
+                Class<?> oneSignalHttpClass = Class.forName("com.onesignal.OneSignalRestClient");
+                Field clientField = oneSignalHttpClass.getDeclaredField("client");
+                clientField.setAccessible(true);
+                clientField.set(null, client);
+
+                Log.d(TAG, "Set OneSignal HTTP client");
+            } catch (Exception e) {
+                Log.d(TAG, "Could not set OneSignal HTTP client: " + e.getMessage());
+            }
+
         } catch (Exception e) {
-            Log.e(TAG, "Error saving crash report", e);
+            Log.e(TAG, "Error setting global OkHttp defaults", e);
+        }
+    }
+
+    private void setupCrashRecovery() {
+        try {
+            // First, save the original handler to avoid recursive calls
+            originalExceptionHandler = Thread.getDefaultUncaughtExceptionHandler();
+
+            // Set up a handler for uncaught exceptions to recover from Firestore crashes
+            Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+                // Using AtomicBoolean to prevent recursive crashes
+                if (isHandlingCrash.compareAndSet(false, true)) {
+                    try {
+                        // Log the exception
+                        Log.e(TAG, "Uncaught exception:", throwable);
+
+                        // Check if this is a Firestore panic
+                        if (throwable instanceof RuntimeException &&
+                                throwable.getMessage() != null &&
+                                throwable.getMessage().contains("Internal error in Cloud Firestore")) {
+
+                            // Clear Firestore state to recover
+                            try {
+                                SharedPreferences prefs = getSharedPreferences("auth_state", MODE_PRIVATE);
+                                prefs.edit().putBoolean("firestore_error_recovery", true).apply();
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error saving recovery state", e);
+                            }
+                        }
+
+                        // Check if this is an OkHttp stream exception
+                        if (throwable instanceof RuntimeException &&
+                                throwable.getMessage() != null &&
+                                throwable.getCause() != null &&
+                                throwable.getCause().getMessage() != null &&
+                                throwable.getCause().getMessage().contains("unexpected end of stream")) {
+
+                            // Flag for OkHttp recovery
+                            try {
+                                SharedPreferences prefs = getSharedPreferences("auth_state", MODE_PRIVATE);
+                                prefs.edit().putBoolean("okhttp_error_recovery", true).apply();
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error saving OkHttp recovery state", e);
+                            }
+                        }
+
+                        // Save crash details - unnecessary method, just log
+                        Log.d(TAG, "Would save crash report for: " + throwable.getMessage());
+                    } catch (Exception e) {
+                        // Last resort if our error handler itself crashes
+                        Log.e(TAG, "Error in crash handler", e);
+                    } finally {
+                        // Reset crash handling flag
+                        isHandlingCrash.set(false);
+
+                        // Pass to the original handler if it exists
+                        if (originalExceptionHandler != null) {
+                            originalExceptionHandler.uncaughtException(thread, throwable);
+                        }
+                    }
+                } else {
+                    // Already handling a crash, use original handler directly
+                    if (originalExceptionHandler != null) {
+                        originalExceptionHandler.uncaughtException(thread, throwable);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to setup crash recovery", e);
         }
     }
 
@@ -170,10 +301,14 @@ public class RescueReachApplication extends Application {
             // Check if we've had a previous Firestore crash
             SharedPreferences prefs = getSharedPreferences("auth_state", MODE_PRIVATE);
             boolean needsRecovery = prefs.getBoolean("firestore_error_recovery", false);
+            boolean needsOkHttpRecovery = prefs.getBoolean("okhttp_error_recovery", false);
 
-            if (needsRecovery) {
-                // Clear the flag
-                prefs.edit().putBoolean("firestore_error_recovery", false).apply();
+            if (needsRecovery || needsOkHttpRecovery) {
+                // Clear the flags
+                prefs.edit()
+                        .putBoolean("firestore_error_recovery", false)
+                        .putBoolean("okhttp_error_recovery", false)
+                        .apply();
 
                 // Clear Firebase caches to ensure fresh state
                 try {
@@ -182,8 +317,14 @@ public class RescueReachApplication extends Application {
                     if (cacheDir.exists()) {
                         deleteDirectory(cacheDir);
                     }
+
+                    // Also clear OkHttp cache
+                    File okHttpCache = new File(getCacheDir(), "okhttp");
+                    if (okHttpCache.exists()) {
+                        deleteDirectory(okHttpCache);
+                    }
                 } catch (Exception e) {
-                    Log.e(TAG, "Error clearing Firebase cache", e);
+                    Log.e(TAG, "Error clearing caches", e);
                 }
 
                 // Wait a moment for cleanup
@@ -192,6 +333,14 @@ public class RescueReachApplication extends Application {
 
             // Now initialize Firebase
             FirebaseApp.initializeApp(this);
+
+            // Configure Firestore settings
+            FirebaseFirestore firestore = FirebaseFirestore.getInstance();
+            FirebaseFirestoreSettings settings = new FirebaseFirestoreSettings.Builder()
+                    .setPersistenceEnabled(true)
+                    .setCacheSizeBytes(FirebaseFirestoreSettings.CACHE_SIZE_UNLIMITED)
+                    .build();
+            firestore.setFirestoreSettings(settings);
 
         } catch (Exception e) {
             Log.e(TAG, "Error initializing Firebase", e);
@@ -244,6 +393,23 @@ public class RescueReachApplication extends Application {
         }
     }
 
+    private void initializeFirebaseAuth() {
+        try {
+            // Initialize Firebase Auth if not already initialized
+            if (FirebaseAuth.getInstance().getCurrentUser() == null) {
+                // Try to sign in anonymously for better permissions
+                FirebaseAuth.getInstance().signInAnonymously()
+                        .addOnSuccessListener(authResult -> {
+                            Log.d(TAG, "Anonymous auth success for Firestore access");
+                        })
+                        .addOnFailureListener(e -> {
+                            Log.e(TAG, "Anonymous auth failed", e);
+                        });
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error initializing Firebase Auth", e);
+        }
+    }
 
     // Unnecessary method
     private void setupDebugMode() {

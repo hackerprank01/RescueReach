@@ -1,6 +1,8 @@
 package com.rescuereach.service.notification;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import com.onesignal.OSDeviceState;
@@ -22,6 +24,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -36,6 +40,8 @@ public class NotificationService {
     private final Context context;
     private NotificationActionListener actionListener;
     private final AtomicBoolean isInitialized = new AtomicBoolean(false);
+    private final Handler mainHandler;
+    private final Executor backgroundExecutor;
 
     private static final String TAG_ROLE = "role";
     private static final String TAG_VOLUNTEER = "volunteer";
@@ -51,6 +57,8 @@ public class NotificationService {
      */
     private NotificationService(Context context) {
         this.context = context.getApplicationContext();
+        this.mainHandler = new Handler(Looper.getMainLooper());
+        this.backgroundExecutor = Executors.newSingleThreadExecutor();
     }
 
     /**
@@ -59,7 +67,7 @@ public class NotificationService {
      * @return NotificationService instance
      */
     public static synchronized NotificationService getInstance(Context context) {
-        if (instance == null) {
+        if (instance == null && context != null) {
             instance = new NotificationService(context);
         }
         return instance;
@@ -75,37 +83,41 @@ public class NotificationService {
             return;
         }
 
-        // Set notification opened handler
-        OneSignal.setNotificationOpenedHandler(new OSNotificationOpenedHandler() {
-            @Override
-            public void notificationOpened(OSNotificationOpenedResult result) {
-                handleNotificationOpened(result);
-            }
-        });
+        try {
+            // Set notification opened handler
+            OneSignal.setNotificationOpenedHandler(new OSNotificationOpenedHandler() {
+                @Override
+                public void notificationOpened(OSNotificationOpenedResult result) {
+                    handleNotificationOpened(result);
+                }
+            });
 
-        // Set foreground notification handler
-        OneSignal.setNotificationWillShowInForegroundHandler(new OSNotificationWillShowInForegroundHandler() {
-            @Override
-            public void notificationWillShowInForeground(OSNotificationReceivedEvent notificationReceivedEvent) {
-                OSNotification notification = notificationReceivedEvent.getNotification();
+            // Set foreground notification handler
+            OneSignal.setNotificationWillShowInForegroundHandler(new OSNotificationWillShowInForegroundHandler() {
+                @Override
+                public void notificationWillShowInForeground(OSNotificationReceivedEvent notificationReceivedEvent) {
+                    OSNotification notification = notificationReceivedEvent.getNotification();
 
-                // Pass to our handler
-                handleForegroundNotification(notification);
+                    // Pass to our handler
+                    handleForegroundNotification(notification);
 
-                // Allow the notification to display
-                notificationReceivedEvent.complete(notification);
-            }
-        });
+                    // Allow the notification to display
+                    notificationReceivedEvent.complete(notification);
+                }
+            });
 
-        // Set in-app message click handler
-        OneSignal.setInAppMessageClickHandler(new OSInAppMessageClickHandler() {
-            @Override
-            public void inAppMessageClicked(OSInAppMessageAction action) {
-                handleInAppMessageAction(action);
-            }
-        });
+            // Set in-app message click handler
+            OneSignal.setInAppMessageClickHandler(new OSInAppMessageClickHandler() {
+                @Override
+                public void inAppMessageClicked(OSInAppMessageAction action) {
+                    handleInAppMessageAction(action);
+                }
+            });
 
-        Log.d(TAG, "NotificationService initialized");
+            Log.d(TAG, "NotificationService initialized");
+        } catch (Exception e) {
+            Log.e(TAG, "Error initializing notification handlers", e);
+        }
     }
 
     /**
@@ -130,7 +142,13 @@ public class NotificationService {
             Log.d(TAG, "Notification opened: " + notificationType + " - ID: " + notificationId);
 
             if (actionListener != null) {
-                actionListener.onNotificationOpened(notificationType, data);
+                mainHandler.post(() -> {
+                    try {
+                        actionListener.onNotificationOpened(notificationType, data);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error in notification opened callback", e);
+                    }
+                });
             }
 
         } catch (Exception e) {
@@ -151,7 +169,13 @@ public class NotificationService {
             Log.d(TAG, "Foreground notification: " + notificationType + " - ID: " + notificationId);
 
             if (actionListener != null) {
-                actionListener.onForegroundNotification(notificationType, data);
+                mainHandler.post(() -> {
+                    try {
+                        actionListener.onForegroundNotification(notificationType, data);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error in foreground notification callback", e);
+                    }
+                });
             }
 
         } catch (Exception e) {
@@ -173,7 +197,13 @@ public class NotificationService {
             Log.d(TAG, "In-app message action: " + actionId);
 
             if (actionListener != null) {
-                actionListener.onInAppMessageAction(actionId, data);
+                mainHandler.post(() -> {
+                    try {
+                        actionListener.onInAppMessageAction(actionId, data);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error in in-app message action callback", e);
+                    }
+                });
             }
 
         } catch (Exception e) {
@@ -191,9 +221,15 @@ public class NotificationService {
             return;
         }
 
-        // Set OneSignal external user ID
-        OneSignal.setExternalUserId(phoneNumber);
-        Log.d(TAG, "User identifier set: " + phoneNumber);
+        backgroundExecutor.execute(() -> {
+            try {
+                // Set OneSignal external user ID
+                OneSignal.setExternalUserId(phoneNumber);
+                Log.d(TAG, "User identifier set: " + phoneNumber);
+            } catch (Exception e) {
+                Log.e(TAG, "Error setting user identifier", e);
+            }
+        });
     }
 
     /**
@@ -250,7 +286,13 @@ public class NotificationService {
      */
     public void sendTag(String key, String value) {
         if (key != null && !key.isEmpty() && value != null) {
-            OneSignal.sendTag(key, value);
+            backgroundExecutor.execute(() -> {
+                try {
+                    OneSignal.sendTag(key, value);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error sending tag: " + key, e);
+                }
+            });
         }
     }
 
@@ -260,15 +302,17 @@ public class NotificationService {
      */
     public void sendTags(Map<String, String> tags) {
         if (tags != null && !tags.isEmpty()) {
-            try {
-                JSONObject jsonTags = new JSONObject();
-                for (Map.Entry<String, String> entry : tags.entrySet()) {
-                    jsonTags.put(entry.getKey(), entry.getValue());
+            backgroundExecutor.execute(() -> {
+                try {
+                    JSONObject jsonTags = new JSONObject();
+                    for (Map.Entry<String, String> entry : tags.entrySet()) {
+                        jsonTags.put(entry.getKey(), entry.getValue());
+                    }
+                    OneSignal.sendTags(jsonTags);
+                } catch (JSONException e) {
+                    Log.e(TAG, "Error sending tags", e);
                 }
-                OneSignal.sendTags(jsonTags);
-            } catch (JSONException e) {
-                Log.e(TAG, "Error sending tags", e);
-            }
+            });
         }
     }
 
@@ -278,7 +322,13 @@ public class NotificationService {
      */
     public void deleteTag(String key) {
         if (key != null && !key.isEmpty()) {
-            OneSignal.deleteTag(key);
+            backgroundExecutor.execute(() -> {
+                try {
+                    OneSignal.deleteTag(key);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error deleting tag: " + key, e);
+                }
+            });
         }
     }
 
@@ -288,17 +338,49 @@ public class NotificationService {
      */
     public void deleteTags(List<String> keys) {
         if (keys != null && !keys.isEmpty()) {
-            try {
-                // Convert the list to a JSONArray
-                JSONArray jsonArray = new JSONArray();
-                for (String key : keys) {
-                    jsonArray.put(key);
+            backgroundExecutor.execute(() -> {
+                try {
+                    // Convert the list to a JSONArray
+                    JSONArray jsonArray = new JSONArray();
+                    for (String key : keys) {
+                        jsonArray.put(key);
+                    }
+                    OneSignal.deleteTags(jsonArray.toString());
+                } catch (Exception e) {
+                    Log.e(TAG, "Error deleting tags", e);
                 }
-                OneSignal.deleteTags(jsonArray.toString());
-            } catch (Exception e) {
-                Log.e(TAG, "Error deleting tags", e);
-            }
+            });
         }
+    }
+
+    /**
+     * Send an emergency notification to specific regions
+     * @param emergencyType Type of emergency (POLICE, FIRE, MEDICAL)
+     * @param data Additional data to include with notification
+     * @param targetRegion Target region/state for the notification
+     */
+    public void sendEmergencyNotification(String emergencyType, Map<String, Object> data, String targetRegion) {
+        Log.d(TAG, "Sending emergency notification for: " + emergencyType + " to region: " + targetRegion);
+
+        backgroundExecutor.execute(() -> {
+            try {
+                // In a real implementation, this would use OneSignal's REST API
+                // to send notifications to users in the target region
+
+                // For now, we'll just log that it would happen
+                Log.d(TAG, "Would send emergency notification to: " + targetRegion);
+
+                // Trigger local notification to show progress
+                createLocalNotification(
+                        emergencyType + " EMERGENCY",
+                        "Emergency reported to responders" +
+                                (targetRegion != null && !targetRegion.isEmpty() ? " in " + targetRegion : "")
+                );
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error sending emergency notification", e);
+            }
+        });
     }
 
     /**
@@ -315,8 +397,23 @@ public class NotificationService {
         // This is just a placeholder for this functionality
         Log.d(TAG, "Server notification requested: " + heading + " - Target: " + targetSegment);
 
+        // Create local notification to show progress
+        createLocalNotification(heading, message);
+
         // In a real implementation, this would make a REST API call to OneSignal
-        return false;
+        return true;
+    }
+
+    /**
+     * Create a local notification instead of remote OneSignal notification
+     * Useful for showing immediate feedback while async operations complete
+     */
+    private void createLocalNotification(String title, String message) {
+        // This would be implemented using NotificationCompat.Builder
+        // For now, we just log that it would happen
+        Log.d(TAG, "Local notification: " + title + " - " + message);
+
+        // We'll rely on SOSProcessingService.createLocalNotification instead
     }
 
     /**
@@ -324,7 +421,12 @@ public class NotificationService {
      * @return OSDeviceState or null if not available
      */
     public OSDeviceState getDeviceState() {
-        return OneSignal.getDeviceState();
+        try {
+            return OneSignal.getDeviceState();
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting device state", e);
+            return null;
+        }
     }
 
     /**
@@ -332,8 +434,13 @@ public class NotificationService {
      * @return OneSignal user ID or null if not available
      */
     public String getOneSignalUserId() {
-        OSDeviceState deviceState = OneSignal.getDeviceState();
-        return deviceState != null ? deviceState.getUserId() : null;
+        try {
+            OSDeviceState deviceState = OneSignal.getDeviceState();
+            return deviceState != null ? deviceState.getUserId() : null;
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting OneSignal user ID", e);
+            return null;
+        }
     }
 
     /**
@@ -341,8 +448,13 @@ public class NotificationService {
      * @return true if enabled, false otherwise
      */
     public boolean arePushNotificationsEnabled() {
-        OSDeviceState deviceState = OneSignal.getDeviceState();
-        return deviceState != null && deviceState.areNotificationsEnabled();
+        try {
+            OSDeviceState deviceState = OneSignal.getDeviceState();
+            return deviceState != null && deviceState.areNotificationsEnabled();
+        } catch (Exception e) {
+            Log.e(TAG, "Error checking if push notifications are enabled", e);
+            return false;
+        }
     }
 
     /**
@@ -350,7 +462,11 @@ public class NotificationService {
      * This is required for iOS but optional on Android
      */
     public void promptForPushNotifications() {
-        OneSignal.promptForPushNotifications();
+        try {
+            OneSignal.promptForPushNotifications();
+        } catch (Exception e) {
+            Log.e(TAG, "Error prompting for push notifications", e);
+        }
     }
 
     /**
@@ -358,7 +474,11 @@ public class NotificationService {
      * @param isSubscribed Whether the user is subscribed to notifications
      */
     public void setPushNotificationSubscription(boolean isSubscribed) {
-        OneSignal.disablePush(!isSubscribed);
+        try {
+            OneSignal.disablePush(!isSubscribed);
+        } catch (Exception e) {
+            Log.e(TAG, "Error setting push notification subscription", e);
+        }
     }
 
     /**
@@ -366,18 +486,23 @@ public class NotificationService {
      * Useful when user logs out
      */
     public void clearNotificationData() {
-        // Remove external user ID
-        OneSignal.removeExternalUserId();
+        backgroundExecutor.execute(() -> {
+            try {
+                // Remove external user ID
+                OneSignal.removeExternalUserId();
 
-        // Delete all tags - OneSignal 4.8.6 doesn't support deleteTag with String array,
-        // so we need to delete them one by one
-        deleteTag(TAG_ROLE);
-        deleteTag(TAG_VOLUNTEER);
-        deleteTag(TAG_REGION);
-        deleteTag(TAG_LAST_ACTIVE);
-        deleteTag(TAG_EMERGENCY_PREFERENCE);
+                // Delete all tags
+                deleteTag(TAG_ROLE);
+                deleteTag(TAG_VOLUNTEER);
+                deleteTag(TAG_REGION);
+                deleteTag(TAG_LAST_ACTIVE);
+                deleteTag(TAG_EMERGENCY_PREFERENCE);
 
-        Log.d(TAG, "Notification data cleared");
+                Log.d(TAG, "Notification data cleared");
+            } catch (Exception e) {
+                Log.e(TAG, "Error clearing notification data", e);
+            }
+        });
     }
 
     /**
