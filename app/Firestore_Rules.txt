@@ -11,48 +11,118 @@ service cloud.firestore {
              exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
     
-    // Critical update: Allow document reads by phone number
-    // but restrict modifications based on the contained userId field
+    function isResponder() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/responders/$(request.auth.uid));
+    }
+    
+    // Users collection - phone number based
     match /users/{phoneNumber} {
       // Allow any authenticated user to READ a user document
       // This is necessary for initial phone number lookup
       allow get, list: if isAuthenticated();
       
-      // But only allow updates if the document belongs to the current user
-      // based on the userId field inside the document
+      // Allow updates if the document belongs to the current user
       allow update, delete: if isAuthenticated() && 
-                             resource.data.userId == request.auth.uid;
+                             (resource.data.userId == request.auth.uid ||
+                             request.resource.data.userId == request.auth.uid);
       
       // Allow creation if the userId is set to the current user
       allow create: if isAuthenticated() && 
                     request.resource.data.userId == request.auth.uid;
     }
     
-    // Fix rules for other collections
-    match /incidents/{incidentId} {
-      // Admin can do everything
-      allow read, write, delete: if isAdmin();
-      
-      // Responders can update
-      allow update: if isAuthenticated() && 
-                    (resource.data.assignedTo == request.auth.uid || 
-                     exists(/databases/$(database)/documents/responders/$(request.auth.uid)));
-      
-      // Any authenticated user can read
-      allow read: if isAuthenticated();
-      
-      // Authenticated users can create new incidents
+    // CRITICAL FIX: SOS Reports Collection
+    // Fix the sos_reports permissions issue
+    match /sos_reports/{reportId} {
+      // Allow creation from any authenticated user
+      // This is necessary for emergency reporting
       allow create: if isAuthenticated();
+      
+      // Allow reading by any authenticated user
+      // This is necessary for emergency map and status display
+      allow get, list: if isAuthenticated();
+      
+      // Allow updates when:
+      // 1. The user is the creator of the report
+      // 2. The user is an admin
+      // 3. The user is a responder (for status updates)
+      allow update: if isAuthenticated() && 
+                      (resource.data.userId == request.auth.uid || 
+                       isAdmin() || 
+                       isResponder());
+                       
+      // Allow deletion by creator or admin
+      allow delete: if isAuthenticated() && 
+                      (resource.data.userId == request.auth.uid || isAdmin());
     }
     
-    // SOS collection that was missing from original rules
-    match /sos/{sosId} {
-      // Anyone can create an SOS
+    // Alternative SOS collection for compatibility
+    match /sos/{reportId} {
+      // Similar permissions as sos_reports
       allow create: if isAuthenticated();
+      allow get, list: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                      (resource.data.userId == request.auth.uid || 
+                       isAdmin() || 
+                       isResponder());
+      allow delete: if isAuthenticated() && 
+                      (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    
+    // SOS History Collection for Past Reports
+    match /sos_history/{userId} {
+      // Allow users to access their own history
+      allow read, write: if isAuthenticated() && userId == request.auth.uid;
       
-      // Only the creator or admin can read/update
-      allow read, update, delete: if isAuthenticated() && 
-                                  (resource.data.userId == request.auth.uid || isAdmin());
+      // Allow admins and responders to access all history
+      allow read: if isAuthenticated() && (isAdmin() || isResponder());
+      
+      // Allow subcollections with the same permissions
+      match /{document=**} {
+        allow read: if isAuthenticated() && 
+                      (userId == request.auth.uid || isAdmin() || isResponder());
+        allow write: if isAuthenticated() && userId == request.auth.uid;
+      }
+    }
+    
+    // System Status Collection
+    match /system_status/{userId} {
+      // Allow users to access their own status data
+      allow read, write: if isAuthenticated() && userId == request.auth.uid;
+      
+      // Nested collections (like locations)
+      match /{document=**} {
+        allow read, write: if isAuthenticated() && userId == request.auth.uid;
+      }
+    }
+    
+    // User Status Collection (for online/offline status)
+    match /user_status/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && userId == request.auth.uid;
+    }
+    
+    // Emergency Data
+    match /sos_data/{userId} {
+      allow read, write: if isAuthenticated() && userId == request.auth.uid;
+      allow read: if isAuthenticated() && (isAdmin() || isResponder());
+      
+      // Nested collections
+      match /{document=**} {
+        allow read: if isAuthenticated() && 
+                      (userId == request.auth.uid || isAdmin() || isResponder());
+        allow write: if isAuthenticated() && userId == request.auth.uid;
+      }
+    }
+    
+    // Incidents Collection
+    match /incidents/{incidentId} {
+      allow read, write, delete: if isAdmin();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                    (resource.data.assignedTo == request.auth.uid || isResponder());
     }
     
     // Admin users collection
@@ -61,17 +131,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // Keep existing rules for responders and volunteers
+    // Responders Collection
     match /responders/{responderId} {
-      allow read, write, delete: if isAdmin();
-      allow read, write: if isAuthenticated() && request.auth.uid == responderId;
       allow read: if isAuthenticated();
+      allow write, delete: if isAdmin();
+      allow write: if isAuthenticated() && request.auth.uid == responderId;
     }
     
+    // Volunteers Collection
     match /volunteers/{volunteerId} {
-      allow read, write, delete: if isAdmin();
-      allow read, write: if isAuthenticated() && request.auth.uid == volunteerId;
       allow read: if isAuthenticated();
+      allow write, delete: if isAdmin();
+      allow write: if isAuthenticated() && request.auth.uid == volunteerId;
+    }
+    
+    // Allow access to emergency config data
+    match /emergency_config/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }
