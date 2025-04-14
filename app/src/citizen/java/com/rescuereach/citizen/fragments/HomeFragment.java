@@ -34,20 +34,25 @@ import com.google.firebase.firestore.GeoPoint;
 import com.rescuereach.R;
 import com.rescuereach.RescueReachApplication;
 import com.rescuereach.citizen.dialogs.SOSConfirmationDialog;
+import com.rescuereach.citizen.dialogs.SOSStatusDialog;
 import com.rescuereach.data.model.SOSReport;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.service.notification.NotificationService;
 import com.rescuereach.service.sos.SOSDataCollectionService;
+import com.rescuereach.service.sos.SOSProcessingService;
 import com.rescuereach.util.LocationManager;
+import com.rescuereach.util.NetworkUtils;
 import com.rescuereach.util.PermissionManager;
 import com.rescuereach.util.SafetyTipProvider;
+import com.rescuereach.util.SharedPreferencesManager;
 
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 /**
  * Home screen fragment with emergency buttons and status information
@@ -55,6 +60,9 @@ import java.util.Locale;
 public class HomeFragment extends Fragment implements OnMapReadyCallback,
         NotificationService.NotificationActionListener {
     private static final String TAG = "HomeFragment";
+
+    private final Executor backgroundExecutor = Executors.newSingleThreadExecutor();
+
 
     // UI components
     private View rootView;
@@ -78,7 +86,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
     private ConnectivityManager connectivityManager;
     private NotificationService notificationService;
     private SOSDataCollectionService sosDataCollectionService;
+    private SOSProcessingService sosProcessingService;
     private UserSessionManager sessionManager;
+    private SharedPreferencesManager prefsManager;
     private Handler uiUpdateHandler;
     private Runnable statusUpdateRunnable;
     private boolean isMapReady = false;
@@ -118,6 +128,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         // Set safety tip
         updateSafetyTip();
 
+        // Check for active SOS reports
+        checkForActiveSOS();
+
         return rootView;
     }
 
@@ -127,6 +140,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         connectivityManager = (ConnectivityManager) requireContext()
                 .getSystemService(Context.CONNECTIVITY_SERVICE);
 
+        // Initialize shared preferences manager
+        prefsManager = new SharedPreferencesManager(requireContext());
+
         // Initialize notification service
         notificationService = ((RescueReachApplication) requireActivity().getApplication())
                 .getNotificationService();
@@ -134,6 +150,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
 
         // Initialize SOS data collection service
         sosDataCollectionService = new SOSDataCollectionService(requireContext());
+
+        // Initialize SOS processing service
+        sosProcessingService = new SOSProcessingService(requireContext());
 
         // Initialize session manager
         sessionManager = UserSessionManager.getInstance(requireContext());
@@ -161,6 +180,55 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
             // Update last active timestamp
             notificationService.updateLastActive();
         }
+    }
+
+    /**
+     * Check for any active SOS reports and show status dialog if needed
+     */
+    private void checkForActiveSOS() {
+        if (!isAdded() || getContext() == null) return;
+
+        String activeReportId = prefsManager.getString("active_sos_report_id", null);
+        if (activeReportId != null && !activeReportId.isEmpty()) {
+            showSOSStatusForReport(activeReportId);
+        }
+    }
+
+    /**
+     * Show SOS status dialog for a specific report ID
+     */
+    private void showSOSStatusForReport(String reportId) {
+        if (!isAdded() || getContext() == null) return;
+
+        // Create and show dialog for existing report
+        SOSStatusDialog dialog = new SOSStatusDialog(requireContext(), reportId);
+        dialog.setSOSStatusDialogListener(new SOSStatusDialog.SOSStatusDialogListener() {
+            @Override
+            public void onStatusChanged(String reportId, String newStatus) {
+                // Update UI or handle status change if needed
+                if (newStatus.equals(SOSReport.STATUS_RESOLVED)) {
+                    prefsManager.remove("active_sos_report_id");
+                }
+            }
+
+            @Override
+            public void onDismissed(String reportId, String currentStatus) {
+                // If the report is resolved or the dialog was closed, we might need to
+                // update something in the UI or perform cleanup
+                if (SOSReport.STATUS_RESOLVED.equals(currentStatus)) {
+                    prefsManager.remove("active_sos_report_id");
+                }
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                Toast.makeText(requireContext(),
+                        "Error loading SOS status: " + errorMessage,
+                        Toast.LENGTH_SHORT).show();
+                prefsManager.remove("active_sos_report_id");
+            }
+        });
+        dialog.show();
     }
 
     private void initializeUIComponents() {
@@ -220,11 +288,23 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         statusUpdateRunnable = new Runnable() {
             @Override
             public void run() {
-                updateNetworkStatus();
-                updateLocationStatus();
-                updateLastUpdatedTime();
+                // Avoid immediate UI updates by using background processing
+                backgroundExecutor.execute(() -> {
+                    // Check network and prepare state
+                    final boolean isOnline = NetworkUtils.isOnline(requireContext());
+                    final boolean hasLocationPermission = permissionManager.hasLocationPermissions(false);
 
-                // Schedule next update
+                    // Return to UI thread for actual updates
+                    uiUpdateHandler.post(() -> {
+                        if (!isAdded()) return;
+
+                        updateNetworkStatus();
+                        updateLocationStatus();
+                        updateLastUpdatedTime();
+                    });
+                });
+
+                // Schedule next update with longer interval to reduce CPU usage
                 uiUpdateHandler.postDelayed(this, STATUS_UPDATE_INTERVAL);
             }
         };
@@ -246,26 +326,36 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
     private void showSOSConfirmation(String emergencyType) {
         Log.d(TAG, "SOS button clicked for: " + emergencyType);
 
+        // Do quick check in-memory first
+        String activeReportId = prefsManager.getString("active_sos_report_id", null);
+        if (activeReportId != null && !activeReportId.isEmpty()) {
+            // Show the existing SOS status instead of creating a new one
+            showSOSStatusForReport(activeReportId);
+            return;
+        }
+
         // Check permissions before showing confirmation
+        // (keep this part on the main thread as it involves UI)
         checkPermissionsForSOS(() -> {
-            // Create and show SOS confirmation dialog
+            // Reduce object allocations by reusing dialog
             SOSConfirmationDialog dialog = new SOSConfirmationDialog(
                     requireContext(), emergencyType, new SOSConfirmationDialog.SOSDialogListener() {
                 @Override
                 public void onSOSConfirmed(String type) {
-                    // Handle SOS confirmation
-                    handleSOSConfirmation(type);
+                    // Move to background thread
+                    backgroundExecutor.execute(() -> handleSOSConfirmation(type));
                 }
 
                 @Override
                 public void onSOSCancelled() {
-                    // Handle SOS cancellation
+                    // No work needed for cancellation
                     Log.d(TAG, "SOS cancelled by user");
                 }
             });
             dialog.show();
         });
     }
+
 
     private void checkPermissionsForSOS(Runnable onPermissionsGranted) {
         // First check location permission
@@ -307,6 +397,8 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
     }
 
     private void handleSOSConfirmation(String emergencyType) {
+        if (!isAdded() || getContext() == null) return;
+
         Log.d(TAG, "SOS confirmed for: " + emergencyType);
 
         // Show toast to indicate processing
@@ -318,7 +410,10 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         sosDataCollectionService.collectSOSData(emergencyType, new SOSDataCollectionService.SOSDataCollectionListener() {
             @Override
             public void onDataCollectionComplete(SOSReport report) {
-                // Process the collected data
+                // Set online status based on current network
+                report.setOnline(NetworkUtils.isOnline(requireContext()));
+
+                // Process the collected data using SOSProcessingService
                 processSOSReport(report);
             }
 
@@ -338,30 +433,89 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
     private void processSOSReport(SOSReport report) {
         if (!isAdded() || getContext() == null) return;
 
-        if (report == null) {
-            Log.e(TAG, "Failed to process null SOS report");
-            Toast.makeText(requireContext(),
-                    getString(R.string.sos_processing_error),
-                    Toast.LENGTH_LONG).show();
-            return;
-        }
+        // Use proper background handling and avoid ANR
+        backgroundExecutor.execute(() -> {
+            // Process the SOS report using the processing service
+            sosProcessingService.processSOSReport(report, new SOSProcessingService.SOSProcessingListener() {
+                @Override
+                public void onProcessingComplete(final SOSReport processedReport) {
+                    if (!isAdded() || getContext() == null) return;
 
-        // For now, just show a success message
-        // This will be replaced with actual processing in next implementation phase
-        String emergencyType = report.getEmergencyType();
-        String locationString = (report.getAddress() != null) ? report.getAddress() :
-                String.format(Locale.US, "%.6f, %.6f",
-                        report.getLocation().getLatitude(),
-                        report.getLocation().getLongitude());
+                    // Return to UI thread for UI operations
+                    uiUpdateHandler.post(() -> {
+                        if (!isAdded() || getContext() == null) return;
 
-        Toast.makeText(requireContext(),
-                emergencyType + " emergency alert initiated at " + locationString,
-                Toast.LENGTH_LONG).show();
+                        // Update notification tags
+                        updateNotificationTags(processedReport);
 
-        // Update notification tags
+                        // Save the report ID to preferences to track active SOS
+                        if (processedReport.getReportId() != null) {
+                            prefsManager.putString("active_sos_report_id", processedReport.getReportId());
+                        }
+
+                        // Show the status dialog
+                        showSOSStatusDialog(processedReport);
+                    });
+                }
+
+                @Override
+                public void onProcessingFailed(final String errorMessage) {
+                    if (!isAdded()) return;
+
+                    // Return to UI thread for UI operations
+                    uiUpdateHandler.post(() -> {
+                        if (!isAdded() || getContext() == null) return;
+
+                        Toast.makeText(requireContext(),
+                                getString(R.string.sos_processing_error) + ": " + errorMessage,
+                                Toast.LENGTH_LONG).show();
+                    });
+                }
+            });
+        });
+    }
+
+
+
+
+    /**
+     * Show the SOS status dialog for a new report
+     */
+    private void showSOSStatusDialog(SOSReport report) {
+        if (!isAdded() || getContext() == null) return;
+
+        SOSStatusDialog dialog = new SOSStatusDialog(requireContext(), report);
+        dialog.setSOSStatusDialogListener(new SOSStatusDialog.SOSStatusDialogListener() {
+            @Override
+            public void onStatusChanged(String reportId, String newStatus) {
+                // Update UI if needed
+                if (newStatus.equals(SOSReport.STATUS_RESOLVED)) {
+                    prefsManager.remove("active_sos_report_id");
+                }
+            }
+
+            @Override
+            public void onDismissed(String reportId, String currentStatus) {
+                // Handle dialog dismissal
+                if (SOSReport.STATUS_RESOLVED.equals(currentStatus)) {
+                    prefsManager.remove("active_sos_report_id");
+                }
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                Toast.makeText(requireContext(),
+                        "Error updating SOS status: " + errorMessage,
+                        Toast.LENGTH_SHORT).show();
+            }
+        });
+        dialog.show();
+    }
+
+    private void updateNotificationTags(SOSReport report) {
         if (notificationService != null) {
             // Set emergency preference tag
-            notificationService.setEmergencyPreference(emergencyType);
+            notificationService.setEmergencyPreference(report.getEmergencyType());
 
             // Update last active timestamp
             notificationService.updateLastActive();
@@ -372,11 +526,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
                 notificationService.setUserRegion(report.getState());
             }
         }
-
-        // TODO: In the next implementation phase, we'll add:
-        // 1. Sending the report to Firebase
-        // 2. Dispatching notifications via OneSignal
-        // 3. Displaying the SOS status dialog
     }
 
     private void createFallbackSOSReport(String emergencyType) {
@@ -388,6 +537,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
             SOSReport report = new SOSReport();
             report.setEmergencyType(emergencyType);
             report.setLocation(new GeoPoint(lastLocation.getLatitude(), lastLocation.getLongitude()));
+            report.setOnline(NetworkUtils.isOnline(requireContext()));
+            report.setUserId(sessionManager.getSavedPhoneNumber());
+            report.setTimestamp(new Date());
 
             // Process this basic report
             processSOSReport(report);
@@ -457,10 +609,14 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
 
             Log.d(TAG, "Emergency notification: " + emergencyType + " (Report ID: " + reportId + ")");
 
-            // In a future implementation, this would navigate to emergency details screen
-            Toast.makeText(requireContext(),
-                    "Received " + emergencyType + " emergency alert",
-                    Toast.LENGTH_SHORT).show();
+            // If there's a report ID, show the status dialog
+            if (!reportId.isEmpty()) {
+                showSOSStatusForReport(reportId);
+            } else {
+                Toast.makeText(requireContext(),
+                        "Received " + emergencyType + " emergency alert",
+                        Toast.LENGTH_SHORT).show();
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error handling emergency notification", e);
         }
@@ -473,10 +629,15 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
 
             Log.d(TAG, "Status update notification: " + status + " (Report ID: " + reportId + ")");
 
-            // In a future implementation, this would update the status display in the UI
-            Toast.makeText(requireContext(),
-                    "Emergency status updated to: " + status,
-                    Toast.LENGTH_SHORT).show();
+            // If there's a report ID and it matches our active report, show the status dialog
+            String activeReportId = prefsManager.getString("active_sos_report_id", null);
+            if (reportId.equals(activeReportId)) {
+                showSOSStatusForReport(reportId);
+            } else {
+                Toast.makeText(requireContext(),
+                        "Emergency status updated to: " + status,
+                        Toast.LENGTH_SHORT).show();
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error handling status update notification", e);
         }
@@ -504,30 +665,17 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
     private void updateNetworkStatus() {
         if (!isAdded() || getContext() == null) return;
 
-        boolean isOnline = isNetworkAvailable();
+        boolean isOnline = NetworkUtils.isOnline(requireContext());
 
-        if (isOnline) {
-            networkStatus.setText(R.string.status_online);
-            networkStatus.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.badge_green));
-        } else {
-            networkStatus.setText(R.string.status_offline);
-            networkStatus.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.badge_red));
+        // Avoid unnecessary view updates
+        if (networkStatus != null) {
+            networkStatus.setText(isOnline ? R.string.status_online : R.string.status_offline);
+            networkStatus.setBackground(ContextCompat.getDrawable(requireContext(),
+                    isOnline ? R.drawable.badge_green : R.drawable.badge_red));
         }
 
         // Update overall status
         updateOverallStatus(isOnline);
-    }
-
-    private boolean isNetworkAvailable() {
-        if (connectivityManager == null) return false;
-
-        NetworkCapabilities capabilities = connectivityManager
-                .getNetworkCapabilities(connectivityManager.getActiveNetwork());
-
-        return capabilities != null &&
-                (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET));
     }
 
     private void updateLocationStatus() {
@@ -535,32 +683,39 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
 
         boolean hasPermission = permissionManager.hasLocationPermissions(false);
 
-        if (hasPermission) {
-            Location lastKnown = locationManager.getLastKnownLocation();
-            if (lastKnown != null) {
-                float accuracy = lastKnown.getAccuracy();
-                String accuracyText;
+        if (locationAccuracy != null) {
+            if (hasPermission) {
+                Location lastKnown = locationManager.getLastKnownLocation();
+                if (lastKnown != null) {
+                    float accuracy = lastKnown.getAccuracy();
+                    String accuracyText;
 
-                if (accuracy < 20) {
-                    accuracyText = getString(R.string.location_high_accuracy);
-                } else if (accuracy < 100) {
-                    accuracyText = getString(R.string.location_medium_accuracy);
+                    if (accuracy < 20) {
+                        accuracyText = getString(R.string.location_high_accuracy);
+                    } else if (accuracy < 100) {
+                        accuracyText = getString(R.string.location_medium_accuracy);
+                    } else {
+                        accuracyText = getString(R.string.location_low_accuracy);
+                    }
+
+                    locationAccuracy.setText(getString(R.string.location_status, accuracyText));
+
+                    // Only update current location if it's significantly different
+                    if (currentLocation == null ||
+                            currentLocation.distanceTo(lastKnown) > 5) { // 5 meters threshold
+                        currentLocation = lastKnown;
+                        updateMapWithCurrentLocation();
+                    }
                 } else {
-                    accuracyText = getString(R.string.location_low_accuracy);
+                    locationAccuracy.setText(getString(R.string.location_unavailable));
                 }
-
-                locationAccuracy.setText(getString(R.string.location_status, accuracyText));
-
-                // Update current location and map if available
-                currentLocation = lastKnown;
-                updateMapWithCurrentLocation();
             } else {
-                locationAccuracy.setText(getString(R.string.location_unavailable));
+                locationAccuracy.setText(getString(R.string.location_permission_required));
             }
-        } else {
-            locationAccuracy.setText(getString(R.string.location_permission_required));
         }
     }
+
+
 
     private void updateLastUpdatedTime() {
         if (!isAdded()) return;
@@ -635,7 +790,16 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
     }
 
     private void updateMapWithCurrentLocation() {
-        if (alertsGoogleMap != null && currentLocation != null) {
+        // Check if we're on the UI thread
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            uiUpdateHandler.post(this::doUpdateMapWithCurrentLocation);
+        } else {
+            doUpdateMapWithCurrentLocation();
+        }
+    }
+
+    private void doUpdateMapWithCurrentLocation() {
+        if (alertsGoogleMap != null && currentLocation != null && isMapReady) {
             LatLng latLng = new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude());
 
             // Clear previous markers
@@ -647,7 +811,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
                     .title(getString(R.string.your_location))
                     .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
 
-            // Move camera to show current location
+            // Move camera to show current location - avoid animations to prevent jank
             alertsGoogleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 14f));
         }
     }
@@ -688,6 +852,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         if (notificationService != null) {
             notificationService.updateLastActive();
         }
+
+        // Check for active SOS reports
+        checkForActiveSOS();
     }
 
     @Override

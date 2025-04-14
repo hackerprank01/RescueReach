@@ -6,49 +6,51 @@ import android.net.NetworkCapabilities;
 import android.os.Build;
 
 /**
- * Utility class for network-related operations
+ * Utility class for network operations
  */
 public class NetworkUtils {
 
     /**
-     * Check if the device has an active network connection
-     * @param context Application context
-     * @return true if network is available, false otherwise
+     * Check if the device is currently online
+     * @param context The application context
+     * @return true if online, false otherwise
      */
-    public static boolean isNetworkAvailable(Context context) {
-        if (context == null) return false;
+    public static boolean isOnline(Context context) {
+        ConnectivityManager connectivityManager =
+                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
 
-        ConnectivityManager connectivityManager = (ConnectivityManager)
-                context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) {
+            return false;
+        }
 
-        if (connectivityManager == null) return false;
+        NetworkCapabilities capabilities = connectivityManager
+                .getNetworkCapabilities(connectivityManager.getActiveNetwork());
 
-        NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(
-                connectivityManager.getActiveNetwork());
-
-        return capabilities != null && (
-                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+        return capabilities != null &&
+                (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
                         capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET));
     }
 
     /**
-     * Get the current network type
-     * @param context Application context
-     * @return String representing the network type ("WIFI", "CELLULAR", "ETHERNET", "OTHER", or "NONE")
+     * Get the current network type (WIFI, CELLULAR, etc)
+     * @param context The application context
+     * @return String describing the network type or "NONE" if offline
      */
     public static String getNetworkType(Context context) {
-        if (context == null) return "NONE";
+        ConnectivityManager connectivityManager =
+                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
 
-        ConnectivityManager connectivityManager = (ConnectivityManager)
-                context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) {
+            return "NONE";
+        }
 
-        if (connectivityManager == null) return "NONE";
+        NetworkCapabilities capabilities = connectivityManager
+                .getNetworkCapabilities(connectivityManager.getActiveNetwork());
 
-        NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(
-                connectivityManager.getActiveNetwork());
-
-        if (capabilities == null) return "NONE";
+        if (capabilities == null) {
+            return "NONE";
+        }
 
         if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
             return "WIFI";
@@ -56,6 +58,10 @@ public class NetworkUtils {
             return "CELLULAR";
         } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
             return "ETHERNET";
+        } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) {
+            return "BLUETOOTH";
+        } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+            return "VPN";
         } else {
             return "OTHER";
         }
@@ -63,24 +69,26 @@ public class NetworkUtils {
 
     /**
      * Check if the device has a high-bandwidth connection
-     * @param context Application context
-     * @return true if high-bandwidth connection is available
+     * @param context The application context
+     * @return true if high-bandwidth (good for sending media), false otherwise
      */
     public static boolean isHighBandwidthConnection(Context context) {
-        if (context == null) return false;
+        ConnectivityManager connectivityManager =
+                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
 
-        ConnectivityManager connectivityManager = (ConnectivityManager)
-                context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) {
+            return false;
+        }
 
-        if (connectivityManager == null) return false;
+        NetworkCapabilities capabilities = connectivityManager
+                .getNetworkCapabilities(connectivityManager.getActiveNetwork());
 
-        NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(
-                connectivityManager.getActiveNetwork());
+        if (capabilities == null) {
+            return false;
+        }
 
-        if (capabilities == null) return false;
-
-        // Check if the connection is unmetered (typically WiFi) or has high bandwidth
+        // Either high bandwidth or unmetered is suitable for media uploads
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) ||
-                capabilities.getLinkDownstreamBandwidthKbps() >= 1000;
+                capabilities.getLinkDownstreamBandwidthKbps() >= 1000; // At least 1Mbps
     }
 }

@@ -1,21 +1,17 @@
 package com.rescuereach.service.sos;
 
 import android.content.Context;
-import android.location.Location;
 import android.os.Handler;
 import android.os.Looper;
 import android.telephony.SmsManager;
 import android.util.Log;
 
-import com.google.firebase.firestore.DocumentReference;
-import com.google.firebase.firestore.FirebaseFirestore;
 import com.rescuereach.R;
 import com.rescuereach.RescueReachApplication;
 import com.rescuereach.data.model.SOSReport;
-import com.rescuereach.data.repository.SOSRepository;
+import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.data.repository.RepositoryProvider;
-import com.rescuereach.data.repository.SOSRepository.OnReportSavedListener;
-import com.rescuereach.data.repository.firebase.FirebaseSOSRepository;
+import com.rescuereach.data.repository.SOSRepository;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.service.notification.NotificationService;
 import com.rescuereach.service.notification.NotificationTemplates;
@@ -54,7 +50,7 @@ public class SOSProcessingService {
      */
     public SOSProcessingService(Context context) {
         this.context = context.getApplicationContext();
-        this.sosRepository = new FirebaseSOSRepository();
+        this.sosRepository = RepositoryProvider.getSOSRepository();
         this.notificationService = ((RescueReachApplication) context.getApplicationContext())
                 .getNotificationService();
         this.sessionManager = UserSessionManager.getInstance(context);
@@ -107,7 +103,7 @@ public class SOSProcessingService {
         Log.d(TAG, "Processing online SOS report");
 
         // Save to Firebase
-        sosRepository.saveSOSReport(report, new OnReportSavedListener() {
+        sosRepository.saveSOSReport(report, new SOSRepository.OnReportSavedListener() {
             @Override
             public void onSuccess(SOSReport savedReport) {
                 Log.d(TAG, "SOS report saved with ID: " + savedReport.getReportId());
@@ -380,7 +376,7 @@ public class SOSProcessingService {
         }
 
         sosRepository.updateSOSStatus(reportId, newStatus, responderInfo,
-                new com.rescuereach.data.repository.OnCompleteListener() {
+                new OnCompleteListener() {
                     @Override
                     public void onSuccess() {
                         // Get updated report to send status notification

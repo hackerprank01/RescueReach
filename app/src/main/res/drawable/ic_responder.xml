@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- Circle background with gradient -->
+    <group>
+        <path
+            android:name="background"
+            android:fillColor="@drawable/responder_gradient"
+            android:pathData="M24,0
+                              a24,24 0 1,0 0.1,0z"/>
+    </group>
+
+    <!-- Icon shape on top -->
+    <group>
+        <path
+            android:name="icon"
+            android:fillColor="#FFFFFF"
+            android:pathData="M24,12 L28,20 L36,20 L30,26 L32,34 L24,30 L16,34 L18,26 L12,20 L20,20 z"/>
+    </group>
+</vector>

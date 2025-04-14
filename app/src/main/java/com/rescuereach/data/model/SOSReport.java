@@ -26,6 +26,7 @@ public class SOSReport implements Serializable {
     private String state;
     @ServerTimestamp
     private Date timestamp;
+    private Date statusUpdatedAt; // Added field for status update timestamp
     private Map<String, Object> userInfo;
     private Map<String, Object> deviceInfo;
     private List<EmergencyService> nearbyServices; // Nearest relevant emergency services
@@ -54,6 +55,7 @@ public class SOSReport implements Serializable {
         this.deviceInfo = new HashMap<>();
         this.responderInfo = new HashMap<>();
         this.status = STATUS_PENDING;
+        this.statusUpdatedAt = new Date(); // Initialize status timestamp
     }
 
     // Constructor with essential fields
@@ -133,6 +135,15 @@ public class SOSReport implements Serializable {
         this.timestamp = timestamp;
     }
 
+    // New getter and setter for statusUpdatedAt
+    public Date getStatusUpdatedAt() {
+        return statusUpdatedAt;
+    }
+
+    public void setStatusUpdatedAt(Date statusUpdatedAt) {
+        this.statusUpdatedAt = statusUpdatedAt;
+    }
+
     public Map<String, Object> getUserInfo() {
         return userInfo;
     }
@@ -171,6 +182,7 @@ public class SOSReport implements Serializable {
 
     public void setStatus(String status) {
         this.status = status;
+        this.statusUpdatedAt = new Date(); // Update timestamp when status changes
     }
 
     public boolean isOnline() {

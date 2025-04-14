@@ -2,10 +2,6 @@ package com.rescuereach.data.repository.firebase;
 
 import android.util.Log;
 
-import androidx.annotation.NonNull;
-
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
 import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.CollectionReference;
 import com.google.firebase.firestore.DocumentReference;
@@ -13,12 +9,10 @@ import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
-import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.firestore.SetOptions;
 import com.google.firebase.firestore.WriteBatch;
-import com.rescuereach.data.model.EmergencyService;
 import com.rescuereach.data.model.SOSReport;
-import com.rescuereach.data.repository.OnCompleteListener as RepoCompleteListener;
+import com.rescuereach.data.repository.OnCompleteListener;
 import com.rescuereach.data.repository.SOSRepository;
 
 import java.util.ArrayList;
@@ -26,6 +20,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 
 /**
  * Firebase implementation of SOS Repository to store and manage emergency reports
@@ -161,7 +156,7 @@ public class FirebaseSOSRepository implements SOSRepository {
     }
 
     @Override
-    public void updateSOSReport(SOSReport report, RepoCompleteListener listener) {
+    public void updateSOSReport(SOSReport report, OnCompleteListener listener) {
         if (report == null || report.getReportId() == null || report.getReportId().isEmpty()) {
             if (listener != null) {
                 listener.onError(new IllegalArgumentException("Invalid report or report ID"));
@@ -188,7 +183,7 @@ public class FirebaseSOSRepository implements SOSRepository {
 
     @Override
     public void updateSOSStatus(String reportId, String newStatus,
-                                Object responderInfo, RepoCompleteListener listener) {
+                                Object responderInfo, OnCompleteListener listener) {
         if (reportId == null || reportId.isEmpty() || newStatus == null || newStatus.isEmpty()) {
             if (listener != null) {
                 listener.onError(new IllegalArgumentException("Invalid report ID or status"));
@@ -255,6 +250,8 @@ public class FirebaseSOSRepository implements SOSRepository {
                 });
     }
 
+// Inside FirebaseSOSRepository - optimize these methods:
+
     @Override
     public void getSOSReportById(String reportId, OnReportFetchedListener listener) {
         if (reportId == null || reportId.isEmpty()) {
@@ -264,13 +261,19 @@ public class FirebaseSOSRepository implements SOSRepository {
             return;
         }
 
-        reportsCollection.document(reportId).get()
+        // Use Task API for more efficient handling
+        reportsCollection.document(reportId)
+                .get()
                 .addOnSuccessListener(documentSnapshot -> {
                     if (documentSnapshot.exists()) {
-                        SOSReport report = documentSnapshot.toObject(SOSReport.class);
-                        if (listener != null) {
-                            listener.onSuccess(report);
-                        }
+                        // Use background thread for serialization
+                        Executors.newSingleThreadExecutor().execute(() -> {
+                            SOSReport report = documentSnapshot.toObject(SOSReport.class);
+                            // Return to calling thread
+                            if (listener != null) {
+                                listener.onSuccess(report);
+                            }
+                        });
                     } else {
                         if (listener != null) {
                             listener.onError(new Exception("Report not found"));
@@ -367,7 +370,7 @@ public class FirebaseSOSRepository implements SOSRepository {
     }
 
     @Override
-    public void addSOSComment(String reportId, String comment, String authorId, RepoCompleteListener listener) {
+    public void addSOSComment(String reportId, String comment, String authorId, OnCompleteListener listener) {
         if (reportId == null || reportId.isEmpty() || comment == null || comment.isEmpty()) {
             if (listener != null) {
                 listener.onError(new IllegalArgumentException("Invalid report ID or comment"));
@@ -411,7 +414,7 @@ public class FirebaseSOSRepository implements SOSRepository {
     }
 
     @Override
-    public void deleteSOSReport(String reportId, RepoCompleteListener listener) {
+    public void deleteSOSReport(String reportId, OnCompleteListener listener) {
         if (reportId == null || reportId.isEmpty()) {
             if (listener != null) {
                 listener.onError(new IllegalArgumentException("Invalid report ID"));

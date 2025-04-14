@@ -606,6 +606,35 @@
     <string name="already_max_radius">Already at maximum search radius</string>
     <string name="permission_settings">Settings</string>
 
+    <!-- SOS Status Dialog -->
+    <string name="report_id_format">Report #%s</string>
+    <string name="unknown">Unknown</string>
+    <string name="last_update_format">Last update: %s</string>
+    <string name="emergency_services">Emergency Services</string>
+    <string name="responder_message_received">Your emergency has been received. Help is being organized.</string>
+    <string name="responder_message_responding">Help is on the way to your location.</string>
+    <string name="responder_message_resolved">This emergency has been resolved.</string>
+    <string name="responder_message_default">Your emergency is being processed.</string>
+    <string name="close">Close</string>
+    <string name="minimize">Minimize</string>
+    <string name="status_pending_description">Your emergency has been reported and we are looking for responders in your area.</string>
+    <string name="status_received_description">Your emergency has been received by responders who are organizing assistance.</string>
+    <string name="status_responding_description">Help is on the way to your location. Please stay where you are if safe to do so.</string>
+    <string name="status_resolved_description">This emergency has been resolved. Thank you for using RescueReach.</string>
+    <string name="status_unknown_description">The status of your emergency is unknown. Please check back later for updates.</string>
+    <string name="cancel_emergency_title">Cancel Emergency?</string>
+    <string name="cancel_emergency_message">Are you sure you want to cancel this emergency? Only do this if the emergency has been resolved or was reported in error.</string>
+    <string name="emergency_cancelled">Emergency has been cancelled</string>
+    <string name="error_cancelling_emergency">Error cancelling emergency: %s</string>
+    <string name="current_status">Current Status</string>
+    <string name="status_updates">Status Updates</string>
+    <string name="location">Location</string>
+    <string name="reported_time">Reported Time</string>
+    <string name="cancel_emergency">Cancel</string>
+    <string name="emergency_status_title">Emergency Status</string>
+    <string name="responder_icon">Responder Icon</string>
+
+
 </resources>
 
 

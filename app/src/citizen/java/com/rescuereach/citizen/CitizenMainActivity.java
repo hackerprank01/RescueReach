@@ -57,6 +57,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
 import com.rescuereach.R;
 import com.rescuereach.citizen.fragments.HomeFragment;
+import com.rescuereach.citizen.fragments.MyReportsFragment;
 import com.rescuereach.citizen.fragments.PlaceholderFragment;
 import com.rescuereach.citizen.fragments.ProfileFragment;
 import com.rescuereach.citizen.fragments.SafetyFeaturesFragment;
@@ -749,10 +750,7 @@ public class CitizenMainActivity extends AppCompatActivity
             fragment = new HomeFragment();
         } else if (fragmentId == R.id.nav_my_reports) {
             title = getString(R.string.menu_my_reports);
-            fragment = PlaceholderFragment.newInstance(
-                    title,
-                    getString(R.string.placeholder_my_reports_description),
-                    R.drawable.ic_reports);
+            fragment = new MyReportsFragment();
         } else if (fragmentId == R.id.nav_volunteer_alerts) {
             // Check if user is volunteer before allowing navigation
             if (!sessionManager.isVolunteer()) {
