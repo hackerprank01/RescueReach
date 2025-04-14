@@ -277,16 +277,17 @@
                 app:backgroundTint="@color/emergency_red"
                 app:cornerRadius="8dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/button_close"
+            <Button
+                android:id="@+id/btnMinimize"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="@string/minimize"
-                android:textColor="@color/text_primary"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                app:cornerRadius="8dp" />
+                android:layout_marginEnd="4dp"
+                android:text="Minimize"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#262626"
+                android:alpha="0.85"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
         </LinearLayout>
 
         <!-- Loading Progress -->

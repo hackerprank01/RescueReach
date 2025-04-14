@@ -247,10 +247,15 @@ public class SOSReport implements Serializable {
         userInfo.put(key, value);
     }
 
+
     public void addDeviceInfo(String key, Object value) {
         if (deviceInfo == null) {
             deviceInfo = new HashMap<>();
         }
         deviceInfo.put(key, value);
     }
+
+//    public Object getPostalCode() {
+//        return getPostalCode();
+//    }
 }
