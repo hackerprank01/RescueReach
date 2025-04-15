@@ -617,6 +617,8 @@
     <string name="responder_message_default">Your emergency is being processed.</string>
     <string name="close">Close</string>
     <string name="minimize">Minimize</string>
+    <string name="status_canceled_description">Your emergency request has been canceled.</string>
+    <string name="status_canceled">Canceled</string>
     <string name="status_pending_description">Your emergency has been reported and we are looking for responders in your area.</string>
     <string name="status_received_description">Your emergency has been received by responders who are organizing assistance.</string>
     <string name="status_responding_description">Help is on the way to your location. Please stay where you are if safe to do so.</string>
@@ -636,6 +638,7 @@
     <string name="responder_icon">Responder Icon</string>
     <string name="search_error">An error occurred during search. Please try again.</string>
     <string name="tap_anywhere_to_cancel">Tap anywhere outside to cancel</string>
+    <string name="emergency_resolved">Emergency has been resolved</string>
 </resources>
 
 

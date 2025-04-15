@@ -20,19 +20,19 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.cardview.widget.CardView;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.ListenerRegistration;
@@ -58,6 +58,13 @@ public class SOSStatusDialog extends Dialog {
     private static final String TAG = "SOSStatusDialog";
 
     private Handler uiHandler = new Handler(Looper.getMainLooper());
+
+    // SharedPreferences for persistent state
+    private SharedPreferences prefs;
+    private static final String PREFS_NAME = "sos_dialog_prefs";
+    private static final String KEY_ACTIVE_SOS = "has_active_sos";
+    private static final String KEY_SOS_ID = "active_sos_report_id";
+    private static final String KEY_MINIMIZED = "sos_dialog_minimized";
 
     // UI components
     private ImageView imageEmergencyType;
@@ -85,12 +92,6 @@ public class SOSStatusDialog extends Dialog {
     private SOSStatusDialogListener listener;
     private boolean isClosed = false;
 
-    private SharedPreferences prefs;
-    private static final String PREFS_NAME = "sos_dialog_prefs";
-    private static final String KEY_ACTIVE_SOS = "has_active_sos";
-    private static final String KEY_SOS_ID = "active_sos_id";
-    private static final String KEY_MINIMIZED = "sos_dialog_minimized";
-
     // Constants
     private static final int STATUS_CHECK_INTERVAL = 10000; // 10 seconds
 
@@ -106,7 +107,11 @@ public class SOSStatusDialog extends Dialog {
         this.sosProcessingService = new SOSProcessingService(context);
         this.uiHandler = new Handler(Looper.getMainLooper());
 
+        // Initialize SharedPreferences
+        this.prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
 
+        // Reset minimize state immediately to ensure consistent behavior
+        this.prefs.edit().putBoolean(KEY_MINIMIZED, false).apply();
     }
 
     /**
@@ -121,6 +126,9 @@ public class SOSStatusDialog extends Dialog {
         this.sosRepository = RepositoryProvider.getSOSRepository();
         this.sosProcessingService = new SOSProcessingService(context);
         this.uiHandler = new Handler(Looper.getMainLooper());
+
+        // Initialize SharedPreferences
+        this.prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
     /**
@@ -156,16 +164,36 @@ public class SOSStatusDialog extends Dialog {
         initializeViews();
         setupClickListeners();
 
-        // Load the report
+        // Reset minimized state when showing dialog
+        prefs.edit().putBoolean(KEY_MINIMIZED, false).apply();
+
+        // Load the report - checking for canceled status first
         if (report != null) {
-            updateUI(report);
-            startStatusListener();
+            // Check if report is already canceled/resolved
+            boolean isFinalStatus = SOSReport.STATUS_CANCELED.equals(report.getStatus()) ||
+                    SOSReport.STATUS_RESOLVED.equals(report.getStatus());
+
+            if (isFinalStatus) {
+                // Report is already in final state, clear state and dismiss after showing briefly
+                updateUI(report);
+
+                // Show status briefly then dismiss
+                uiHandler.postDelayed(() -> {
+                    clearSOSState();
+                    dismiss();
+                }, 3000);
+            } else {
+                // Normal flow for active reports
+                updateUI(report);
+                startStatusListener();
+            }
         } else if (reportId != null && !reportId.isEmpty()) {
             loadReport(reportId);
         } else {
             handleError("Invalid report or report ID");
         }
     }
+
 
     private void initializeViews() {
         imageEmergencyType = findViewById(R.id.image_emergency_type);
@@ -188,23 +216,57 @@ public class SOSStatusDialog extends Dialog {
         cardResponderInfo.setVisibility(View.GONE);
     }
 
-    private void setupClickListeners() {
-        // Existing code...
-        buttonClose.setOnClickListener(v -> {
-            // Store minimized state in preferences for persistence
-            SharedPreferences prefs = getContext().getSharedPreferences(
-                    "sos_dialog_prefs", Context.MODE_PRIVATE);
-            prefs.edit()
-                    .putBoolean("has_active_sos", true)
-                    .putString("active_sos_id", reportId)
-                    .apply();
+    @Override
+    protected void onStart() {
+        super.onStart();
 
-            // Dismiss with a single click
-            dismiss();
+        // Apply window flags to improve responsiveness
+        if (getWindow() != null) {
+            getWindow().setFlags(
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            );
+
+            // Ensure dialog appears in front
+            getWindow().setFlags(
+                    WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
+                    WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+            );
+        }
+    }
+    private void setupClickListeners() {
+        // Set up minimize/close button with improved ONE-CLICK functionality
+        buttonClose.setOnClickListener(new View.OnClickListener() {
+            // Use flag to prevent double-click processing
+            private boolean isProcessing = false;
+
+            @Override
+            public void onClick(View v) {
+                // Prevent multiple rapid clicks
+                if (isProcessing) return;
+                isProcessing = true;
+
+                Log.d(TAG, "Close/minimize button clicked");
+
+                // Save the active report ID to preferences BEFORE dismissing
+                prefs.edit()
+                        .putBoolean(KEY_ACTIVE_SOS, true)
+                        .putString(KEY_SOS_ID, reportId)
+                        .putBoolean(KEY_MINIMIZED, true)
+                        .apply();
+
+                Log.d(TAG, "SOS dialog minimized: " + reportId);
+
+                // Schedule dismiss on next frame to ensure preferences are saved
+                v.post(() -> dismiss());
+            }
         });
 
+        // Set up cancel button with improved error handling
         buttonCancel.setOnClickListener(v -> {
-            // Cancel the emergency
+            Log.d(TAG, "Cancel button clicked");
+
+            // Check if cancellation is allowed based on current status
             if (report != null && !isStatusFinal(report.getStatus())) {
                 cancelEmergency();
             } else {
@@ -213,6 +275,7 @@ public class SOSStatusDialog extends Dialog {
         });
     }
 
+    // Helper method to check if status is final
     private boolean isStatusFinal(String status) {
         return SOSReport.STATUS_RESOLVED.equals(status) ||
                 SOSReport.STATUS_CANCELED.equals(status);
@@ -239,8 +302,24 @@ public class SOSStatusDialog extends Dialog {
                         progressBar.setVisibility(View.GONE);
 
                         if (report != null) {
-                            updateUI(report);
-                            startStatusListener();
+                            // Check if report is already canceled/resolved
+                            boolean isFinalStatus = SOSReport.STATUS_CANCELED.equals(report.getStatus()) ||
+                                    SOSReport.STATUS_RESOLVED.equals(report.getStatus());
+
+                            if (isFinalStatus) {
+                                // Report is already in final state
+                                updateUI(report);
+
+                                // Show status briefly then dismiss
+                                uiHandler.postDelayed(() -> {
+                                    clearSOSState();
+                                    dismiss();
+                                }, 3000);
+                            } else {
+                                // Normal flow for active reports
+                                updateUI(report);
+                                startStatusListener();
+                            }
                         } else {
                             handleError("Report not found");
                         }
@@ -258,6 +337,9 @@ public class SOSStatusDialog extends Dialog {
                         Log.e(TAG, "Error loading report", e);
                         progressBar.setVisibility(View.GONE);
                         handleError("Failed to load emergency information: " + e.getMessage());
+
+                        // Clear state on error
+                        clearSOSState();
                     });
                 }
             });
@@ -294,9 +376,6 @@ public class SOSStatusDialog extends Dialog {
                         try {
                             final SOSReport updatedReport = snapshot.toObject(SOSReport.class);
                             if (updatedReport != null) {
-                                // Make sure reportId is set since @DocumentId might not work
-                                updatedReport.setReportId(snapshot.getId());
-
                                 // Check if status actually changed
                                 final boolean statusChanged = report == null ||
                                         !updatedReport.getStatus().equals(report.getStatus());
@@ -312,6 +391,31 @@ public class SOSStatusDialog extends Dialog {
                                         // Notify listener of status changes
                                         if (statusChanged && listener != null) {
                                             listener.onStatusChanged(reportId, updatedReport.getStatus());
+
+                                            // AUTO-CLOSE: If status is CANCELED or RESOLVED, close the dialog
+                                            if (SOSReport.STATUS_CANCELED.equals(updatedReport.getStatus()) ||
+                                                    SOSReport.STATUS_RESOLVED.equals(updatedReport.getStatus())) {
+
+                                                Log.d(TAG, "Auto-closing dialog due to final status: " +
+                                                        updatedReport.getStatus());
+
+                                                // Show a message first
+                                                ToastUtil.showShort(getContext(),
+                                                        getContext().getString(
+                                                                SOSReport.STATUS_CANCELED.equals(updatedReport.getStatus()) ?
+                                                                        R.string.emergency_cancelled :
+                                                                        R.string.emergency_resolved
+                                                        )
+                                                );
+
+                                                // Wait 2 seconds before closing to allow user to see the status
+                                                uiHandler.postDelayed(() -> {
+                                                    // Clear SOS state
+                                                    clearSOSState();
+                                                    // Dismiss dialog
+                                                    dismiss();
+                                                }, 2000);
+                                            }
                                         }
                                     }
                                 });
@@ -391,22 +495,8 @@ public class SOSStatusDialog extends Dialog {
             }
 
             // Update last status change time
-            Date statusUpdatedAt = null;
-            try {
-                // Try to get statusUpdatedAt from report, might not exist
-                if (report.getClass().getMethod("getStatusUpdatedAt") != null) {
-                    statusUpdatedAt = (Date)report.getClass().getMethod("getStatusUpdatedAt").invoke(report);
-                }
-            } catch (Exception e) {
-                // Method doesn't exist, ignore
-                statusUpdatedAt = null;
-            }
-
-            if (statusUpdatedAt != null) {
-                String timeAgo = TimeUtils.getTimeAgo(statusUpdatedAt, getContext());
-                textLastUpdate.setText(getContext().getString(R.string.last_update_format, timeAgo));
-            } else if (report.getTimestamp() != null) {
-                String timeAgo = TimeUtils.getTimeAgo(report.getTimestamp(), getContext());
+            if (report.getStatusUpdatedAt() != null) {
+                String timeAgo = TimeUtils.getTimeAgo(report.getStatusUpdatedAt(), getContext());
                 textLastUpdate.setText(getContext().getString(R.string.last_update_format, timeAgo));
             } else {
                 textLastUpdate.setText(getContext().getString(R.string.last_update_format, "just now"));
@@ -494,6 +584,11 @@ public class SOSStatusDialog extends Dialog {
                 descriptionResId = R.string.status_resolved_description;
                 textStatus.setText(R.string.status_resolved);
                 break;
+            case SOSReport.STATUS_CANCELED:
+                colorResId = R.color.red_error;
+                descriptionResId = R.string.status_canceled_description;
+                textStatus.setText(R.string.status_canceled);
+                break;
             default:
                 colorResId = R.color.warning_yellow;
                 descriptionResId = R.string.status_unknown_description;
@@ -506,84 +601,73 @@ public class SOSStatusDialog extends Dialog {
     }
 
     /**
-     * Cancel the emergency (mark as resolved)
+     * Cancel the emergency (mark as canceled)
      */
     private void cancelEmergency() {
         // Show confirmation dialog
-        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(getContext());
         builder.setTitle(R.string.cancel_emergency_title)
                 .setMessage(R.string.cancel_emergency_message)
                 .setPositiveButton(R.string.yes, (dialog, which) -> {
-                    // Proceed with cancellation
-                    proceedWithCancellation();
+                    // Proceed with cancellation using direct Firestore operations
+                    performCancellation();
                 })
                 .setNegativeButton(R.string.no, null)
                 .show();
     }
 
     /**
-     * Proceed with emergency cancellation after confirmation
-     * FIXED: Added proper authentication before cancellation
-     */
-    private void proceedWithCancellation() {
-        if (reportId == null || reportId.isEmpty()) return;
-
-        progressBar.setVisibility(View.VISIBLE);
-
-        // First ensure we're authenticated
-        FirebaseAuth auth = FirebaseAuth.getInstance();
-        if (auth.getCurrentUser() == null) {
-            // Try to authenticate anonymously first
-            auth.signInAnonymously()
-                    .addOnSuccessListener(result -> {
-                        // Now proceed with cancellation
-                        performCancellation();
-                    })
-                    .addOnFailureListener(e -> {
-                        Log.e(TAG, "Failed to authenticate for cancellation", e);
-                        progressBar.setVisibility(View.GONE);
-                        ToastUtil.showShort(getContext(), "Authentication failed. Please try again.");
-                    });
-        } else {
-            // Already authenticated, proceed directly
-            performCancellation();
-        }
-    }
-
-    /**
-     * Actually perform the cancellation after authentication
+     * Directly perform cancellation using Firestore operations
+     * This bypasses the SOSRepository and SOSProcessingService for better reliability
      */
     private void performCancellation() {
         if (reportId == null || reportId.isEmpty()) return;
 
         progressBar.setVisibility(View.VISIBLE);
 
-        // Don't use anonymous auth - it's causing admin permission errors
-        // Instead use direct Firebase operations with the current user
-
         try {
             FirebaseFirestore db = FirebaseFirestore.getInstance();
             DocumentReference reportRef = db.collection("sos_reports").document(reportId);
 
-            // Create a simple update that only changes the status field
+            // Prepare a minimal update that just changes the status
             Map<String, Object> updates = new HashMap<>();
             updates.put("status", SOSReport.STATUS_CANCELED);
             updates.put("statusUpdatedAt", new Date());
 
-            // Add cancellation metadata
-            Map<String, Object> cancellationInfo = new HashMap<>();
-            cancellationInfo.put("cancelledBy", "user");
-            cancellationInfo.put("cancelledAt", new Date());
-            cancellationInfo.put("reason", "user_cancelled");
-            updates.put("cancellationInfo", cancellationInfo);
-
-            // Update only specific fields instead of the whole document
+            // Update the document
             reportRef.update(updates)
                     .addOnSuccessListener(aVoid -> {
-                        // Success - update UI
+                        // Success!
+                        Log.d(TAG, "Successfully canceled SOS report");
+
+                        // Update UI
                         progressBar.setVisibility(View.GONE);
 
-                        // Also remove from active emergencies in RTDB manually
+                        // Update local report state
+                        if (report != null) {
+                            report.setStatus(SOSReport.STATUS_CANCELED);
+                        }
+
+                        // Update UI to reflect cancellation
+                        updateStatus(SOSReport.STATUS_CANCELED);
+                        buttonCancel.setVisibility(View.GONE);
+
+                        // Change close button text
+                        buttonClose.setText(R.string.close);
+
+                        // Clear active SOS state
+                        clearSOSState();
+
+                        // Show success message
+                        ToastUtil.showShort(getContext(),
+                                getContext().getString(R.string.emergency_cancelled));
+
+                        // Notify listener
+                        if (listener != null) {
+                            listener.onStatusChanged(reportId, SOSReport.STATUS_CANCELED);
+                        }
+
+                        // Also clean up the RTDB
                         try {
                             FirebaseDatabase.getInstance()
                                     .getReference("active_emergencies")
@@ -591,49 +675,57 @@ public class SOSStatusDialog extends Dialog {
                                     .removeValue();
                         } catch (Exception e) {
                             Log.e(TAG, "Error removing from active emergencies", e);
-                            // Continue anyway since Firestore update succeeded
                         }
 
-                        if (listener != null) {
-                            listener.onStatusChanged(reportId, SOSReport.STATUS_CANCELED);
-                        }
-
-                        ToastUtil.showShort(getContext(),
-                                getContext().getString(R.string.emergency_cancelled));
-
-                        // Mark report as cancelled locally too
-                        if (report != null) {
-                            report.setStatus(SOSReport.STATUS_CANCELED);
-                        }
-
-                        // Update the UI to reflect cancellation
-                        updateStatus(SOSReport.STATUS_CANCELED);
-                        buttonCancel.setVisibility(View.GONE);
-
-                        // Allow dialog to be dismissed now
-                        buttonClose.setText(R.string.close);
+                        // Auto-dismiss dialog after 2 seconds
+                        uiHandler.postDelayed(() -> {
+                            dismiss();
+                        }, 2000);
                     })
                     .addOnFailureListener(e -> {
-                        Log.e(TAG, "Error cancelling SOS", e);
+                        // Handle failure
+                        Log.e(TAG, "Failed to cancel SOS report", e);
                         progressBar.setVisibility(View.GONE);
-
-                        // Show a more user-friendly error message
                         ToastUtil.showShort(getContext(),
-                                "Couldn't cancel emergency. Please try again.");
+                                "Could not cancel emergency: " + e.getMessage());
                     });
         } catch (Exception e) {
-            Log.e(TAG, "Error in performCancellation", e);
+            Log.e(TAG, "Exception in performCancellation", e);
             progressBar.setVisibility(View.GONE);
             ToastUtil.showShort(getContext(), "An error occurred. Please try again.");
         }
     }
 
+    /**
+     * Clear the active SOS state when resolved or cancelled
+     */
+    private void clearSOSState() {
+        // Clear from preferences
+        prefs.edit()
+                .remove(KEY_ACTIVE_SOS)
+                .remove(KEY_SOS_ID)
+                .remove(KEY_MINIMIZED)
+                .apply();
+
+        // Also clear from the main shared preferences to ensure consistency
+        Context context = getContext();
+        if (context != null) {
+            SharedPreferences mainPrefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE);
+            mainPrefs.edit()
+                    .remove("active_sos_report_id")
+                    .remove("sos_dialog_minimized")
+                    .putBoolean("has_active_sos", false)
+                    .apply();
+        }
+
+        Log.d(TAG, "Cleared all SOS state data from dialog");
+    }
 
     /**
-     * Handle errors with safe toast display
+     * Handle errors
      */
     private void handleError(String errorMessage) {
-        ToastUtil.showShort(getContext(), errorMessage);
+        Toast.makeText(getContext(), errorMessage, Toast.LENGTH_SHORT).show();
         if (listener != null) {
             listener.onError(errorMessage);
         }
@@ -653,6 +745,24 @@ public class SOSStatusDialog extends Dialog {
 
         isClosed = true;
         removeStatusListener();
+
+        // Check if we're dismissing with a final status
+        boolean isFinalStatus = (report != null &&
+                (SOSReport.STATUS_RESOLVED.equals(report.getStatus()) ||
+                        SOSReport.STATUS_CANCELED.equals(report.getStatus())));
+
+        if (isFinalStatus) {
+            // Clear the state if resolved or cancelled
+            clearSOSState();
+            Log.d(TAG, "Cleared SOS state on final status: " +
+                    (report != null ? report.getStatus() : "unknown"));
+        } else {
+            // Otherwise mark as minimized
+            prefs.edit()
+                    .putBoolean(KEY_MINIMIZED, true)
+                    .apply();
+            Log.d(TAG, "Marked SOS dialog as minimized");
+        }
 
         // Use handler to prevent window focus ANRs
         if (listener != null && report != null) {

@@ -1,6 +1,7 @@
 package com.rescuereach.citizen.fragments;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
@@ -30,6 +31,8 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MapStyleOptions;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.material.button.MaterialButton;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import com.rescuereach.R;
 import com.rescuereach.RescueReachApplication;
@@ -190,12 +193,56 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         if (!isAdded() || getContext() == null) return;
 
         String activeReportId = prefsManager.getString("active_sos_report_id", null);
-        boolean isMinimized = prefsManager.getBoolean("sos_dialog_minimized", false);
 
-        if (activeReportId != null && !activeReportId.isEmpty() && !isMinimized) {
-            // Only show dialog if it's not minimized
-            showSOSStatusForReport(activeReportId);
+        // If no active report, just return
+        if (activeReportId == null || activeReportId.isEmpty()) {
+            return;
         }
+
+        // Before showing dialog, check if report is actually active (not canceled/resolved)
+        new Thread(() -> {
+            try {
+                DocumentReference reportRef = FirebaseFirestore.getInstance()
+                        .collection("sos_reports")
+                        .document(activeReportId);
+
+                reportRef.get().addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        SOSReport report = documentSnapshot.toObject(SOSReport.class);
+                        if (report != null) {
+                            boolean isFinalStatus = SOSReport.STATUS_CANCELED.equals(report.getStatus()) ||
+                                    SOSReport.STATUS_RESOLVED.equals(report.getStatus());
+
+                            if (isFinalStatus) {
+                                // Report is canceled or resolved, clear state
+                                Log.d(TAG, "Found inactive SOS report, clearing state: " + activeReportId);
+                                clearSOSState();
+                            } else {
+                                // Only show dialog if not minimized
+                                boolean isMinimized = prefsManager.getBoolean("sos_dialog_minimized", false);
+                                if (!isMinimized) {
+                                    // Show dialog on UI thread
+                                    uiUpdateHandler.post(() -> showSOSStatusForReport(activeReportId));
+                                }
+                            }
+                        } else {
+                            // Invalid report, clear state
+                            clearSOSState();
+                        }
+                    } else {
+                        // Report doesn't exist anymore, clear state
+                        clearSOSState();
+                    }
+                }).addOnFailureListener(e -> {
+                    // Error checking report status, clear state to be safe
+                    clearSOSState();
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "Error checking active SOS", e);
+                // On error, clear state to be safe
+                clearSOSState();
+            }
+        }).start();
     }
 
     /**
@@ -339,15 +386,59 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
 
         // Check if there's already an active SOS report
         String activeReportId = prefsManager.getString("active_sos_report_id", null);
-        boolean isMinimized = prefsManager.getBoolean("sos_dialog_minimized", false);
-
         if (activeReportId != null && !activeReportId.isEmpty()) {
-            // Show the existing SOS status dialog
-            prefsManager.putBoolean("sos_dialog_minimized", false); // No longer minimized
-            showSOSStatusForReport(activeReportId);
-            return;
-        }
+            // Before showing existing dialog, verify report is still active
+            new Thread(() -> {
+                try {
+                    DocumentReference reportRef = FirebaseFirestore.getInstance()
+                            .collection("sos_reports")
+                            .document(activeReportId);
 
+                    reportRef.get().addOnSuccessListener(documentSnapshot -> {
+                        if (documentSnapshot.exists()) {
+                            SOSReport report = documentSnapshot.toObject(SOSReport.class);
+                            if (report != null) {
+                                boolean isFinalStatus = SOSReport.STATUS_CANCELED.equals(report.getStatus()) ||
+                                        SOSReport.STATUS_RESOLVED.equals(report.getStatus());
+
+                                if (isFinalStatus) {
+                                    // Report is inactive, clear state and allow new SOS
+                                    clearSOSState();
+                                    uiUpdateHandler.post(() -> proceedWithSOSConfirmation(emergencyType));
+                                } else {
+                                    // Report is active, show status dialog
+                                    prefsManager.putBoolean("sos_dialog_minimized", false); // No longer minimized
+                                    uiUpdateHandler.post(() -> showSOSStatusForReport(activeReportId));
+                                }
+                            } else {
+                                // Invalid report, clear state and allow new SOS
+                                clearSOSState();
+                                uiUpdateHandler.post(() -> proceedWithSOSConfirmation(emergencyType));
+                            }
+                        } else {
+                            // Report doesn't exist anymore, clear state and allow new SOS
+                            clearSOSState();
+                            uiUpdateHandler.post(() -> proceedWithSOSConfirmation(emergencyType));
+                        }
+                    }).addOnFailureListener(e -> {
+                        // Error checking report status, allow new SOS
+                        clearSOSState();
+                        uiUpdateHandler.post(() -> proceedWithSOSConfirmation(emergencyType));
+                    });
+                } catch (Exception e) {
+                    Log.e(TAG, "Error checking active SOS", e);
+                    // On error, allow new SOS
+                    clearSOSState();
+                    uiUpdateHandler.post(() -> proceedWithSOSConfirmation(emergencyType));
+                }
+            }).start();
+        } else {
+            // No active SOS, proceed with new confirmation
+            proceedWithSOSConfirmation(emergencyType);
+        }
+    }
+
+    private void proceedWithSOSConfirmation(String emergencyType) {
         // Simplified permission flow to avoid double-click issue
         if (!permissionManager.hasLocationPermissions(false)) {
             permissionManager.requestLocationPermissions(getActivity(), false,
@@ -512,11 +603,28 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
     private void showSOSStatusDialog(SOSReport report) {
         if (!isAdded() || getContext() == null) return;
 
+        // Ensure we're on the main thread for UI operations
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            uiUpdateHandler.post(() -> showSOSStatusDialog(report));
+            return;
+        }
+
+        // Create the dialog with improved initialization
+        SharedPreferences prefs = requireContext().getSharedPreferences("sos_dialog_prefs", Context.MODE_PRIVATE);
+
+        // Reset minimized state before showing dialog
+        prefs.edit()
+                .putBoolean("sos_dialog_minimized", false)
+                .putString("active_sos_report_id", report.getReportId())
+                .putBoolean("has_active_sos", true)
+                .apply();
+
+        // Create dialog with improved settings
         SOSStatusDialog dialog = new SOSStatusDialog(requireContext(), report);
         dialog.setSOSStatusDialogListener(new SOSStatusDialog.SOSStatusDialogListener() {
             @Override
             public void onStatusChanged(String reportId, String newStatus) {
-                // Update UI if needed
+                // Check for final statuses
                 if (SOSReport.STATUS_RESOLVED.equals(newStatus) ||
                         SOSReport.STATUS_CANCELED.equals(newStatus)) {
                     clearSOSState();
@@ -525,13 +633,13 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
 
             @Override
             public void onDismissed(String reportId, String currentStatus) {
-                // Handle dialog dismissal - either resolved/canceled or minimized
+                // Handle dialog dismissal
                 if (SOSReport.STATUS_RESOLVED.equals(currentStatus) ||
                         SOSReport.STATUS_CANCELED.equals(currentStatus)) {
                     clearSOSState();
                 } else {
-                    // Dialog was minimized
-                    prefsManager.putBoolean("sos_dialog_minimized", true);
+                    // Ensure minimized flag is set
+                    prefs.edit().putBoolean("sos_dialog_minimized", true).apply();
                 }
             }
 
@@ -543,14 +651,25 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
             }
         });
 
-        // Reset minimized state when showing dialog
-        prefsManager.putBoolean("sos_dialog_minimized", false);
-        dialog.show();
+        // Show dialog after a very short delay to ensure UI is ready
+        uiUpdateHandler.postDelayed(dialog::show, 50);
     }
 
     private void clearSOSState() {
+        // Clear all SOS-related preferences
         prefsManager.remove("active_sos_report_id");
-        prefsManager.putBoolean("sos_dialog_minimized", false);
+        prefsManager.remove("sos_dialog_minimized");
+        prefsManager.putBoolean("has_active_sos", false);
+
+        Log.d(TAG, "Cleared all SOS state data");
+
+        // Also clear from shared preferences directly to ensure consistency
+        SharedPreferences prefs = requireContext().getSharedPreferences("sos_dialog_prefs", Context.MODE_PRIVATE);
+        prefs.edit()
+                .remove("active_sos_report_id")
+                .remove("sos_dialog_minimized")
+                .putBoolean("has_active_sos", false)
+                .apply();
     }
 
     private void updateNotificationTags(SOSReport report) {
@@ -568,6 +687,8 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
             }
         }
     }
+
+
 
     private void createFallbackSOSReport(String emergencyType) {
         if (!isAdded() || getContext() == null) return;
@@ -909,6 +1030,8 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         updateNetworkStatus();
         updateLocationStatus();
         updateLastUpdatedTime();
+        checkForActiveSOS();
+
     }
 
     @Override
