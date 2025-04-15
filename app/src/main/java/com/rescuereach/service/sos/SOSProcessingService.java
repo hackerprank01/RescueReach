@@ -20,7 +20,11 @@ import androidx.core.app.NotificationCompat;
 
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.rescuereach.BuildConfig;
 import com.rescuereach.R;
 import com.rescuereach.RescueReachApplication;
@@ -270,6 +274,70 @@ public class SOSProcessingService {
         return fallback;
     }
 
+    public void cancelSOS(String reportId, SOSStatusUpdateListener listener) {
+        if (reportId == null || reportId.isEmpty()) {
+            if (listener != null) {
+                listener.onStatusUpdateFailed("Invalid report ID");
+            }
+            return;
+        }
+
+        try {
+            FirebaseFirestore db = FirebaseFirestore.getInstance();
+            DocumentReference reportRef = db.collection("sos_reports").document(reportId);
+
+            // Create a simple update that only changes the status field
+            Map<String, Object> updates = new HashMap<>();
+            updates.put("status", SOSReport.STATUS_CANCELED);
+            updates.put("statusUpdatedAt", new Date());
+
+            // Add cancellation metadata
+            Map<String, Object> cancellationInfo = new HashMap<>();
+            cancellationInfo.put("cancelledBy", "user");
+            cancellationInfo.put("cancelledAt", new Date());
+            cancellationInfo.put("reason", "user_cancelled");
+            updates.put("cancellationInfo", cancellationInfo);
+
+            // Update only specific fields instead of the whole document
+            reportRef.update(updates)
+                    .addOnSuccessListener(aVoid -> {
+                        // Success - also remove from active emergencies
+                        try {
+                            FirebaseDatabase.getInstance()
+                                    .getReference("active_emergencies")
+                                    .child(reportId)
+                                    .removeValue();
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error removing from active emergencies", e);
+                            // Continue anyway since Firestore update succeeded
+                        }
+
+                        // Create basic report to return to caller
+                        SOSReport report = new SOSReport();
+                        report.setReportId(reportId);
+                        report.setStatus(SOSReport.STATUS_CANCELED);
+                        report.setStatusUpdatedAt(new Date());
+
+                        if (listener != null) {
+                            listener.onStatusUpdated(report);
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e(TAG, "Error cancelling SOS", e);
+
+                        if (listener != null) {
+                            listener.onStatusUpdateFailed(e.getMessage());
+                        }
+                    });
+        } catch (Exception e) {
+            Log.e(TAG, "Error in cancelSOS", e);
+
+            if (listener != null) {
+                listener.onStatusUpdateFailed(e.getMessage());
+            }
+        }
+    }
+
     /**
      * Process an SOS report when offline
      */
@@ -309,6 +377,81 @@ public class SOSProcessingService {
         }
     }
 
+    private void updateSOSStatusWithAuth(String reportId, String newStatus, SOSStatusUpdateListener listener) {
+        // First ensure we're authenticated
+        FirebaseAuth auth = FirebaseAuth.getInstance();
+        if (auth.getCurrentUser() == null) {
+            // Try to authenticate anonymously first
+            auth.signInAnonymously()
+                    .addOnSuccessListener(result -> {
+                        // Now proceed with update after authentication
+                        performStatusUpdate(reportId, newStatus, listener);
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e(TAG, "Failed to authenticate for status update", e);
+                        if (listener != null) {
+                            listener.onStatusUpdateFailed("Authentication failed: " + e.getMessage());
+                        }
+                    });
+        } else {
+            // Already authenticated, proceed directly
+            performStatusUpdate(reportId, newStatus, listener);
+        }
+    }
+
+    private void performStatusUpdate(String reportId, String newStatus, SOSStatusUpdateListener listener) {
+        // Create responder info with current user details
+        Map<String, Object> responderInfo = new HashMap<>();
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+
+        if (currentUser != null) {
+            responderInfo.put("userId", currentUser.getUid());
+            responderInfo.put("userEmail", currentUser.getEmail());
+        }
+
+        responderInfo.put("actionTime", System.currentTimeMillis());
+        responderInfo.put("action", "status_update_to_" + newStatus.toLowerCase());
+
+        // Actually update via repository
+        sosRepository.updateSOSStatus(reportId, newStatus, responderInfo,
+                new OnCompleteListener() {
+                    @Override
+                    public void onSuccess() {
+                        // Get the updated report to return
+                        sosRepository.getSOSReportById(reportId, new SOSRepository.OnReportFetchedListener() {
+                            @Override
+                            public void onSuccess(SOSReport report) {
+                                if (listener != null) {
+                                    listener.onStatusUpdated(report);
+                                }
+                            }
+
+                            @Override
+                            public void onError(Exception e) {
+                                // We updated successfully but couldn't fetch the result
+                                Log.w(TAG, "Status update succeeded but couldn't fetch updated report", e);
+
+                                // Create a basic report with the new status
+                                SOSReport basicReport = new SOSReport();
+                                basicReport.setReportId(reportId);
+                                basicReport.setStatus(newStatus);
+
+                                if (listener != null) {
+                                    listener.onStatusUpdated(basicReport);
+                                }
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        Log.e(TAG, "Error updating SOS status", e);
+                        if (listener != null) {
+                            listener.onStatusUpdateFailed(e.getMessage());
+                        }
+                    }
+                });
+    }
     /**
      * Notify the listener on the main thread
      */
@@ -660,6 +803,7 @@ public class SOSProcessingService {
      * Update the status of an SOS report
      */
     public void updateSOSStatus(String reportId, String newStatus, SOSStatusUpdateListener listener) {
+        updateSOSStatusWithAuth(reportId, newStatus, listener);
         if (reportId == null || reportId.isEmpty() || newStatus == null || newStatus.isEmpty()) {
             notifyStatusUpdateFailed(listener, "Invalid report ID or status");
             return;

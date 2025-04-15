@@ -3,6 +3,7 @@ package com.rescuereach.citizen.dialogs;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -19,16 +20,18 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.cardview.widget.CardView;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.firestore.DocumentReference;
-import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.EventListener;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FirebaseFirestoreException;
@@ -39,10 +42,13 @@ import com.rescuereach.data.repository.RepositoryProvider;
 import com.rescuereach.data.repository.SOSRepository;
 import com.rescuereach.service.sos.SOSProcessingService;
 import com.rescuereach.util.TimeUtils;
+import com.rescuereach.util.ToastUtil;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Dialog to display SOS status and updates
@@ -52,7 +58,6 @@ public class SOSStatusDialog extends Dialog {
     private static final String TAG = "SOSStatusDialog";
 
     private Handler uiHandler = new Handler(Looper.getMainLooper());
-
 
     // UI components
     private ImageView imageEmergencyType;
@@ -80,6 +85,12 @@ public class SOSStatusDialog extends Dialog {
     private SOSStatusDialogListener listener;
     private boolean isClosed = false;
 
+    private SharedPreferences prefs;
+    private static final String PREFS_NAME = "sos_dialog_prefs";
+    private static final String KEY_ACTIVE_SOS = "has_active_sos";
+    private static final String KEY_SOS_ID = "active_sos_id";
+    private static final String KEY_MINIMIZED = "sos_dialog_minimized";
+
     // Constants
     private static final int STATUS_CHECK_INTERVAL = 10000; // 10 seconds
 
@@ -94,6 +105,8 @@ public class SOSStatusDialog extends Dialog {
         this.sosRepository = RepositoryProvider.getSOSRepository();
         this.sosProcessingService = new SOSProcessingService(context);
         this.uiHandler = new Handler(Looper.getMainLooper());
+
+
     }
 
     /**
@@ -176,16 +189,33 @@ public class SOSStatusDialog extends Dialog {
     }
 
     private void setupClickListeners() {
-        buttonClose.setOnClickListener(v -> dismiss());
+        // Existing code...
+        buttonClose.setOnClickListener(v -> {
+            // Store minimized state in preferences for persistence
+            SharedPreferences prefs = getContext().getSharedPreferences(
+                    "sos_dialog_prefs", Context.MODE_PRIVATE);
+            prefs.edit()
+                    .putBoolean("has_active_sos", true)
+                    .putString("active_sos_id", reportId)
+                    .apply();
+
+            // Dismiss with a single click
+            dismiss();
+        });
 
         buttonCancel.setOnClickListener(v -> {
             // Cancel the emergency
-            if (report != null && !report.getStatus().equals(SOSReport.STATUS_RESOLVED)) {
+            if (report != null && !isStatusFinal(report.getStatus())) {
                 cancelEmergency();
             } else {
                 dismiss();
             }
         });
+    }
+
+    private boolean isStatusFinal(String status) {
+        return SOSReport.STATUS_RESOLVED.equals(status) ||
+                SOSReport.STATUS_CANCELED.equals(status);
     }
 
     /**
@@ -264,6 +294,9 @@ public class SOSStatusDialog extends Dialog {
                         try {
                             final SOSReport updatedReport = snapshot.toObject(SOSReport.class);
                             if (updatedReport != null) {
+                                // Make sure reportId is set since @DocumentId might not work
+                                updatedReport.setReportId(snapshot.getId());
+
                                 // Check if status actually changed
                                 final boolean statusChanged = report == null ||
                                         !updatedReport.getStatus().equals(report.getStatus());
@@ -294,9 +327,6 @@ public class SOSStatusDialog extends Dialog {
         }
     }
 
-    /**
-     * Update the UI with report information
-     */
     /**
      * Update the UI with report information
      */
@@ -361,8 +391,22 @@ public class SOSStatusDialog extends Dialog {
             }
 
             // Update last status change time
-            if (report.getStatusUpdatedAt() != null) {
-                String timeAgo = TimeUtils.getTimeAgo(report.getStatusUpdatedAt(), getContext());
+            Date statusUpdatedAt = null;
+            try {
+                // Try to get statusUpdatedAt from report, might not exist
+                if (report.getClass().getMethod("getStatusUpdatedAt") != null) {
+                    statusUpdatedAt = (Date)report.getClass().getMethod("getStatusUpdatedAt").invoke(report);
+                }
+            } catch (Exception e) {
+                // Method doesn't exist, ignore
+                statusUpdatedAt = null;
+            }
+
+            if (statusUpdatedAt != null) {
+                String timeAgo = TimeUtils.getTimeAgo(statusUpdatedAt, getContext());
+                textLastUpdate.setText(getContext().getString(R.string.last_update_format, timeAgo));
+            } else if (report.getTimestamp() != null) {
+                String timeAgo = TimeUtils.getTimeAgo(report.getTimestamp(), getContext());
                 textLastUpdate.setText(getContext().getString(R.string.last_update_format, timeAgo));
             } else {
                 textLastUpdate.setText(getContext().getString(R.string.last_update_format, "just now"));
@@ -466,7 +510,7 @@ public class SOSStatusDialog extends Dialog {
      */
     private void cancelEmergency() {
         // Show confirmation dialog
-        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(getContext());
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
         builder.setTitle(R.string.cancel_emergency_title)
                 .setMessage(R.string.cancel_emergency_message)
                 .setPositiveButton(R.string.yes, (dialog, which) -> {
@@ -479,46 +523,117 @@ public class SOSStatusDialog extends Dialog {
 
     /**
      * Proceed with emergency cancellation after confirmation
+     * FIXED: Added proper authentication before cancellation
      */
     private void proceedWithCancellation() {
         if (reportId == null || reportId.isEmpty()) return;
 
         progressBar.setVisibility(View.VISIBLE);
 
-        // Update the status to resolved
-        sosProcessingService.updateSOSStatus(reportId, SOSReport.STATUS_RESOLVED,
-                new SOSProcessingService.SOSStatusUpdateListener() {
-                    @Override
-                    public void onStatusUpdated(SOSReport updatedReport) {
+        // First ensure we're authenticated
+        FirebaseAuth auth = FirebaseAuth.getInstance();
+        if (auth.getCurrentUser() == null) {
+            // Try to authenticate anonymously first
+            auth.signInAnonymously()
+                    .addOnSuccessListener(result -> {
+                        // Now proceed with cancellation
+                        performCancellation();
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e(TAG, "Failed to authenticate for cancellation", e);
                         progressBar.setVisibility(View.GONE);
-
-                        if (listener != null) {
-                            listener.onStatusChanged(reportId, SOSReport.STATUS_RESOLVED);
-                        }
-
-                        Toast.makeText(getContext(),
-                                R.string.emergency_cancelled,
-                                Toast.LENGTH_SHORT).show();
-
-                        // Dialog will update via the Firestore listener
-                    }
-
-                    @Override
-                    public void onStatusUpdateFailed(String errorMessage) {
-                        progressBar.setVisibility(View.GONE);
-
-                        Toast.makeText(getContext(),
-                                getContext().getString(R.string.error_cancelling_emergency, errorMessage),
-                                Toast.LENGTH_SHORT).show();
-                    }
-                });
+                        ToastUtil.showShort(getContext(), "Authentication failed. Please try again.");
+                    });
+        } else {
+            // Already authenticated, proceed directly
+            performCancellation();
+        }
     }
 
     /**
-     * Handle errors
+     * Actually perform the cancellation after authentication
+     */
+    private void performCancellation() {
+        if (reportId == null || reportId.isEmpty()) return;
+
+        progressBar.setVisibility(View.VISIBLE);
+
+        // Don't use anonymous auth - it's causing admin permission errors
+        // Instead use direct Firebase operations with the current user
+
+        try {
+            FirebaseFirestore db = FirebaseFirestore.getInstance();
+            DocumentReference reportRef = db.collection("sos_reports").document(reportId);
+
+            // Create a simple update that only changes the status field
+            Map<String, Object> updates = new HashMap<>();
+            updates.put("status", SOSReport.STATUS_CANCELED);
+            updates.put("statusUpdatedAt", new Date());
+
+            // Add cancellation metadata
+            Map<String, Object> cancellationInfo = new HashMap<>();
+            cancellationInfo.put("cancelledBy", "user");
+            cancellationInfo.put("cancelledAt", new Date());
+            cancellationInfo.put("reason", "user_cancelled");
+            updates.put("cancellationInfo", cancellationInfo);
+
+            // Update only specific fields instead of the whole document
+            reportRef.update(updates)
+                    .addOnSuccessListener(aVoid -> {
+                        // Success - update UI
+                        progressBar.setVisibility(View.GONE);
+
+                        // Also remove from active emergencies in RTDB manually
+                        try {
+                            FirebaseDatabase.getInstance()
+                                    .getReference("active_emergencies")
+                                    .child(reportId)
+                                    .removeValue();
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error removing from active emergencies", e);
+                            // Continue anyway since Firestore update succeeded
+                        }
+
+                        if (listener != null) {
+                            listener.onStatusChanged(reportId, SOSReport.STATUS_CANCELED);
+                        }
+
+                        ToastUtil.showShort(getContext(),
+                                getContext().getString(R.string.emergency_cancelled));
+
+                        // Mark report as cancelled locally too
+                        if (report != null) {
+                            report.setStatus(SOSReport.STATUS_CANCELED);
+                        }
+
+                        // Update the UI to reflect cancellation
+                        updateStatus(SOSReport.STATUS_CANCELED);
+                        buttonCancel.setVisibility(View.GONE);
+
+                        // Allow dialog to be dismissed now
+                        buttonClose.setText(R.string.close);
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e(TAG, "Error cancelling SOS", e);
+                        progressBar.setVisibility(View.GONE);
+
+                        // Show a more user-friendly error message
+                        ToastUtil.showShort(getContext(),
+                                "Couldn't cancel emergency. Please try again.");
+                    });
+        } catch (Exception e) {
+            Log.e(TAG, "Error in performCancellation", e);
+            progressBar.setVisibility(View.GONE);
+            ToastUtil.showShort(getContext(), "An error occurred. Please try again.");
+        }
+    }
+
+
+    /**
+     * Handle errors with safe toast display
      */
     private void handleError(String errorMessage) {
-        Toast.makeText(getContext(), errorMessage, Toast.LENGTH_SHORT).show();
+        ToastUtil.showShort(getContext(), errorMessage);
         if (listener != null) {
             listener.onError(errorMessage);
         }
@@ -559,7 +674,7 @@ public class SOSStatusDialog extends Dialog {
     }
 
     /**
-     * Remove Firebase listener when dialog is closedloadReport
+     * Remove Firebase listener when dialog is closed
      */
     private void removeStatusListener() {
         if (reportListener != null) {

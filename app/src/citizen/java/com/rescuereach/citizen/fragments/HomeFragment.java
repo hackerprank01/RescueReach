@@ -190,7 +190,10 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         if (!isAdded() || getContext() == null) return;
 
         String activeReportId = prefsManager.getString("active_sos_report_id", null);
-        if (activeReportId != null && !activeReportId.isEmpty()) {
+        boolean isMinimized = prefsManager.getBoolean("sos_dialog_minimized", false);
+
+        if (activeReportId != null && !activeReportId.isEmpty() && !isMinimized) {
+            // Only show dialog if it's not minimized
             showSOSStatusForReport(activeReportId);
         }
     }
@@ -206,18 +209,22 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
         dialog.setSOSStatusDialogListener(new SOSStatusDialog.SOSStatusDialogListener() {
             @Override
             public void onStatusChanged(String reportId, String newStatus) {
-                // Update UI or handle status change if needed
-                if (newStatus.equals(SOSReport.STATUS_RESOLVED)) {
-                    prefsManager.remove("active_sos_report_id");
+                // Handle status change
+                if (SOSReport.STATUS_RESOLVED.equals(newStatus) ||
+                        SOSReport.STATUS_CANCELED.equals(newStatus)) {
+                    clearSOSState();
                 }
             }
 
             @Override
             public void onDismissed(String reportId, String currentStatus) {
-                // If the report is resolved or the dialog was closed, we might need to
-                // update something in the UI or perform cleanup
-                if (SOSReport.STATUS_RESOLVED.equals(currentStatus)) {
-                    prefsManager.remove("active_sos_report_id");
+                // Handle dialog dismissal
+                if (SOSReport.STATUS_RESOLVED.equals(currentStatus) ||
+                        SOSReport.STATUS_CANCELED.equals(currentStatus)) {
+                    clearSOSState();
+                } else {
+                    // Dialog was minimized
+                    prefsManager.putBoolean("sos_dialog_minimized", true);
                 }
             }
 
@@ -226,9 +233,12 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
                 Toast.makeText(requireContext(),
                         "Error loading SOS status: " + errorMessage,
                         Toast.LENGTH_SHORT).show();
-                prefsManager.remove("active_sos_report_id");
+                clearSOSState();
             }
         });
+
+        // Reset minimized state when showing dialog
+        prefsManager.putBoolean("sos_dialog_minimized", false);
         dialog.show();
     }
 
@@ -327,34 +337,52 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
     private void showSOSConfirmation(String emergencyType) {
         Log.d(TAG, "SOS button clicked for: " + emergencyType);
 
-        // Do quick check in-memory first
+        // Check if there's already an active SOS report
         String activeReportId = prefsManager.getString("active_sos_report_id", null);
+        boolean isMinimized = prefsManager.getBoolean("sos_dialog_minimized", false);
+
         if (activeReportId != null && !activeReportId.isEmpty()) {
-            // Show the existing SOS status instead of creating a new one
+            // Show the existing SOS status dialog
+            prefsManager.putBoolean("sos_dialog_minimized", false); // No longer minimized
             showSOSStatusForReport(activeReportId);
             return;
         }
 
-        // Check permissions before showing confirmation
-        // (keep this part on the main thread as it involves UI)
-        checkPermissionsForSOS(() -> {
-            // Reduce object allocations by reusing dialog
-            SOSConfirmationDialog dialog = new SOSConfirmationDialog(
-                    requireContext(), emergencyType, new SOSConfirmationDialog.SOSDialogListener() {
-                @Override
-                public void onSOSConfirmed(String type) {
-                    // Move to background thread
-                    backgroundExecutor.execute(() -> handleSOSConfirmation(type));
-                }
+        // Simplified permission flow to avoid double-click issue
+        if (!permissionManager.hasLocationPermissions(false)) {
+            permissionManager.requestLocationPermissions(getActivity(), false,
+                    (isGranted, granted, denied) -> {
+                        if (isGranted) {
+                            // Show dialog immediately
+                            displaySOSConfirmationDialog(emergencyType);
+                        } else {
+                            Toast.makeText(requireContext(),
+                                    "Location permission needed for emergency services",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    });
+        } else {
+            // Already have location permission, show dialog immediately
+            displaySOSConfirmationDialog(emergencyType);
+        }
+    }
 
-                @Override
-                public void onSOSCancelled() {
-                    // No work needed for cancellation
-                    Log.d(TAG, "SOS cancelled by user");
-                }
-            });
-            dialog.show();
+    private void displaySOSConfirmationDialog(String emergencyType) {
+        SOSConfirmationDialog dialog = new SOSConfirmationDialog(
+                requireContext(), emergencyType, new SOSConfirmationDialog.SOSDialogListener() {
+            @Override
+            public void onSOSConfirmed(String type) {
+                // Move to background thread
+                backgroundExecutor.execute(() -> handleSOSConfirmation(type));
+            }
+
+            @Override
+            public void onSOSCancelled() {
+                // No work needed for cancellation
+                Log.d(TAG, "SOS cancelled by user");
+            }
         });
+        dialog.show();
     }
 
 
@@ -489,16 +517,21 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
             @Override
             public void onStatusChanged(String reportId, String newStatus) {
                 // Update UI if needed
-                if (newStatus.equals(SOSReport.STATUS_RESOLVED)) {
-                    prefsManager.remove("active_sos_report_id");
+                if (SOSReport.STATUS_RESOLVED.equals(newStatus) ||
+                        SOSReport.STATUS_CANCELED.equals(newStatus)) {
+                    clearSOSState();
                 }
             }
 
             @Override
             public void onDismissed(String reportId, String currentStatus) {
-                // Handle dialog dismissal
-                if (SOSReport.STATUS_RESOLVED.equals(currentStatus)) {
-                    prefsManager.remove("active_sos_report_id");
+                // Handle dialog dismissal - either resolved/canceled or minimized
+                if (SOSReport.STATUS_RESOLVED.equals(currentStatus) ||
+                        SOSReport.STATUS_CANCELED.equals(currentStatus)) {
+                    clearSOSState();
+                } else {
+                    // Dialog was minimized
+                    prefsManager.putBoolean("sos_dialog_minimized", true);
                 }
             }
 
@@ -509,7 +542,15 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
                         Toast.LENGTH_SHORT).show();
             }
         });
+
+        // Reset minimized state when showing dialog
+        prefsManager.putBoolean("sos_dialog_minimized", false);
         dialog.show();
+    }
+
+    private void clearSOSState() {
+        prefsManager.remove("active_sos_report_id");
+        prefsManager.putBoolean("sos_dialog_minimized", false);
     }
 
     private void updateNotificationTags(SOSReport report) {

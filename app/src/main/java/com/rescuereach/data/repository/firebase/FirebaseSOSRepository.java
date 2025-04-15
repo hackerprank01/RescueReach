@@ -190,8 +190,8 @@ public class FirebaseSOSRepository implements SOSRepository {
                     // Save to Realtime Database first for better real-time access
                     saveToRealtimeDatabase(report);
 
-                    // Save the report to Firestore
-                    reportRef.set(report)
+                    // Save the report to Firestore - use toMap() to avoid DocumentId issues
+                    reportRef.set(report.toMap())
                             .addOnSuccessListener(aVoid -> {
                                 Log.d(TAG, "SOS report saved with ID: " + report.getReportId());
 
@@ -280,7 +280,8 @@ public class FirebaseSOSRepository implements SOSRepository {
                             Log.e(TAG, "Error saving SOS to Realtime Database", e));
 
             // If the SOS is active (not resolved), also save to active emergencies
-            if (!SOSReport.STATUS_RESOLVED.equals(report.getStatus())) {
+            if (!SOSReport.STATUS_RESOLVED.equals(report.getStatus()) &&
+                    !SOSReport.STATUS_CANCELED.equals(report.getStatus())) {
                 // Create a simplified version for active emergencies
                 Map<String, Object> activeEmergency = new HashMap<>();
                 activeEmergency.put("reportId", report.getReportId());
@@ -315,7 +316,7 @@ public class FirebaseSOSRepository implements SOSRepository {
                         .addOnFailureListener(e ->
                                 Log.e(TAG, "Error saving SOS to active emergencies", e));
             } else {
-                // If resolved, remove from active emergencies
+                // If resolved or canceled, remove from active emergencies
                 activeEmergenciesRef.child(report.getReportId()).removeValue();
             }
         } catch (Exception e) {
@@ -442,7 +443,8 @@ public class FirebaseSOSRepository implements SOSRepository {
                 // First update Realtime Database for better real-time access
                 saveToRealtimeDatabase(report);
 
-                reportRef.set(report, SetOptions.merge())
+                // Use toMap() to avoid DocumentId issues
+                reportRef.set(report.toMap(), SetOptions.merge())
                         .addOnSuccessListener(aVoid -> {
                             Log.d(TAG, "SOS report updated: " + report.getReportId());
                             if (listener != null) {
@@ -509,6 +511,12 @@ public class FirebaseSOSRepository implements SOSRepository {
             return;
         }
 
+        // If it's a cancellation, handle it with higher priority and ensure authentication
+        if (SOSReport.STATUS_CANCELED.equals(newStatus)) {
+            handleCancellation(reportId, responderInfo, listener);
+            return;
+        }
+
         backgroundExecutor.execute(() -> {
             try {
                 DocumentReference reportRef = reportsCollection.document(reportId);
@@ -519,14 +527,16 @@ public class FirebaseSOSRepository implements SOSRepository {
                             if (documentSnapshot.exists()) {
                                 SOSReport report = documentSnapshot.toObject(SOSReport.class);
                                 if (report != null) {
+                                    // Make sure reportId is set since @DocumentId might not work
+                                    report.setReportId(documentSnapshot.getId());
+
                                     // Update the status
                                     report.setStatus(newStatus);
+                                    // Set statusUpdatedAt to now
+                                    report.setStatusUpdatedAt(new Date());
 
-                                    // Convert the report to a map manually instead of calling toMap()
-                                    Map<String, Object> updateData = convertReportToMap(report);
-
-                                    // Add statusUpdatedAt field
-                                    updateData.put("statusUpdatedAt", new Date());
+                                    // Use toMap() to create update data
+                                    Map<String, Object> updateData = report.toMap();
 
                                     // Add responder info if provided
                                     if (responderInfo != null) {
@@ -534,20 +544,24 @@ public class FirebaseSOSRepository implements SOSRepository {
                                             // If it's already a Map, put it directly in the update data
                                             updateData.put(FIELD_RESPONDER_INFO, responderInfo);
                                         } else {
-                                            // If it's some other object, convert it to String representation
+                                            // If it's some other object, convert to String representation
                                             updateData.put(FIELD_RESPONDER_INFO, responderInfo.toString());
                                         }
                                     }
+
+                                    // Store report and reportId for use in callbacks
+                                    final SOSReport finalReport = report;
+                                    final String finalReportId = reportId;
 
                                     // Use updateData map to update instead of the report object directly
                                     reportRef.set(updateData, SetOptions.merge())
                                             .addOnSuccessListener(aVoid -> {
                                                 // Update Realtime Database
-                                                updateStatusInRealtimeDatabase(reportId, newStatus, responderInfo);
+                                                updateStatusInRealtimeDatabase(finalReportId, newStatus, responderInfo);
 
                                                 // Update history
-                                                if (report.getUserId() != null) {
-                                                    updateStatusInHistory(reportId, report.getUserId(), newStatus);
+                                                if (finalReport.getUserId() != null) {
+                                                    updateStatusInHistory(finalReportId, finalReport.getUserId(), newStatus);
                                                 }
 
                                                 if (listener != null) {
@@ -586,69 +600,34 @@ public class FirebaseSOSRepository implements SOSRepository {
         });
     }
 
-    private Map<String, Object> convertReportToMap(SOSReport report) {
-        if (report == null) {
-            return new HashMap<>();
+    private void handleCancellation(String reportId, Object responderInfo, OnCompleteListener listener) {
+        // Ensure we're authenticated
+        FirebaseAuth auth = FirebaseAuth.getInstance();
+        if (auth.getCurrentUser() == null) {
+            auth.signInAnonymously()
+                    .addOnSuccessListener(authResult -> {
+                        // Now try the direct update approach for cancellation
+                        updateStatusDirectly(reportsCollection.document(reportId),
+                                reportId,
+                                SOSReport.STATUS_CANCELED,
+                                responderInfo,
+                                listener);
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e(TAG, "Anonymous auth failed for cancellation", e);
+                        if (listener != null) {
+                            mainHandler.post(() -> listener.onError(e));
+                        }
+                    });
+            return;
         }
 
-        Map<String, Object> map = new HashMap<>();
-
-        // Add all standard fields that are definitely in the SOSReport class
-        map.put("reportId", report.getReportId());
-        map.put("userId", report.getUserId());
-        map.put("status", report.getStatus());
-        map.put("emergencyType", report.getEmergencyType());
-
-        if (report.getTimestamp() != null) {
-            map.put("timestamp", report.getTimestamp());
-        }
-
-        // Add location if available
-        if (report.getLocation() != null) {
-            // GeoPoint for Firestore
-            map.put("location", new GeoPoint(
-                    report.getLocation().getLatitude(),
-                    report.getLocation().getLongitude()
-            ));
-        }
-
-        // Add other fields if they exist
-        if (report.getAddress() != null) {
-            map.put("address", report.getAddress());
-        }
-
-        if (report.getCity() != null) {
-            map.put("city", report.getCity());
-        }
-
-        if (report.getState() != null) {
-            map.put("state", report.getState());
-        }
-
-        // REMOVED: postalCode field since getPostalCode() doesn't exist
-
-        // Add emergency contacts if available
-        if (report.getEmergencyContactNumbers() != null && !report.getEmergencyContactNumbers().isEmpty()) {
-            map.put("emergencyContactNumbers", report.getEmergencyContactNumbers());
-        }
-
-        // Add any user info
-        if (report.getUserInfo() != null && !report.getUserInfo().isEmpty()) {
-            map.put("userInfo", report.getUserInfo());
-        }
-
-        // Add SMS status fields if they exist
-        try {
-            map.put("smsSent", report.isSmsSent());
-            map.put("smsStatus", report.getSmsStatus());
-        } catch (NoSuchMethodError e) {
-            // These methods might not exist, which is fine
-        }
-
-        // Add online status
-        map.put("isOnline", report.isOnline());
-
-        return map;
+        // Already authenticated, do direct update for cancellation
+        updateStatusDirectly(reportsCollection.document(reportId),
+                reportId,
+                SOSReport.STATUS_CANCELED,
+                responderInfo,
+                listener);
     }
 
     /**
@@ -683,8 +662,11 @@ public class FirebaseSOSRepository implements SOSRepository {
 
             batch.update(reportRef, updates);
 
+            // Store reportId for use in callbacks
+            final String finalReportId = reportId;
+
             // Update Realtime Database too
-            updateStatusInRealtimeDatabase(reportId, newStatus, responderInfo);
+            updateStatusInRealtimeDatabase(finalReportId, newStatus, responderInfo);
 
             // Commit the batch
             batch.commit()
@@ -702,7 +684,7 @@ public class FirebaseSOSRepository implements SOSRepository {
                                 ((FirebaseFirestoreException) e).getCode() ==
                                         FirebaseFirestoreException.Code.PERMISSION_DENIED) {
 
-                            authenticateAndRetryStatusUpdate(reportId, newStatus, responderInfo, listener);
+                            authenticateAndRetryStatusUpdate(finalReportId, newStatus, responderInfo, listener);
                             return;
                         }
 
@@ -743,8 +725,9 @@ public class FirebaseSOSRepository implements SOSRepository {
                             Log.e(TAG, "Error updating status in RTDB", e));
 
             // Update or remove from active emergencies based on status
-            if (SOSReport.STATUS_RESOLVED.equals(newStatus)) {
-                // If resolved, remove from active emergencies
+            if (SOSReport.STATUS_RESOLVED.equals(newStatus) ||
+                    SOSReport.STATUS_CANCELED.equals(newStatus)) {
+                // If resolved or canceled, remove from active emergencies
                 activeEmergenciesRef.child(reportId).removeValue()
                         .addOnFailureListener(e ->
                                 Log.e(TAG, "Error removing from active emergencies", e));
@@ -810,44 +793,19 @@ public class FirebaseSOSRepository implements SOSRepository {
         // Execute on background thread
         backgroundExecutor.execute(() -> {
             try {
-                // First try to get from Realtime Database for better performance
-                sosRTDBRef.child(reportId).get()
-                        .addOnSuccessListener(dataSnapshot -> {
-                            if (dataSnapshot.exists()) {
-                                try {
-                                    // Convert to SOSReport
-                                    SOSReport report = dataSnapshot.getValue(SOSReport.class);
-                                    if (report != null) {
-                                        // Return to main thread
-                                        if (listener != null) {
-                                            mainHandler.post(() -> listener.onSuccess(report));
-                                        }
-                                        return;
-                                    }
-                                } catch (Exception e) {
-                                    Log.e(TAG, "Error converting RTDB data to SOSReport", e);
-                                    // Fall through to Firestore
-                                }
-                            }
-
-                            // If not found in RTDB or conversion failed, try Firestore
-                            getReportFromFirestore(reportId, listener);
-                        })
-                        .addOnFailureListener(e -> {
-                            Log.e(TAG, "Error fetching report from RTDB", e);
-                            // Fall through to Firestore
-                            getReportFromFirestore(reportId, listener);
-                        });
+                // First try Firestore directly since RTDB conversion is problematic
+                getReportFromFirestore(reportId, listener);
             } catch (Exception e) {
                 Log.e(TAG, "Error in getSOSReportById", e);
-                // Try Firestore as fallback
-                getReportFromFirestore(reportId, listener);
+                if (listener != null) {
+                    mainHandler.post(() -> listener.onError(e));
+                }
             }
         });
     }
 
     /**
-     * Get report from Firestore (used as fallback if RTDB fails)
+     * Get report from Firestore
      */
     private void getReportFromFirestore(String reportId, OnReportFetchedListener listener) {
         reportsCollection.document(reportId)
@@ -856,9 +814,19 @@ public class FirebaseSOSRepository implements SOSRepository {
                     if (documentSnapshot.exists()) {
                         try {
                             SOSReport report = documentSnapshot.toObject(SOSReport.class);
-                            // Return to main thread
-                            if (listener != null) {
-                                mainHandler.post(() -> listener.onSuccess(report));
+
+                            // Make sure reportId is explicitly set since @DocumentId annotation is removed
+                            if (report != null) {
+                                report.setReportId(documentSnapshot.getId());
+
+                                // Return to main thread
+                                if (listener != null) {
+                                    mainHandler.post(() -> listener.onSuccess(report));
+                                }
+                            } else {
+                                if (listener != null) {
+                                    mainHandler.post(() -> listener.onError(new Exception("Failed to parse report")));
+                                }
                             }
                         } catch (Exception e) {
                             Log.e(TAG, "Error converting document to SOSReport", e);
@@ -932,6 +900,8 @@ public class FirebaseSOSRepository implements SOSRepository {
                             for (DocumentSnapshot doc : queryDocumentSnapshots) {
                                 SOSReport report = doc.toObject(SOSReport.class);
                                 if (report != null) {
+                                    // Make sure reportId is explicitly set since @DocumentId annotation is removed
+                                    report.setReportId(doc.getId());
                                     reports.add(report);
                                 }
                             }
@@ -1010,6 +980,8 @@ public class FirebaseSOSRepository implements SOSRepository {
                             for (DocumentSnapshot doc : queryDocumentSnapshots) {
                                 SOSReport report = doc.toObject(SOSReport.class);
                                 if (report != null) {
+                                    // Make sure reportId is explicitly set since @DocumentId annotation is removed
+                                    report.setReportId(doc.getId());
                                     reports.add(report);
                                 }
                             }
@@ -1206,13 +1178,16 @@ public class FirebaseSOSRepository implements SOSRepository {
                                     batch.update(historyRef, updates);
                                 }
 
+                                // Store reportId for use in callback
+                                final String finalReportId = reportId;
+
                                 // Commit all deletions
                                 batch.commit()
                                         .addOnSuccessListener(aVoid -> {
-                                            Log.d(TAG, "SOS report deleted: " + reportId);
+                                            Log.d(TAG, "SOS report deleted: " + finalReportId);
 
                                             // Also remove from Realtime Database
-                                            deleteFromRealtimeDatabase(reportId);
+                                            deleteFromRealtimeDatabase(finalReportId);
 
                                             if (listener != null) {
                                                 mainHandler.post(listener::onSuccess);
@@ -1225,7 +1200,7 @@ public class FirebaseSOSRepository implements SOSRepository {
                                                     ((FirebaseFirestoreException) e).getCode() ==
                                                             FirebaseFirestoreException.Code.PERMISSION_DENIED) {
 
-                                                authenticateAndRetryDelete(reportId, listener);
+                                                authenticateAndRetryDelete(finalReportId, listener);
                                                 return;
                                             }
 
@@ -1235,7 +1210,8 @@ public class FirebaseSOSRepository implements SOSRepository {
                                         });
                             } else {
                                 // Report doesn't exist, consider it a success
-                                deleteFromRealtimeDatabase(reportId);
+                                final String finalReportId = reportId;
+                                deleteFromRealtimeDatabase(finalReportId);
 
                                 if (listener != null) {
                                     mainHandler.post(listener::onSuccess);
@@ -1249,7 +1225,8 @@ public class FirebaseSOSRepository implements SOSRepository {
                                     ((FirebaseFirestoreException) e).getCode() ==
                                             FirebaseFirestoreException.Code.PERMISSION_DENIED) {
 
-                                authenticateAndRetryDelete(reportId, listener);
+                                final String finalReportId = reportId;
+                                authenticateAndRetryDelete(finalReportId, listener);
                                 return;
                             }
 

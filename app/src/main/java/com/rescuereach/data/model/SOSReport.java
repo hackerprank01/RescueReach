@@ -1,6 +1,5 @@
 package com.rescuereach.data.model;
 
-import com.google.firebase.firestore.DocumentId;
 import com.google.firebase.firestore.Exclude;
 import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.ServerTimestamp;
@@ -16,7 +15,7 @@ import java.util.Map;
  * Model class representing an SOS emergency report
  */
 public class SOSReport implements Serializable {
-    @DocumentId
+    // FIXED: Removed @DocumentId annotation that was causing problems
     private String reportId;
     private String userId;
     private String emergencyType; // POLICE, FIRE, MEDICAL
@@ -31,7 +30,7 @@ public class SOSReport implements Serializable {
     private Map<String, Object> deviceInfo;
     private List<EmergencyService> nearbyServices; // Nearest relevant emergency services
     private List<String> emergencyContactNumbers; // Emergency contact phone numbers
-    private String status; // PENDING, RECEIVED, RESPONDING, RESOLVED
+    private String status; // PENDING, RECEIVED, RESPONDING, RESOLVED, CANCELED
     private boolean isOnline;
     private boolean smsSent;
     private String smsStatus;
@@ -46,6 +45,7 @@ public class SOSReport implements Serializable {
     public static final String STATUS_RECEIVED = "RECEIVED";
     public static final String STATUS_RESPONDING = "RESPONDING";
     public static final String STATUS_RESOLVED = "RESOLVED";
+    public static final String STATUS_CANCELED = "CANCELED"; // Added for cancellation status
 
     // Default constructor required for Firestore
     public SOSReport() {
@@ -247,7 +247,6 @@ public class SOSReport implements Serializable {
         userInfo.put(key, value);
     }
 
-
     public void addDeviceInfo(String key, Object value) {
         if (deviceInfo == null) {
             deviceInfo = new HashMap<>();
@@ -255,7 +254,47 @@ public class SOSReport implements Serializable {
         deviceInfo.put(key, value);
     }
 
-//    public Object getPostalCode() {
-//        return getPostalCode();
-//    }
+    /**
+     * ADDED: Convert this report to a Map for Firestore operations
+     * This supports the FirebaseSOSRepository methods
+     * @return Map representation of this report
+     */
+    @Exclude
+    public Map<String, Object> toMap() {
+        Map<String, Object> map = new HashMap<>();
+
+        // Add all standard fields
+        map.put("reportId", reportId);
+        map.put("userId", userId);
+        map.put("emergencyType", emergencyType);
+        map.put("location", location);
+        map.put("address", address);
+        map.put("city", city);
+        map.put("state", state);
+        map.put("timestamp", timestamp);
+        map.put("statusUpdatedAt", statusUpdatedAt);
+        map.put("userInfo", userInfo);
+        map.put("deviceInfo", deviceInfo);
+        map.put("status", status);
+        map.put("isOnline", isOnline);
+        map.put("smsSent", smsSent);
+        map.put("smsStatus", smsStatus);
+        map.put("responderInfo", responderInfo);
+
+        // Add collections if they exist and aren't empty
+        if (nearbyServices != null && !nearbyServices.isEmpty()) {
+            map.put("nearbyServices", nearbyServices);
+        }
+
+        if (emergencyContactNumbers != null && !emergencyContactNumbers.isEmpty()) {
+            map.put("emergencyContactNumbers", emergencyContactNumbers);
+        }
+
+        return map;
+    }
+
+    // REMOVED: Incorrect recursive getPostalCode method that would cause stack overflow
+    // public Object getPostalCode() {
+    //    return getPostalCode();
+    // }
 }

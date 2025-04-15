@@ -308,20 +308,15 @@ public class PhoneAuthActivity extends AppCompatActivity implements OTPInputView
     }
 
     private void populateOTPAndVerify(String otp) {
-        if (otpInputView == null || isFinishing() || isDestroyed()) {
-            return;
-        }
-
-        // Check if we're already on the main thread
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            otpInputView.setOTP(otp);
-            scheduleVerification();
-        } else {
+        if (otpInputView != null && !isFinishing() && !isDestroyed()) {
             runOnUiThread(() -> {
-                if (otpInputView != null && !isFinishing() && !isDestroyed()) {
-                    otpInputView.setOTP(otp);
-                    scheduleVerification();
-                }
+                otpInputView.setOTP(otp);
+                // Give UI time to update before verifying
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        verifyCode();
+                    }
+                }, 200);
             });
         }
     }
