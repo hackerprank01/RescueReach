@@ -541,6 +541,13 @@
                     android:text="In emergency situations, remain calm and provide clear information to help responders reach you quickly."
                     android:textSize="14sp"
                     android:textColor="?android:attr/textColorSecondary" />
+
+                <Button
+                    android:id="@+id/button_test_sms"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Test SMS"
+                    android:visibility="gone" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </androidx.constraintlayout.widget.ConstraintLayout>

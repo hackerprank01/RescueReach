@@ -1,9 +1,17 @@
 package com.rescuereach.service.notification;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
 import com.onesignal.OSDeviceState;
 import com.onesignal.OSNotification;
@@ -15,12 +23,12 @@ import com.onesignal.OneSignal.OSNotificationOpenedHandler;
 import com.onesignal.OneSignal.OSNotificationWillShowInForegroundHandler;
 import com.onesignal.OSInAppMessageAction;
 import com.onesignal.OneSignal.OSInAppMessageClickHandler;
+import com.rescuereach.R;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +59,10 @@ public class NotificationService {
 
     // External ID types
     private static final String EXTERNAL_ID_PHONE = "phone";
+
+    // Test notification channel
+    private static final String TEST_CHANNEL_ID = "test_notification_channel";
+    private static final int TEST_NOTIFICATION_ID = 2001;
 
     /**
      * Private constructor to prevent direct instantiation
@@ -113,6 +125,11 @@ public class NotificationService {
                     handleInAppMessageAction(action);
                 }
             });
+
+            // Create notification channels for testing
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                createTestNotificationChannel();
+            }
 
             Log.d(TAG, "NotificationService initialized");
         } catch (Exception e) {
@@ -370,12 +387,13 @@ public class NotificationService {
                 // For now, we'll just log that it would happen
                 Log.d(TAG, "Would send emergency notification to: " + targetRegion);
 
-                // Trigger local notification to show progress
-                createLocalNotification(
-                        emergencyType + " EMERGENCY",
-                        "Emergency reported to responders" +
-                                (targetRegion != null && !targetRegion.isEmpty() ? " in " + targetRegion : "")
-                );
+                // Send a test notification to the current device instead
+                String heading = emergencyType + " EMERGENCY";
+                String message = "Emergency reported" +
+                        (targetRegion != null && !targetRegion.isEmpty() ? " in " + targetRegion : "");
+
+                // Use our test method to show a local notification
+                sendTestNotification(heading, message);
 
             } catch (Exception e) {
                 Log.e(TAG, "Error sending emergency notification", e);
@@ -397,23 +415,95 @@ public class NotificationService {
         // This is just a placeholder for this functionality
         Log.d(TAG, "Server notification requested: " + heading + " - Target: " + targetSegment);
 
-        // Create local notification to show progress
-        createLocalNotification(heading, message);
+        // Send a test notification to the current device
+        sendTestNotification(heading, message);
 
         // In a real implementation, this would make a REST API call to OneSignal
         return true;
     }
 
     /**
-     * Create a local notification instead of remote OneSignal notification
-     * Useful for showing immediate feedback while async operations complete
+     * Send a direct test notification to the current device
+     * For development and testing purposes
+     * @param title Notification title
+     * @param message Notification message
      */
-    private void createLocalNotification(String title, String message) {
-        // This would be implemented using NotificationCompat.Builder
-        // For now, we just log that it would happen
-        Log.d(TAG, "Local notification: " + title + " - " + message);
+    public void sendTestNotification(String title, String message) {
+        backgroundExecutor.execute(() -> {
+            try {
+                // Get this device's OneSignal ID
+                String deviceId = getOneSignalUserId();
+                Log.d(TAG, "Sending test notification to device: " +
+                        (deviceId != null ? deviceId : "unknown"));
 
-        // We'll rely on SOSProcessingService.createLocalNotification instead
+                // First try OneSignal notification if we have a valid device ID
+                if (deviceId != null && !deviceId.isEmpty()) {
+                    // In a real app, this would use OneSignal's REST API to send
+                    // For now, we'll create a local notification instead
+                }
+
+                // Create and show a local notification on the main thread
+                mainHandler.post(() -> {
+                    try {
+                        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, TEST_CHANNEL_ID)
+                                .setSmallIcon(R.drawable.ic_notification)
+                                .setContentTitle(title)
+                                .setContentText(message)
+                                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                                .setAutoCancel(true);
+
+                        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
+
+                        // Check for notification permission on Android 13+
+                        if (Build.VERSION.SDK_INT < 33 ||
+                                ActivityCompat.checkSelfPermission(context,
+                                        android.Manifest.permission.POST_NOTIFICATIONS)
+                                        == PackageManager.PERMISSION_GRANTED) {
+
+                            // Each test notification gets a unique ID based on time
+                            int id = (int) ((System.currentTimeMillis() / 1000) % Integer.MAX_VALUE);
+                            notificationManager.notify(id, builder.build());
+
+                            Log.d(TAG, "Test notification displayed with ID: " + id);
+                        } else {
+                            Log.w(TAG, "Cannot show notification: Permission not granted");
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error showing test notification", e);
+                    }
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to send test notification", e);
+            }
+        });
+    }
+
+    /**
+     * Create notification channel for test notifications (required for Android O+)
+     */
+    private void createTestNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                NotificationManager notificationManager =
+                        (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+                if (notificationManager != null) {
+                    NotificationChannel channel = new NotificationChannel(
+                            TEST_CHANNEL_ID,
+                            "Test Notifications",
+                            NotificationManager.IMPORTANCE_HIGH);
+                    channel.setDescription("Channel for test notifications");
+                    channel.enableLights(true);
+                    channel.enableVibration(true);
+                    notificationManager.createNotificationChannel(channel);
+
+                    Log.d(TAG, "Test notification channel created");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error creating test notification channel", e);
+            }
+        }
     }
 
     /**

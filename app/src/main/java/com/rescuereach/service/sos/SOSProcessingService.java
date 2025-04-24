@@ -25,6 +25,7 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.GeoPoint;
 import com.rescuereach.BuildConfig;
 import com.rescuereach.R;
 import com.rescuereach.RescueReachApplication;
@@ -35,7 +36,7 @@ import com.rescuereach.data.repository.SOSRepository;
 import com.rescuereach.service.auth.UserSessionManager;
 import com.rescuereach.service.notification.NotificationService;
 import com.rescuereach.service.notification.NotificationTemplates;
-import com.rescuereach.util.PermissionManager; // Changed from PermissionHelper to PermissionManager
+import com.rescuereach.util.PermissionManager;
 import com.rescuereach.util.ToastUtil;
 
 import org.json.JSONObject;
@@ -55,7 +56,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Service for processing SOS emergency reports
  * Handles saving reports to Firebase, sending notifications, and SMS fallback
- * Fixed with timeout handling and improved error recovery
+ * Fixed with timeout handling, improved error recovery, and enhanced SMS functionality
  */
 public class SOSProcessingService {
     private static final String TAG = "SOSProcessingService";
@@ -76,6 +77,9 @@ public class SOSProcessingService {
 
     // Constants for SMS messages
     private static final int MAX_SMS_LENGTH = 160;
+
+    // Flag to force SMS sending even in debug mode
+    private boolean forceSmsSending = false;
 
     /**
      * Create a new SOS Processing Service
@@ -103,6 +107,9 @@ public class SOSProcessingService {
             notifyProcessingFailed(listener, "Invalid SOS report data");
             return;
         }
+
+        // Ensure emergency contacts are set
+        ensureEmergencyContacts(report);
 
         // Ensure report ID is unique if not set
         if (report.getReportId() == null || report.getReportId().isEmpty()) {
@@ -145,6 +152,64 @@ public class SOSProcessingService {
     }
 
     /**
+     * Ensure emergency contacts are set for the report
+     * @param report The SOS report to check
+     */
+    private void ensureEmergencyContacts(SOSReport report) {
+        if (report.getEmergencyContactNumbers() == null || report.getEmergencyContactNumbers().isEmpty()) {
+            // No contacts set, add a default one for testing in debug builds
+            List<String> contacts = new ArrayList<>();
+
+            if (BuildConfig.DEBUG) {
+                contacts.add("919326994197"); // Default test number
+                Log.d(TAG, "Adding default emergency contact for testing");
+            }
+
+            if (!contacts.isEmpty()) {
+                report.setEmergencyContactNumbers(contacts);
+            }
+        }
+    }
+
+    /**
+     * Test SMS functionality with a direct method
+     * For development and testing only
+     * @param testPhoneNumber The phone number to send test SMS to
+     * @return true if SMS was sent successfully, false otherwise
+     */
+    public boolean testSMSFunctionality(String testPhoneNumber) {
+        // Create a minimal test report
+        SOSReport testReport = new SOSReport();
+        testReport.setEmergencyType("TEST");
+        testReport.setUserId("test_user");
+
+        if (testReport.getLocation() == null) {
+            // Add mock location
+            GeoPoint location = new GeoPoint(18.5204, 73.8567); // Example coordinates
+            testReport.setLocation(location);
+        }
+
+        // Add the test phone number as emergency contact
+        List<String> contacts = new ArrayList<>();
+        contacts.add(testPhoneNumber);
+        testReport.setEmergencyContactNumbers(contacts);
+
+        // Force SMS to be sent even in DEBUG mode
+        forceSmsSending = true;
+
+        // Send SMS and return result
+        boolean result = sendEmergencyContactSMS(testReport);
+
+        // Log result
+        Log.d(TAG, "Test SMS sending result: " + result + " to number: " + testPhoneNumber);
+
+        // Return to default setting
+        forceSmsSending = false;
+
+        return result;
+    }
+
+    /**
      * Process an SOS report when online with timeout handling
      */
     private void processOnlineReport(final SOSReport report, final SOSProcessingListener listener) {
@@ -170,7 +235,11 @@ public class SOSProcessingService {
                     final AtomicBoolean smsSent = new AtomicBoolean(false);
                     backgroundExecutor.execute(() -> {
                         try {
+                            // Force SMS sending in debug mode for testing
+                            forceSmsSending = true;
                             boolean result = sendEmergencyContactSMS(savedReport);
+                            forceSmsSending = false; // Reset flag
+
                             smsSent.set(result);
                             Log.d(TAG, "SMS sending completed, result: " + result);
 
@@ -210,7 +279,10 @@ public class SOSProcessingService {
                                 sendEmergencyNotifications(savedReport);
 
                                 // Send SMS to emergency contacts if needed
+                                // Force SMS sending in debug mode for testing
+                                forceSmsSending = true;
                                 boolean smsSent = sendEmergencyContactSMS(savedReport);
+                                forceSmsSending = false; // Reset flag
 
                                 // Update notification with SMS status
                                 if (smsSent) {
@@ -346,7 +418,10 @@ public class SOSProcessingService {
 
         try {
             // In offline mode, we can only send SMS
+            // Force SMS sending in debug mode for testing
+            forceSmsSending = true;
             boolean smsSent = sendEmergencyContactSMS(report);
+            forceSmsSending = false; // Reset flag
 
             // Update status based on SMS result
             report.setSmsSent(smsSent);
@@ -593,7 +668,8 @@ public class SOSProcessingService {
                 try {
                     Log.d(TAG, "Attempting to send SMS to: " + phoneNumber);
 
-                    if (BuildConfig.DEBUG) {
+                    // Modified to check forceSmsSending flag
+                    if (BuildConfig.DEBUG && !forceSmsSending) {
                         // In debug mode, just log instead of actually sending
                         Log.d(TAG, "DEBUG MODE - Would send SMS: " + emergencyMessage);
                         continue;
@@ -710,6 +786,10 @@ public class SOSProcessingService {
                 messageTemplate = "EMERGENCY ALERT: %s needs medical assistance at %s. " +
                         "Please contact medical services. This alert was sent via RescueReach.";
                 break;
+            case "TEST":
+                messageTemplate = "TEST MESSAGE: This is a test emergency alert from %s. " +
+                        "Location: %s. This is only a test from RescueReach.";
+                break;
             default:
                 messageTemplate = "EMERGENCY ALERT: %s needs assistance at %s. " +
                         "Please contact emergency services. This alert was sent via RescueReach.";
@@ -821,7 +901,7 @@ public class SOSProcessingService {
         // Show status update toast on main thread
         mainHandler.post(() -> {
             try {
-                ToastUtil.showShort(context, "Failed to send emergency messages" + newStatus);
+                ToastUtil.showShort(context, "Updating emergency status to: " + newStatus);
             } catch (Exception e) {
                 Log.e(TAG, "Error showing toast", e);
             }

@@ -1,23 +1,30 @@
 package com.rescuereach.citizen.fragments;
 
+import android.Manifest;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.InputType;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.RecyclerView;
@@ -34,6 +41,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
+import com.rescuereach.BuildConfig;
 import com.rescuereach.R;
 import com.rescuereach.RescueReachApplication;
 import com.rescuereach.citizen.dialogs.SOSConfirmationDialog;
@@ -53,7 +61,9 @@ import com.rescuereach.util.ToastUtil;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -134,6 +144,12 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
 
         // Check for active SOS reports
         checkForActiveSOS();
+
+        Button testButton = rootView.findViewById(R.id.button_test_sms);
+        if (BuildConfig.DEBUG) {
+            testButton.setVisibility(View.VISIBLE);
+            testButton.setOnClickListener(v -> testNotificationSystems());
+        }
 
         return rootView;
     }
@@ -671,6 +687,155 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback,
                 .putBoolean("has_active_sos", false)
                 .apply();
     }
+
+//    private void testNotificationSystems() {
+//        // Test SMS sending
+//        SOSReport testReport = new SOSReport();
+//        testReport.setEmergencyType("TEST");
+//
+//        // Add your test phone number here
+//        List<String> contacts = new ArrayList<>();
+//        contacts.add("919326994197");  // Replace with your phone number
+//        testReport.setEmergencyContactNumbers(contacts);
+//
+//        // Get services
+//        SOSProcessingService sosService = new SOSProcessingService(requireContext());
+//        NotificationService notifService =
+//                ((RescueReachApplication) requireActivity().getApplication()).getNotificationService();
+//
+//        // Test both systems
+//        sosService.sendEmergencyContactSMS(testReport);
+//        notifService.sendTestNotification("Test Notification", "This is a test emergency notification");
+//
+//        Toast.makeText(requireContext(), "Testing notifications and SMS...",
+//                Toast.LENGTH_LONG).show();
+//    }
+
+
+    private void testNotificationSystems() {
+        // Check SMS permission first
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.SEND_SMS)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            Toast.makeText(requireContext(),
+                    "SMS permission required. Please grant it in app settings.",
+                    Toast.LENGTH_LONG).show();
+
+            // Request permission
+            ActivityCompat.requestPermissions(requireActivity(),
+                    new String[]{Manifest.permission.SEND_SMS},
+                    1001); // SMS permission request code
+            return;
+        }
+        // Show dialog to enter test phone number
+        EditText phoneInput = new EditText(requireContext());
+        phoneInput.setInputType(InputType.TYPE_CLASS_PHONE);
+        phoneInput.setHint("Enter phone number with country code");
+        phoneInput.setText("919326994197"); // Pre-fill with test number
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Test Notification Systems")
+                .setMessage("Enter phone number to receive test SMS:")
+                .setView(phoneInput)
+                .setPositiveButton("Test Both", (dialog, which) -> {
+                    String phoneNumber = phoneInput.getText().toString().trim();
+                    if (phoneNumber.isEmpty()) {
+                        Toast.makeText(requireContext(), "Please enter a valid phone number",
+                                Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    // Execute on background thread
+                    new Thread(() -> {
+                        // Test SMS
+                        SOSProcessingService sosService = new SOSProcessingService(requireContext());
+                        boolean smsResult = sosService.testSMSFunctionality(phoneNumber);
+
+                        // Test push notification
+                        NotificationService notifService =
+                                ((RescueReachApplication) requireActivity().getApplication()).getNotificationService();
+                        notifService.sendTestNotification("Test Emergency Alert",
+                                "This is a test emergency notification from RescueReach");
+
+                        // Show result on UI thread
+                        uiUpdateHandler.post(() -> {
+                            Toast.makeText(requireContext(),
+                                    "SMS: " + (smsResult ? "Success" : "Failed") +
+                                            ", Push notification sent to your device",
+                                    Toast.LENGTH_LONG).show();
+                        });
+                    }).start();
+                })
+                .setNeutralButton("Test SMS Only", (dialog, which) -> {
+                    String phoneNumber = phoneInput.getText().toString().trim();
+                    if (phoneNumber.isEmpty()) {
+                        Toast.makeText(requireContext(), "Please enter a valid phone number",
+                                Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    // Execute on background thread
+                    new Thread(() -> {
+                        SOSProcessingService sosService = new SOSProcessingService(requireContext());
+                        boolean result = sosService.testSMSFunctionality(phoneNumber);
+
+                        // Show result on UI thread
+                        uiUpdateHandler.post(() -> {
+                            Toast.makeText(requireContext(),
+                                    result ? "Test SMS sent successfully!" : "Failed to send test SMS",
+                                    Toast.LENGTH_LONG).show();
+                        });
+                    }).start();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+//    private void testSMS() {
+//        // Check SMS permission first
+//        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.SEND_SMS)
+//                != PackageManager.PERMISSION_GRANTED) {
+//
+//            Toast.makeText(requireContext(),
+//                    "SMS permission required. Please grant it in app settings.",
+//                    Toast.LENGTH_LONG).show();
+//
+//            return;
+//        }
+//
+//        // Show dialog to enter test phone number
+//        EditText phoneInput = new EditText(requireContext());
+//        phoneInput.setInputType(InputType.TYPE_CLASS_PHONE);
+//        phoneInput.setHint("Enter phone number with country code");
+//        phoneInput.setText("919326994197"); // Pre-fill with your test number
+//
+//        new AlertDialog.Builder(requireContext())
+//                .setTitle("Test SMS")
+//                .setMessage("Enter phone number to receive test SMS:")
+//                .setView(phoneInput)
+//                .setPositiveButton("Send", (dialog, which) -> {
+//                    String phoneNumber = phoneInput.getText().toString().trim();
+//                    if (phoneNumber.isEmpty()) {
+//                        Toast.makeText(requireContext(), "Please enter a valid phone number",
+//                                Toast.LENGTH_SHORT).show();
+//                        return;
+//                    }
+//
+//                    // Execute on background thread
+//                    new Thread(() -> {
+//                        SOSProcessingService sosService = new SOSProcessingService(requireContext());
+//                        boolean result = sosService.testSMSFunctionality(phoneNumber);
+//
+//                        // Show result on UI thread
+//                        uiUpdateHandler.post(() -> {
+//                            Toast.makeText(requireContext(),
+//                                    result ? "Test SMS sent successfully!" : "Failed to send test SMS",
+//                                    Toast.LENGTH_LONG).show();
+//                        });
+//                    }).start();
+//                })
+//                .setNegativeButton("Cancel", null)
+//                .show();
+//    }
 
     private void updateNotificationTags(SOSReport report) {
         if (notificationService != null) {

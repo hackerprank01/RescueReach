@@ -81,6 +81,8 @@ public class CitizenMainActivity extends AppCompatActivity
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
     private static final String MAPVIEW_BUNDLE_KEY = "MapViewBundleKey";
 
+    private static final int SMS_PERMISSION_REQUEST_CODE = 123;
+
     // UI components
     private DrawerLayout drawer;
     private MapView mapView;
@@ -166,6 +168,19 @@ public class CitizenMainActivity extends AppCompatActivity
 //        }
 //    }
 
+    private void checkSmsPermissions() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            // Request permission
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.SEND_SMS},
+                    SMS_PERMISSION_REQUEST_CODE);
+
+            Toast.makeText(this, "SMS permission is required to notify emergency contacts",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
     private void updateDrawerWithFirebaseCheck() {
         // Direct Firebase check - this is crucial
         try {
